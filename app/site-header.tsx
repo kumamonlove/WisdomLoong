@@ -5,27 +5,11 @@ import { useEffect, useState } from "react";
 type PageName = "latest" | "categories";
 
 function BrandW() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="brand-w"
-      viewBox="0 0 31 24"
-    >
-      <path d="M1.5 1L7.5 23L15.5 6.5L23.5 23L29.5 1" />
-    </svg>
-  );
+  return <span className="brand-w">W</span>;
 }
 
 function BrandSlash() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="brand-slash"
-      viewBox="0 0 8 24"
-    >
-      <path d="M1 23L7 1" />
-    </svg>
-  );
+  return <span className="brand-slash">/</span>;
 }
 
 export function SiteHeader({ page }: { page: PageName }) {

@@ -153,7 +153,7 @@ export function KnowledgePage({
       </main>
 
       <footer id="footer">
-        <span>WisdomLoong · Shared robotics reading</span>
+        <span>WisdomLoong · 目前仅供算法组内部交流学习使用</span>
         <span>{appVersion}</span>
       </footer>
     </div>
