@@ -1,14 +1,17 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { deleteCurrentSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     await deleteCurrentSession();
   } catch (error) {
     console.error("Logout failed", error);
   }
 
-  return NextResponse.redirect(new URL("/login", request.url), 303);
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: "/login" },
+  });
 }

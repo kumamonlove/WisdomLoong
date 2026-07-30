@@ -3,6 +3,14 @@ import { createSession, registerUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+function redirectToRegister(error: string) {
+  const params = new URLSearchParams({ error });
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: `/register?${params}` },
+  });
+}
+
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const username = String(formData.get("username") ?? "");
@@ -13,17 +21,16 @@ export async function POST(request: NextRequest) {
     const result = await registerUser(username, password, invitationCode);
 
     if (!result.ok) {
-      const url = new URL("/register", request.url);
-      url.searchParams.set("error", result.error);
-      return NextResponse.redirect(url, 303);
+      return redirectToRegister(result.error);
     }
 
     await createSession(result.user.id);
-    return NextResponse.redirect(new URL("/", request.url), 303);
+    return new NextResponse(null, {
+      status: 303,
+      headers: { Location: "/" },
+    });
   } catch (error) {
     console.error("Registration failed", error);
-    const url = new URL("/register", request.url);
-    url.searchParams.set("error", "注册暂时不可用，请稍后重试");
-    return NextResponse.redirect(url, 303);
+    return redirectToRegister("注册暂时不可用，请稍后重试");
   }
 }
