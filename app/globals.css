@@ -49,9 +49,11 @@ header {
   display: flex;
   align-items: center;
   gap: 12px;
+  color: inherit;
   border: 0;
   background: none;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .logo span {
@@ -76,21 +78,24 @@ nav {
   gap: 28px;
 }
 
-nav button {
+nav a {
   position: relative;
   padding: 0;
+  display: flex;
+  align-items: center;
   border: 0;
   background: none;
   color: var(--muted);
   cursor: pointer;
+  text-decoration: none;
 }
 
-nav button.active {
+nav a.active {
   color: var(--ink);
   font-weight: 650;
 }
 
-nav button.active::after {
+nav a.active::after {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -133,7 +138,13 @@ main {
   color: var(--muted);
 }
 
-.heading label {
+.sort-form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sort-form label {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -148,6 +159,15 @@ select {
   background: var(--white);
 }
 
+.sort-form button {
+  padding: 9px 14px;
+  color: var(--white);
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: var(--ink);
+  cursor: pointer;
+}
+
 .categories {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -155,7 +175,7 @@ select {
   margin-top: 44px;
 }
 
-.categories button {
+.categories a {
   min-height: 108px;
   padding: 18px;
   display: flex;
@@ -165,28 +185,30 @@ select {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--white);
+  color: inherit;
   cursor: pointer;
+  text-decoration: none;
   transition:
     border-color 160ms ease,
     transform 160ms ease;
 }
 
-.categories button:hover {
+.categories a:hover {
   transform: translateY(-2px);
   border-color: #aeb8b4;
 }
 
-.categories button.selected {
+.categories a.selected {
   color: var(--white);
   border-color: var(--ink);
   background: var(--ink);
 }
 
-.categories button span {
+.categories a span {
   font-weight: 700;
 }
 
-.categories button small {
+.categories a small {
   opacity: 0.65;
 }
 

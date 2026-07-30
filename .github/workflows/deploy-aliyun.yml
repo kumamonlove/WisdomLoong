@@ -32,6 +32,9 @@ jobs:
           if [ -d public ]; then
             cp -r public .next/standalone/public
           fi
+          find .next/standalone/.next/static -type f \
+            \( -name '*.js' -o -name '*.css' -o -name '*.svg' -o -name '*.json' \) \
+            -exec gzip -9 -k {} \;
           tar -C .next/standalone -czf "/tmp/wisdomloong-${GITHUB_SHA}.tgz" .
 
       - name: Configure SSH
@@ -50,7 +53,9 @@ jobs:
           ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
         run: |
           scp "/tmp/wisdomloong-${GITHUB_SHA}.tgz" \
-            "${ALIYUN_USER}@${ALIYUN_HOST}:/tmp/wisdomloong-${GITHUB_SHA}.tgz"
+            deploy/nginx.conf \
+            deploy/wisdomloong.service \
+            "${ALIYUN_USER}@${ALIYUN_HOST}:/tmp/"
 
       - name: Activate release
         env:
@@ -64,6 +69,12 @@ jobs:
             tar -xzf /tmp/wisdomloong-${GITHUB_SHA}.tgz -C \"\$release\"
             rm /tmp/wisdomloong-${GITHUB_SHA}.tgz
             sudo ln -sfn \"\$release\" /srv/wisdomloong/current
+            sudo install -m 644 /tmp/wisdomloong.service /etc/systemd/system/wisdomloong.service
+            sudo install -m 644 /tmp/nginx.conf /etc/nginx/sites-available/wisdomloong
+            sudo nginx -t
+            sudo systemctl daemon-reload
             sudo systemctl restart wisdomloong
             sudo systemctl is-active --quiet wisdomloong
+            sudo systemctl reload nginx
+            sudo systemctl is-active --quiet nginx
           "
