@@ -35,8 +35,8 @@ function validateCredentials(username: string, password: string) {
     return "用户名不能包含控制字符";
   }
 
-  if (password.length < 8 || password.length > 128) {
-    return "密码需要为 8–128 个字符";
+  if (!password) {
+    return "请输入密码";
   }
 
   return null;
@@ -132,12 +132,7 @@ export async function authenticateUser(
 ): Promise<AuthResult> {
   const username = rawUsername.trim();
 
-  if (
-    !username ||
-    username.length > 32 ||
-    !password ||
-    password.length > 128
-  ) {
+  if (!username || username.length > 32 || !password) {
     return { ok: false, error: "请输入用户名和密码" };
   }
 

@@ -66,10 +66,8 @@ export function AuthPage({
               密码
               <input
                 autoComplete={isLogin ? "current-password" : "new-password"}
-                maxLength={128}
-                minLength={8}
                 name="password"
-                placeholder="至少 8 个字符"
+                placeholder="请输入密码"
                 required
                 type="password"
               />
