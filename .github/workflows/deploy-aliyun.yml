@@ -1,0 +1,69 @@
+name: Deploy to Alibaba Cloud
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: aliyun-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Package application
+        run: |
+          cp -r .next/static .next/standalone/.next/static
+          if [ -d public ]; then
+            cp -r public .next/standalone/public
+          fi
+          tar -C .next/standalone -czf "/tmp/wisdomloong-${GITHUB_SHA}.tgz" .
+
+      - name: Configure SSH
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_SSH_KEY: ${{ secrets.ALIYUN_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$ALIYUN_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$ALIYUN_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload release
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
+        run: |
+          scp "/tmp/wisdomloong-${GITHUB_SHA}.tgz" \
+            "${ALIYUN_USER}@${ALIYUN_HOST}:/tmp/wisdomloong-${GITHUB_SHA}.tgz"
+
+      - name: Activate release
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
+        run: |
+          ssh "${ALIYUN_USER}@${ALIYUN_HOST}" "
+            set -eu
+            release=/srv/wisdomloong/releases/${GITHUB_SHA}
+            sudo install -d -o ${ALIYUN_USER} -g ${ALIYUN_USER} \"\$release\"
+            tar -xzf /tmp/wisdomloong-${GITHUB_SHA}.tgz -C \"\$release\"
+            rm /tmp/wisdomloong-${GITHUB_SHA}.tgz
+            sudo ln -sfn \"\$release\" /srv/wisdomloong/current
+            sudo systemctl restart wisdomloong
+            sudo systemctl is-active --quiet wisdomloong
+          "
