@@ -10,6 +10,10 @@ WorkingDirectory=/srv/wisdomloong/current
 Environment=NODE_ENV=production
 Environment=HOSTNAME=127.0.0.1
 Environment=PORT=3000
+Environment=PGHOST=/var/run/postgresql
+Environment=PGDATABASE=wisdomloong
+Environment=PGUSER=admin
+EnvironmentFile=/etc/wisdomloong.env
 ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=5

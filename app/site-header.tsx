@@ -12,7 +12,13 @@ function BrandSlash() {
   return <span className="brand-slash">/</span>;
 }
 
-export function SiteHeader({ page }: { page: PageName }) {
+export function SiteHeader({
+  page,
+  username,
+}: {
+  page: PageName;
+  username: string;
+}) {
   const [compact, setCompact] = useState(false);
 
   useEffect(() => {
@@ -46,17 +52,33 @@ export function SiteHeader({ page }: { page: PageName }) {
           </span>
         </a>
 
-        <nav aria-label="主要导航">
-          <a className={page === "latest" ? "active" : ""} href="/">
-            最新文章
-          </a>
-          <a
-            className={page === "categories" ? "active" : ""}
-            href="/categories"
-          >
-            分类
-          </a>
-        </nav>
+        <div className="header-actions">
+          <nav aria-label="主要导航">
+            <a className={page === "latest" ? "active" : ""} href="/">
+              最新文章
+            </a>
+            <a
+              className={page === "categories" ? "active" : ""}
+              href="/categories"
+            >
+              分类
+            </a>
+          </nav>
+
+          <details className="account-menu">
+            <summary title={username}>
+              <span aria-hidden="true">{username.slice(0, 1).toUpperCase()}</span>
+              <strong>{username}</strong>
+            </summary>
+            <div>
+              <p>当前登录用户</p>
+              <strong>{username}</strong>
+              <form action="/api/auth/logout" method="post">
+                <button type="submit">退出登录</button>
+              </form>
+            </div>
+          </details>
+        </div>
       </div>
     </header>
   );

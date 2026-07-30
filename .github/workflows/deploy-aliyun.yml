@@ -51,9 +51,20 @@ jobs:
         env:
           ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
           ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
+          REGISTRATION_INVITE_CODE: ${{ secrets.REGISTRATION_INVITE_CODE }}
         run: |
+          if [ -z "$REGISTRATION_INVITE_CODE" ]; then
+            echo "REGISTRATION_INVITE_CODE secret is required" >&2
+            exit 1
+          fi
+          umask 077
+          printf 'REGISTRATION_INVITE_CODE=%s\n' \
+            "$REGISTRATION_INVITE_CODE" > /tmp/wisdomloong.env
           scp "/tmp/wisdomloong-${GITHUB_SHA}.tgz" \
+            /tmp/wisdomloong.env \
             deploy/nginx.conf \
+            deploy/prepare-database.sh \
+            deploy/schema.sql \
             deploy/wisdomloong.service \
             "${ALIYUN_USER}@${ALIYUN_HOST}:/tmp/"
 
@@ -68,6 +79,9 @@ jobs:
             sudo install -d -o ${ALIYUN_USER} -g ${ALIYUN_USER} \"\$release\"
             tar -xzf /tmp/wisdomloong-${GITHUB_SHA}.tgz -C \"\$release\"
             rm /tmp/wisdomloong-${GITHUB_SHA}.tgz
+            sudo install -m 600 -o root -g root /tmp/wisdomloong.env /etc/wisdomloong.env
+            chmod +x /tmp/prepare-database.sh
+            /tmp/prepare-database.sh
             sudo ln -sfn \"\$release\" /srv/wisdomloong/current
             sudo install -m 644 /tmp/wisdomloong.service /etc/systemd/system/wisdomloong.service
             sudo install -m 644 /tmp/nginx.conf /etc/nginx/sites-available/wisdomloong

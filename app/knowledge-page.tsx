@@ -54,10 +54,12 @@ export function KnowledgePage({
   page,
   category,
   order,
+  username,
 }: {
   page: PageName;
   category: Category;
   order: Order;
+  username: string;
 }) {
   const visibleArticles = articles
     .filter((article) => category === "全部" || article.category === category)
@@ -69,7 +71,7 @@ export function KnowledgePage({
 
   return (
     <div className="site">
-      <SiteHeader page={page} />
+      <SiteHeader page={page} username={username} />
 
       <main>
         <section className="heading">

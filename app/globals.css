@@ -24,6 +24,7 @@ body {
 }
 
 button,
+input,
 select {
   font: inherit;
 }
@@ -164,6 +165,103 @@ nav a.active::after {
   height: 3px;
   background: var(--accent);
   content: "";
+}
+
+.header-actions {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.account-menu {
+  position: relative;
+}
+
+.account-menu summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  list-style: none;
+}
+
+.account-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-menu summary > span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: var(--white);
+  border-radius: 50%;
+  background: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.account-menu summary > strong {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu > div {
+  position: absolute;
+  top: calc(100% + 16px);
+  right: 0;
+  width: 210px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--white);
+  box-shadow: 0 16px 36px rgba(24, 24, 22, 0.12);
+}
+
+.account-menu > div::before {
+  position: absolute;
+  top: -17px;
+  right: 0;
+  width: 100%;
+  height: 17px;
+  content: "";
+}
+
+.account-menu p {
+  margin: 0 0 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.account-menu > div > strong {
+  display: block;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu form {
+  margin-top: 16px;
+}
+
+.account-menu button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.account-menu button:hover {
+  border-color: var(--ink);
 }
 
 main {
@@ -370,6 +468,185 @@ footer {
   font-size: 12px;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: 76px 1fr auto;
+}
+
+.auth-header {
+  padding: 0 max(24px, calc((100% - 1120px) / 2));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+
+.auth-wordmark {
+  color: var(--ink);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  text-decoration: none;
+}
+
+.auth-header > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.auth-main {
+  width: min(1120px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 72px 0 88px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+  align-items: center;
+  gap: clamp(64px, 10vw, 144px);
+}
+
+.auth-intro > p {
+  margin: 0 0 12px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.18em;
+}
+
+.auth-intro h1 {
+  margin: 0 0 16px;
+  font-size: clamp(44px, 6vw, 72px);
+  font-weight: 500;
+  letter-spacing: -0.065em;
+  line-height: 1;
+}
+
+.auth-intro > span {
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.auth-panel {
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(248, 246, 239, 0.68);
+}
+
+.auth-tabs {
+  margin-bottom: 28px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--line);
+}
+
+.auth-tabs a {
+  position: relative;
+  padding: 0 0 13px;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  text-decoration: none;
+}
+
+.auth-tabs a.active {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.auth-tabs a.active::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  content: "";
+}
+
+.auth-form {
+  display: grid;
+  gap: 18px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.auth-form input {
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 400;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.auth-form input:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(24, 24, 22, 0.08);
+}
+
+.auth-form input::placeholder {
+  color: #97948b;
+}
+
+.auth-form button {
+  height: 46px;
+  margin-top: 4px;
+  color: var(--white);
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: var(--ink);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.auth-form button:hover {
+  background: #2d2d29;
+}
+
+.auth-error {
+  margin: -4px 0 0;
+  padding: 10px 12px;
+  color: #9d321f;
+  border: 1px solid rgba(214, 95, 64, 0.34);
+  border-radius: 7px;
+  background: rgba(214, 95, 64, 0.08);
+  font-size: 12px;
+}
+
+.auth-switch {
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.auth-switch a {
+  margin-left: 6px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.auth-footer {
+  align-self: end;
+}
+
 @media (max-width: 720px) {
   .header-inner {
     width: calc(100% - 40px);
@@ -404,6 +681,27 @@ footer {
     gap: 18px;
   }
 
+  .header-actions {
+    gap: 16px;
+  }
+
+  .account-menu summary {
+    gap: 6px;
+  }
+
+  .account-menu summary > span {
+    width: 27px;
+    height: 27px;
+  }
+
+  .account-menu summary > strong {
+    max-width: 52px;
+  }
+
+  .account-menu > div {
+    right: -2px;
+  }
+
   main {
     width: calc(100% - 40px);
     padding-top: 48px;
@@ -421,6 +719,39 @@ footer {
   .article {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .auth-header {
+    padding: 0 20px;
+  }
+
+  .auth-wordmark {
+    font-size: 18px;
+  }
+
+  .auth-main {
+    width: calc(100% - 40px);
+    padding: 48px 0 64px;
+    grid-template-columns: 1fr;
+    gap: 42px;
+  }
+
+  .auth-intro h1 {
+    font-size: 46px;
+  }
+
+  .auth-panel {
+    padding: 22px;
+  }
+}
+
+@media (max-width: 360px) {
+  .account-menu summary {
+    gap: 0;
+  }
+
+  .account-menu summary > strong {
+    display: none;
   }
 }
 
