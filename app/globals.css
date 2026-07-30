@@ -1,10 +1,11 @@
 :root {
-  --ink: #17201e;
-  --muted: #68716e;
-  --line: #dde2df;
-  --paper: #f5f6f3;
-  --white: #ffffff;
-  --accent: #e75f3c;
+  --ink: #181816;
+  --muted: #68665f;
+  --line: rgba(24, 24, 22, 0.18);
+  --paper: #f0eee6;
+  --surface: #e7e4da;
+  --white: #f8f6ef;
+  --accent: #d65f40;
 }
 
 * {
@@ -19,7 +20,7 @@ body {
   margin: 0;
   color: var(--ink);
   font-family:
-    Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    Arial, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 button,
@@ -35,41 +36,86 @@ button {
   min-height: 100vh;
 }
 
-header {
-  height: 72px;
-  padding: 0 max(24px, calc((100vw - 1120px) / 2));
+.site-header {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  background: rgba(240, 238, 230, 0.94);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(14px);
+}
+
+.header-inner {
+  width: min(1120px, calc(100% - 48px));
+  height: 100%;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--white);
-  border-bottom: 1px solid var(--line);
 }
 
-.logo {
+.wordmark {
+  position: relative;
+  width: 194px;
+  height: 32px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  overflow: hidden;
   color: inherit;
-  border: 0;
-  background: none;
-  cursor: pointer;
   text-decoration: none;
+  transition: width 520ms cubic-bezier(0.76, 0, 0.24, 1);
 }
 
-.logo span {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  color: white;
-  background: var(--ink);
-  border-radius: 9px;
-  font: 700 18px Georgia, serif;
+.wordmark-full {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  font-size: 21px;
+  font-weight: 750;
+  letter-spacing: -0.075em;
+  line-height: 1;
+  transition:
+    opacity 240ms ease,
+    transform 520ms cubic-bezier(0.76, 0, 0.24, 1);
 }
 
-.logo strong {
-  font-size: 17px;
-  letter-spacing: -0.02em;
+.brand-slash {
+  width: 7px;
+  height: 24px;
+  display: inline-block;
+  flex: 0 0 auto;
+  margin: 0 1px 0 3px;
+  background: currentColor;
+  transform: skew(-18deg);
+}
+
+.wordmark-mark {
+  position: absolute;
+  left: 5px;
+  margin: 0;
+  opacity: 0;
+  transform: translateX(28px) skew(-18deg);
+  transition:
+    opacity 240ms ease 100ms,
+    transform 520ms cubic-bezier(0.76, 0, 0.24, 1);
+}
+
+.site-header.is-compact .wordmark {
+  width: 22px;
+}
+
+.site-header.is-compact .wordmark-full {
+  opacity: 0;
+  transform: translateX(-32px);
+}
+
+.site-header.is-compact .wordmark-mark {
+  opacity: 1;
+  transform: translateX(0) skew(-18deg);
 }
 
 nav {
@@ -87,6 +133,7 @@ nav a {
   background: none;
   color: var(--muted);
   cursor: pointer;
+  font-size: 14px;
   text-decoration: none;
 }
 
@@ -128,10 +175,10 @@ main {
 
 .heading h1 {
   margin: 0 0 12px;
-  font-family: Georgia, "Songti SC", serif;
+  font-family: Arial, "Helvetica Neue", "PingFang SC", sans-serif;
   font-size: clamp(38px, 6vw, 62px);
   font-weight: 500;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.065em;
 }
 
 .heading > div > span {
@@ -184,7 +231,7 @@ select {
   justify-content: space-between;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: var(--white);
+  background: rgba(248, 246, 239, 0.58);
   color: inherit;
   cursor: pointer;
   text-decoration: none;
@@ -257,7 +304,7 @@ select {
 
 .article h3 {
   margin: 0;
-  font: 500 20px Georgia, "Songti SC", serif;
+  font: 500 20px Arial, "PingFang SC", sans-serif;
   transition: color 160ms ease;
 }
 
@@ -310,12 +357,29 @@ footer {
 }
 
 @media (max-width: 720px) {
-  header {
-    padding: 0 20px;
+  .header-inner {
+    width: calc(100% - 40px);
   }
 
-  .logo strong {
-    display: none;
+  .wordmark {
+    width: 174px;
+  }
+
+  .wordmark-full {
+    font-size: 18px;
+  }
+
+  .brand-slash {
+    width: 6px;
+    height: 21px;
+  }
+
+  .site-header.is-compact .wordmark {
+    width: 20px;
+  }
+
+  nav {
+    gap: 18px;
   }
 
   main {
@@ -335,5 +399,13 @@ footer {
   .article {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wordmark,
+  .wordmark-full,
+  .wordmark-mark {
+    transition: none;
   }
 }

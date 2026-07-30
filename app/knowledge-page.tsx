@@ -1,4 +1,5 @@
 import packageInfo from "@/package.json";
+import { SiteHeader } from "@/app/site-header";
 
 type Article = {
   id: number;
@@ -68,24 +69,7 @@ export function KnowledgePage({
 
   return (
     <div className="site">
-      <header>
-        <a className="logo" href="/">
-          <span>W</span>
-          <strong>WisdomLoong</strong>
-        </a>
-
-        <nav>
-          <a className={page === "latest" ? "active" : ""} href="/">
-            最新文章
-          </a>
-          <a
-            className={page === "categories" ? "active" : ""}
-            href="/categories"
-          >
-            分类
-          </a>
-        </nav>
-      </header>
+      <SiteHeader page={page} />
 
       <main>
         <section className="heading">
@@ -168,7 +152,7 @@ export function KnowledgePage({
         </section>
       </main>
 
-      <footer>
+      <footer id="footer">
         <span>WisdomLoong · Shared robotics reading</span>
         <span>{appVersion}</span>
       </footer>
