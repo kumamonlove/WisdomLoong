@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "vinext dev",
-    "build": "vinext build && mkdir -p dist/.openai && cp .openai/hosting.json dist/.openai/hosting.json && cp dist/server/index.mjs dist/server/index.js",
-    "start": "vinext start",
-    "typecheck": "tsc --noEmit"
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run build"
   },
   "dependencies": {
     "next": "16.2.11",
@@ -17,8 +18,6 @@
     "@types/node": "^22.15.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-rsc": "^0.5.32",
-    "typescript": "^5.9.0",
-    "vinext": "^1.0.0-beta.4"
+    "typescript": "^5.9.0"
   }
 }
