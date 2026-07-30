@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import packageInfo from "@/package.json";
 
 type Article = {
   id: number;
@@ -15,6 +16,7 @@ const categories = ["全部", "VLA", "世界模型", "具身智能", "强化学�
 
 // 先保留空数据结构，后续将这里替换为数据库内容。
 const articles: Article[] = [];
+const appVersion = `v${packageInfo.version}`;
 
 export default function Home() {
   const [page, setPage] = useState<"latest" | "categories">("latest");
@@ -144,7 +146,10 @@ export default function Home() {
         </section>
       </main>
 
-      <footer>WisdomLoong · Shared robotics reading</footer>
+      <footer>
+        <span>WisdomLoong · Shared robotics reading</span>
+        <span>{appVersion}</span>
+      </footer>
     </div>
   );
 }

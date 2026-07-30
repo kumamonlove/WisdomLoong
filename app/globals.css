@@ -279,6 +279,9 @@ footer {
   width: min(1120px, calc(100% - 48px));
   margin: 0 auto;
   padding: 22px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
   color: var(--muted);
   border-top: 1px solid var(--line);
   font-size: 12px;
