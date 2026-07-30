@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type PageName = "latest" | "categories";
+export type PageName = "recommended" | "categories" | "reading" | "review";
 
 function BrandW() {
   return <span className="brand-w">W</span>;
@@ -54,16 +54,26 @@ export function SiteHeader({
 
         <div className="header-actions">
           <nav aria-label="主要导航">
-            <a className={page === "latest" ? "active" : ""} href="/">
-              最新文章
+            <a className={page === "recommended" ? "active" : ""} href="/">
+              推荐阅读
             </a>
             <a
               className={page === "categories" ? "active" : ""}
               href="/categories"
             >
-              分类
+              知识分类
+            </a>
+            <a className={page === "reading" ? "active" : ""} href="/reading-list">
+              待读文章
             </a>
           </nav>
+
+          <a
+            className={`write-review-button${page === "review" ? " active" : ""}`}
+            href="/reviews/new"
+          >
+            撰写评论
+          </a>
 
           <details className="account-menu">
             <summary title={username}>
