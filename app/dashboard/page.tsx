@@ -1,4 +1,5 @@
 import packageInfo from "@/package.json";
+import { DeleteUserButton } from "@/app/dashboard/user-actions";
 import { requireAdmin } from "@/lib/admin-auth";
 import { database } from "@/lib/db";
 
@@ -44,11 +45,10 @@ export default async function DashboardPage() {
         <section className="admin-stats">
           <div><span>注册用户</span><strong>{result.rows.length}</strong></div>
           <div><span>已发布评论</span><strong>{totalReviews}</strong></div>
-          <div><span>人均评论</span><strong>{result.rows.length ? (totalReviews / result.rows.length).toFixed(1) : "0"}</strong></div>
         </section>
         <section className="admin-user-table">
           <div className="admin-table-row heading-row">
-            <span>用户</span><span>注册时间</span><span>评论</span><span>待读</span><span>最后活跃</span>
+            <span>用户</span><span>注册时间</span><span>评论</span><span>待读</span><span>最后活跃</span><span>管理</span>
           </div>
           {result.rows.map((user) => (
             <div className="admin-table-row" key={user.id}>
@@ -56,6 +56,7 @@ export default async function DashboardPage() {
               <span>{new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(new Date(user.createdAt))}</span>
               <span>{user.reviewCount}</span><span>{user.readingCount}</span>
               <span>{user.lastActiveAt ? new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(user.lastActiveAt)) : "暂无"}</span>
+              <DeleteUserButton userId={user.id} username={user.username} />
             </div>
           ))}
         </section>

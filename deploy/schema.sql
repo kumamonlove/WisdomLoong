@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS articles (
   published_at DATE,
   source_url TEXT NOT NULL,
   external_id VARCHAR(128),
-  imported_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  imported_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT articles_category_check CHECK (
     category IN ('Ego第一人称', 'VLA', '世界模型', '强化学习')
@@ -54,6 +54,11 @@ CREATE INDEX IF NOT EXISTS articles_published_at_idx ON articles(published_at DE
 
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE articles ALTER COLUMN publisher SET DEFAULT '机构待补充';
+ALTER TABLE articles ALTER COLUMN imported_by DROP NOT NULL;
+ALTER TABLE articles DROP CONSTRAINT IF EXISTS articles_imported_by_fkey;
+ALTER TABLE articles
+  ADD CONSTRAINT articles_imported_by_fkey
+  FOREIGN KEY (imported_by) REFERENCES users(id) ON DELETE SET NULL;
 UPDATE articles SET tags = ARRAY[category] WHERE CARDINALITY(tags) = 0;
 UPDATE articles SET publisher = '机构待补充' WHERE LOWER(publisher) = 'arxiv';
 UPDATE articles SET publisher = 'Physical Intelligence'
@@ -138,6 +143,25 @@ latest_reviews AS (
 UPDATE reviews
 SET review_type = 'short'
 WHERE reviews.id IN (SELECT id FROM latest_reviews)
+  AND EXISTS (SELECT 1 FROM apply_once);
+
+WITH apply_once AS (
+  INSERT INTO app_migrations (migration_key)
+  VALUES ('2026-07-31-pi05-must-read')
+  ON CONFLICT (migration_key) DO NOTHING
+  RETURNING migration_key
+),
+pi05_reviews AS (
+  SELECT DISTINCT ON (articles.id) reviews.id
+  FROM reviews
+  INNER JOIN articles ON articles.id = reviews.article_id
+  WHERE LOWER(articles.title) LIKE '%pi0.5%'
+     OR articles.title LIKE '%π0.5%'
+  ORDER BY articles.id, reviews.updated_at DESC, reviews.id DESC
+)
+UPDATE reviews
+SET must_read = TRUE
+WHERE reviews.id IN (SELECT id FROM pi05_reviews)
   AND EXISTS (SELECT 1 FROM apply_once);
 
 CREATE TABLE IF NOT EXISTS review_attachments (

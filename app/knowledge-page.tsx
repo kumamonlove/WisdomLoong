@@ -30,14 +30,21 @@ export function ArticleGrid({
   return (
     <div className="article-grid">
       {articles.map((article) => (
-        <article className="article-card" key={article.id}>
+        <article
+          className={`article-card${article.recommendationSignals?.mustReadCount ? " must-read-card" : ""}`}
+          key={article.id}
+        >
           <div className="article-card-topline">
             <div className="card-tags">
               {(article.tags?.length ? article.tags : [article.category]).map((tag) => (
                 <span className="tag" key={tag}>{tag}</span>
               ))}
             </div>
-            {article.rating !== null && (
+            {article.recommendationSignals?.mustReadCount ? (
+              <span className="must-read-rating" aria-label="必读，优先于五星推荐">
+                ✦ 必读
+              </span>
+            ) : article.rating !== null && (
               <span className="rating" aria-label={`评分 ${article.rating}`}>
                 ★ {article.rating}
               </span>

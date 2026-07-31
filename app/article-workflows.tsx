@@ -513,6 +513,17 @@ function pdfUrl(
   return `${base.split("#")[0]}#page=${page}&zoom=${zoom}&pagemode=none&navpanes=0`;
 }
 
+function arxivPageUrl(sourceUrl: string) {
+  try {
+    const parsed = new URL(sourceUrl);
+    if (!["arxiv.org", "www.arxiv.org"].includes(parsed.hostname)) return null;
+    const id = parsed.pathname.match(/^\/(?:abs|pdf)\/([^/]+?)(?:\.pdf)?$/)?.[1];
+    return id ? `https://arxiv.org/abs/${id}` : null;
+  } catch {
+    return null;
+  }
+}
+
 export function ReviewComposer({
   articles,
   initialArticleId,
@@ -572,6 +583,9 @@ export function ReviewComposer({
   const localPdfUrlRef = useRef("");
 
   const selectedArticle = availableArticles.find((item) => item.id === articleId);
+  const selectedArxivPage = selectedArticle
+    ? arxivPageUrl(selectedArticle.sourceUrl)
+    : null;
   const searchableTags = useMemo(
     () => ["全部", ...new Set(availableArticles.flatMap((article) => article.tags))],
     [availableArticles],
@@ -717,7 +731,6 @@ export function ReviewComposer({
       }
     } catch {
       if (activeCacheArticle.current === id) {
-        setLocalPdfUrl(`/api/articles/${id}/pdf`);
         setLocalCache({ status: "error", progress: 0 });
       }
     } finally {
@@ -1081,13 +1094,25 @@ export function ReviewComposer({
                         {localCache.status === "loading"
                           ? `正在下载到本地阅读器 ${localCache.progress}%`
                           : localCache.status === "error"
-                            ? "本地保存失败，正在直接打开论文"
+                            ? "论文暂时无法加载"
                           : "正在打开本地论文"}
                       </strong>
-                      <small>下载只进行一次，完成后翻页和缩放不再访问网络</small>
-                      <button onClick={() => readerFileInput.current?.click()} type="button">
-                        加载不出来？拖入或选择本地 PDF
-                      </button>
+                      {localCache.status === "error" ? (
+                        <>
+                          <small>请打开 arXiv 页面下载 PDF，下载完成后把文件拖入这个阅读区域。</small>
+                          {selectedArxivPage ? (
+                            <a href={selectedArxivPage} rel="noreferrer" target="_blank">
+                              在新标签页打开 arXiv 下载页面 ↗
+                            </a>
+                          ) : (
+                            <button onClick={() => readerFileInput.current?.click()} type="button">
+                              选择已经下载的本地 PDF
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <small>首次下载可能需要一些时间，请保持页面打开；完成后翻页不再访问网络。</small>
+                      )}
                     </div>
                   )}
                   {localPdfUrl && (
@@ -1331,25 +1356,36 @@ export function ReviewComposer({
               <strong>长评</strong><span>完整解读</span>
             </button>
           </div>
-          <div className={`star-rating rating-${rating}`}>
-            <span>我的评分</span>
+          <div className={`star-rating rating-${rating}${mustRead ? " is-must-read" : ""}`}>
+            <span>我的推荐等级</span>
             <div>
               {[1, 2, 3, 4, 5].map((value) => (
                 <button
                   aria-label={`${value} 星`}
                   className={value <= rating ? "filled" : ""}
                   key={value}
-                  onClick={() => setRating(value)}
+                  onClick={() => {
+                    setRating(value);
+                    setMustRead(false);
+                  }}
                   type="button"
                 >★</button>
               ))}
-              <strong>{rating}.0</strong>
+              <strong>{mustRead ? "✦ 必读" : `${rating}.0`}</strong>
             </div>
           </div>
           <label className={`must-read-toggle${mustRead ? " selected" : ""}`}>
-            <input checked={mustRead} onChange={(event) => setMustRead(event.target.checked)} type="checkbox" />
+            <input
+              checked={mustRead}
+              onChange={(event) => {
+                setMustRead(event.target.checked);
+                if (event.target.checked) setRating(5);
+              }}
+              type="checkbox"
+            />
             <span aria-hidden="true">✦</span>
-            <div><strong>必读</strong><small>向团队重点推荐这篇文章</small></div>
+            <div><strong>必读</strong><small>高于五星 · 向团队重点推荐</small></div>
+            <em>五星之上</em>
           </label>
           <label>
             {reviewType === "short" ? "一句话短评" : "长评 / 解读"}

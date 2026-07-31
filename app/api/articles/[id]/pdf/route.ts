@@ -102,7 +102,7 @@ export async function GET(
     const response = await fetch(remoteUrl, {
       cache: "no-store",
       headers: { "User-Agent": "WisdomLoong/1.10 PDF cache" },
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(120_000),
     });
     if (!response.ok || !response.body) throw new Error(`PDF source returned ${response.status}`);
 
@@ -127,6 +127,9 @@ export async function GET(
     return new NextResponse(clientStream, { headers });
   } catch (error) {
     console.error("PDF proxy failed", error);
-    return NextResponse.json({ error: "论文加载失败，请稍后重试或打开原文" }, { status: 502 });
+    return NextResponse.json(
+      { error: "论文加载失败，请前往 arXiv 下载 PDF 后拖入阅读器" },
+      { status: 502 },
+    );
   }
 }
