@@ -74,6 +74,7 @@ jobs:
             /tmp/wisdomloong.env \
             deploy/nginx.conf \
             deploy/prepare-database.sh \
+            deploy/prewarm-pdfs.sh \
             deploy/schema.sql \
             deploy/wisdomloong.service \
             "${ALIYUN_USER}@${ALIYUN_HOST}:/tmp/"
@@ -92,6 +93,10 @@ jobs:
             sudo install -m 600 -o root -g root /tmp/wisdomloong.env /etc/wisdomloong.env
             chmod +x /tmp/prepare-database.sh
             /tmp/prepare-database.sh
+            sudo install -d -o ${ALIYUN_USER} -g ${ALIYUN_USER} \
+              /srv/wisdomloong/pdf-cache
+            chmod +x /tmp/prewarm-pdfs.sh
+            PDF_CACHE_DIR=/srv/wisdomloong/pdf-cache /tmp/prewarm-pdfs.sh
             sudo ln -sfn \"\$release\" /srv/wisdomloong/current
             sudo install -m 644 /tmp/wisdomloong.service /etc/systemd/system/wisdomloong.service
             sudo install -m 644 /tmp/nginx.conf /etc/nginx/sites-available/wisdomloong

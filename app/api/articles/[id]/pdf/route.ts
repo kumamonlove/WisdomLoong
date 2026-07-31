@@ -1,33 +1,22 @@
 import { createReadStream } from "node:fs";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { join } from "node:path";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { database } from "@/lib/db";
+import {
+  activePdfDownloads,
+  arxivPdfUrl,
+  pdfCacheDirectory,
+  pdfCachePath,
+} from "@/lib/pdf-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const cacheDirectory = "/tmp/wisdomloong-pdf-cache";
 const cacheMaxAge = 60 * 60 * 24 * 30;
-const globalForPdfCache = globalThis as typeof globalThis & {
-  wisdomLoongPdfDownloads?: Map<number, Promise<void>>;
-};
-const activeDownloads =
-  globalForPdfCache.wisdomLoongPdfDownloads ?? new Map<number, Promise<void>>();
-globalForPdfCache.wisdomLoongPdfDownloads = activeDownloads;
 
 type ArticleSource = { sourceUrl: string };
-
-function arxivPdfUrl(sourceUrl: string) {
-  const parsed = new URL(sourceUrl);
-  if (parsed.protocol !== "https:" || !["arxiv.org", "www.arxiv.org"].includes(parsed.hostname)) {
-    return null;
-  }
-  const id = parsed.pathname.match(/^\/(?:abs|pdf)\/([^/]+?)(?:\.pdf)?$/)?.[1];
-  return id ? `https://arxiv.org/pdf/${id}.pdf` : null;
-}
 
 function cachedResponse(filePath: string, size: number, rangeHeader: string | null) {
   const match = rangeHeader?.match(/^bytes=(\d*)-(\d*)$/);
@@ -44,6 +33,7 @@ function cachedResponse(filePath: string, size: number, rangeHeader: string | nu
           "Content-Length": String(end - start + 1),
           "Content-Range": `bytes ${start}-${end}/${size}`,
           "Content-Type": "application/pdf",
+          "X-WisdomLoong-Cache": "HIT",
         },
       });
     }
@@ -56,6 +46,7 @@ function cachedResponse(filePath: string, size: number, rangeHeader: string | nu
       "Cache-Control": `private, max-age=${cacheMaxAge}`,
       "Content-Length": String(size),
       "Content-Type": "application/pdf",
+      "X-WisdomLoong-Cache": "HIT",
     },
   });
 }
@@ -72,8 +63,8 @@ export async function GET(
     return NextResponse.json({ error: "文章不存在" }, { status: 404 });
   }
 
-  await mkdir(cacheDirectory, { recursive: true });
-  const filePath = join(cacheDirectory, `${articleId}.pdf`);
+  await mkdir(pdfCacheDirectory, { recursive: true });
+  const filePath = pdfCachePath(articleId);
   try {
     const file = await stat(filePath);
     if (file.size > 0) {
@@ -83,7 +74,7 @@ export async function GET(
     // 首次访问时继续从论文源站获取。
   }
 
-  const activeDownload = activeDownloads.get(articleId);
+  const activeDownload = activePdfDownloads.get(articleId);
   if (activeDownload) {
     try {
       await activeDownload;
@@ -122,8 +113,8 @@ export async function GET(
         await writeFile(temporaryPath, Buffer.from(buffer));
         await rename(temporaryPath, filePath);
       })
-      .finally(() => activeDownloads.delete(articleId));
-    activeDownloads.set(articleId, cachePromise);
+      .finally(() => activePdfDownloads.delete(articleId));
+    activePdfDownloads.set(articleId, cachePromise);
     void cachePromise.catch((error) => console.error("PDF cache write failed", error));
 
     const headers = new Headers({
