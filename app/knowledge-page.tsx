@@ -1,5 +1,6 @@
 import packageInfo from "@/package.json";
 import { SiteHeader, type PageName } from "@/app/site-header";
+import { ReviewLikeButton } from "@/app/review-actions";
 import type { ArticleCardData } from "@/lib/knowledge";
 
 const appVersion = `v${packageInfo.version}`;
@@ -44,9 +45,31 @@ export function ArticleGrid({
               {article.title}
             </a>
           </h3>
+          {article.recommendationSignals && (
+            <div className="recommendation-hooks">
+              {article.recommendationSignals.reviewerCount > 0 && (
+                <span className="primary-hook">
+                  <i aria-hidden="true">◉</i>
+                  已有 {article.recommendationSignals.reviewerCount} 位成员读过并留下判断
+                </span>
+              )}
+              {article.recommendationSignals.mustReadCount > 0 && (
+                <span><i aria-hidden="true">✦</i>{article.recommendationSignals.mustReadCount} 人标记必读</span>
+              )}
+              {article.recommendationSignals.longReviewCount > 0 && (
+                <span><i aria-hidden="true">¶</i>包含 {article.recommendationSignals.longReviewCount} 篇深度解读</span>
+              )}
+              {article.recommendationSignals.likeCount > 0 && (
+                <span><i aria-hidden="true">♥</i>长评获得 {article.recommendationSignals.likeCount} 个赞同</span>
+              )}
+              {article.rating !== null && (
+                <span><i aria-hidden="true">★</i>团队评分 {article.rating}</span>
+              )}
+            </div>
+          )}
           <dl className="article-meta">
             <div>
-              <dt>发布时间</dt>
+              <dt>论文日期</dt>
               <dd>
                 {article.publishedAt
                   ? new Intl.DateTimeFormat("zh-CN").format(
@@ -54,6 +77,10 @@ export function ArticleGrid({
                     )
                   : "暂无"}
               </dd>
+            </div>
+            <div>
+              <dt>研究类型</dt>
+              <dd>{(article.tags?.length ? article.tags : [article.category]).join(" · ")}</dd>
             </div>
             {article.publisher &&
               article.publisher !== "机构待补充" &&
@@ -109,6 +136,13 @@ export function ArticleGrid({
                           </figure>
                         ))}
                       </div>
+                    )}
+                    {review.reviewType === "long" && (
+                      <ReviewLikeButton
+                        initialCount={review.likeCount}
+                        initiallyLiked={review.likedByViewer}
+                        reviewId={review.id}
+                      />
                     )}
                   </div>
                 </details>

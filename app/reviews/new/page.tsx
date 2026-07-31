@@ -9,7 +9,7 @@ export default async function NewReviewPage({
   searchParams: Promise<{ article?: string }>;
 }) {
   const user = await requireUser();
-  const articles = await getArticlesForReview();
+  const articles = await getArticlesForReview(user.id);
   const requestedId = Number((await searchParams).article);
   const initialArticleId = articles.some((article) => article.id === requestedId)
     ? requestedId

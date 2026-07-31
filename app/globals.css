@@ -268,6 +268,17 @@ nav a.active::after {
   white-space: nowrap;
 }
 
+.account-menu .profile-link {
+  margin-top: 13px;
+  padding: 9px 0;
+  display: block;
+  color: var(--ink);
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .account-menu form {
   margin-top: 16px;
 }
@@ -500,6 +511,37 @@ select {
   color: var(--accent);
 }
 
+.recommendation-hooks {
+  margin: -8px 0 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.recommendation-hooks span {
+  padding: 6px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #4e4c46;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(248, 246, 239, 0.78);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.recommendation-hooks span.primary-hook {
+  color: #9e422e;
+  border-color: rgba(214, 95, 64, 0.26);
+  background: rgba(214, 95, 64, 0.07);
+}
+
+.recommendation-hooks i {
+  color: var(--accent);
+  font-style: normal;
+}
+
 .article-meta {
   margin: 0;
   display: grid;
@@ -617,6 +659,69 @@ select {
   font-size: 13px;
   line-height: 1.75;
   white-space: pre-wrap;
+}
+
+.review-like {
+  position: relative;
+  margin-top: 16px;
+  padding: 8px 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 10px;
+  transition: transform 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.review-like:hover {
+  transform: translateY(-1px);
+  color: var(--accent);
+  border-color: rgba(214, 95, 64, 0.4);
+}
+
+.review-like.liked {
+  color: #a63f29;
+  border-color: rgba(214, 95, 64, 0.38);
+  background: rgba(214, 95, 64, 0.08);
+}
+
+.review-like > span {
+  font-size: 13px;
+}
+
+.review-like small {
+  min-width: 14px;
+  padding-left: 5px;
+  border-left: 1px solid currentColor;
+  text-align: center;
+}
+
+.review-like i {
+  position: absolute;
+  top: -18px;
+  right: 8px;
+  color: var(--accent);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  animation: like-rise 650ms ease-out both;
+}
+
+.review-like.celebrate > span {
+  animation: heart-pop 500ms cubic-bezier(.2,.9,.3,1.4);
+}
+
+@keyframes like-rise {
+  to { transform: translateY(-12px); opacity: 0; }
+}
+
+@keyframes heart-pop {
+  45% { transform: scale(1.55) rotate(-8deg); }
 }
 
 .must-read-badge {
@@ -1127,6 +1232,50 @@ select {
   gap: 5px;
 }
 
+.library-search-meta {
+  margin-top: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.library-search-meta button {
+  padding: 0;
+  color: var(--accent);
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.library-tag-filter {
+  margin: 9px -2px 0;
+  padding: 2px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.library-tag-filter button {
+  padding: 5px 7px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 8px;
+}
+
+.library-tag-filter button.selected {
+  color: var(--white);
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
 .article-search-results > button {
   padding: 11px;
   display: grid;
@@ -1156,6 +1305,16 @@ select {
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.article-search-results em {
+  width: fit-content;
+  padding: 3px 6px;
+  color: #9e422e;
+  border-radius: 999px;
+  background: rgba(214, 95, 64, 0.08);
+  font-size: 8px;
+  font-style: normal;
 }
 
 .article-search-results strong {
@@ -1219,6 +1378,25 @@ select {
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.reader-essential-meta {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reader-essential-meta strong {
+  font-size: 9px;
+}
+
+.reader-essential-meta span {
+  padding-left: 8px;
+  color: var(--muted);
+  border-left: 1px solid var(--line);
+  font-size: 9px;
+  font-weight: 500;
 }
 
 .reader-titlebar a {
@@ -1305,6 +1483,12 @@ select {
   background: var(--ink);
 }
 
+.reader-toolbar .active-focus {
+  color: var(--white);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
 .pdf-frame {
   position: relative;
   min-height: 720px;
@@ -1374,6 +1558,40 @@ select {
   grid-column: 1 / -1;
   width: 100%;
   accent-color: var(--accent);
+}
+
+.reading-bookmark {
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.reading-bookmark > div {
+  display: grid;
+  gap: 3px;
+}
+
+.reading-bookmark span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.reading-bookmark strong {
+  font-size: 10px;
+}
+
+.reading-bookmark button {
+  padding: 7px 10px;
+  color: var(--white);
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: var(--ink);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .reader-notebook {
@@ -1781,6 +1999,154 @@ select {
   grid-template-columns: 0 minmax(0, 1fr) 320px;
   overflow: auto;
   background: var(--paper);
+}
+
+.focus-status {
+  position: fixed;
+  z-index: 45;
+  top: 10px;
+  left: 50%;
+  min-width: 420px;
+  padding: 9px 10px 9px 14px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--white);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(24, 24, 22, 0.94);
+  box-shadow: 0 12px 30px rgba(24, 24, 22, 0.25);
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
+}
+
+.focus-status span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.focus-status span i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 5px rgba(214, 95, 64, 0.2);
+}
+
+.focus-status small {
+  margin-left: auto;
+  color: rgba(248, 246, 239, 0.58);
+  font-size: 9px;
+}
+
+.focus-status button {
+  padding: 7px 11px;
+  color: var(--ink);
+  border: 0;
+  border-radius: 999px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.profile-stats {
+  margin-top: 44px;
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1fr;
+  gap: 12px;
+}
+
+.profile-stats > div {
+  min-height: 150px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(248, 246, 239, 0.65);
+}
+
+.profile-stats > div > span,
+.profile-stats small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.profile-stats > div > strong {
+  font-size: 38px;
+  font-weight: 500;
+}
+
+.profile-stats .likes-received {
+  border-color: rgba(214, 95, 64, 0.35);
+  background: linear-gradient(135deg, rgba(214, 95, 64, 0.1), rgba(248, 246, 239, 0.78));
+}
+
+.likes-received strong {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.likes-received strong i {
+  color: var(--accent);
+  font-size: 25px;
+  font-style: normal;
+  animation: quiet-heart 2.4s ease-in-out infinite;
+}
+
+@keyframes quiet-heart {
+  50% { transform: scale(1.12); filter: drop-shadow(0 3px 7px rgba(214,95,64,.25)); }
+}
+
+.profile-reviews {
+  margin-top: 42px;
+}
+
+.profile-reviews > article {
+  padding: 22px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.profile-reviews > article > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.profile-reviews h3 {
+  margin: 10px 0;
+  font-size: 18px;
+}
+
+.profile-reviews article > p {
+  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.profile-reviews article > footer {
+  margin-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.profile-reviews footer strong.has-likes {
+  color: var(--accent);
 }
 
 .reader-workspace.focus-mode .article-library {
@@ -2311,6 +2677,20 @@ select {
 
   .reader-workspace.focus-mode .reader-notebook {
     display: none;
+  }
+
+  .focus-status {
+    top: 8px;
+    width: calc(100% - 20px);
+    min-width: 0;
+  }
+
+  .focus-status small {
+    display: none;
+  }
+
+  .profile-stats {
+    grid-template-columns: 1fr;
   }
 
   .admin-stats {

@@ -70,6 +70,17 @@ CREATE TABLE IF NOT EXISTS reading_list (
 CREATE INDEX IF NOT EXISTS reading_list_user_created_idx
   ON reading_list(user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS reading_progress (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  page_number INTEGER NOT NULL CHECK (page_number > 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, article_id)
+);
+
+CREATE INDEX IF NOT EXISTS reading_progress_user_updated_idx
+  ON reading_progress(user_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS reviews (
   id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -116,3 +127,13 @@ CREATE TABLE IF NOT EXISTS review_annotations (
 
 CREATE INDEX IF NOT EXISTS review_annotations_review_idx
   ON review_annotations(review_id, page_number, id);
+
+CREATE TABLE IF NOT EXISTS review_likes (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, review_id)
+);
+
+CREATE INDEX IF NOT EXISTS review_likes_review_idx
+  ON review_likes(review_id, created_at DESC);

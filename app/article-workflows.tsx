@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useEffect,
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -98,6 +99,7 @@ function ArxivLookup({
         tags,
         publishedAt: article.publishedAt,
         sourceUrl: article.sourceUrl,
+        lastReadPage: null,
       });
       router.refresh();
     } catch (error) {
@@ -143,7 +145,7 @@ function ArxivLookup({
           </select>
         </label>
         <label>
-          发布机构
+          发布机构（选填）
           <input
             onChange={(event) => setPublisher(event.target.value)}
             placeholder="如 Physical Intelligence（不是 arXiv）"
@@ -247,7 +249,7 @@ function pdfUrl(articleId: number, sourceUrl: string, page: number, zoom: number
   const base = sourceUrl.includes("arxiv.org/")
     ? `/api/articles/${articleId}/pdf`
     : sourceUrl;
-  return `${base.split("#")[0]}#page=${page}&zoom=${zoom}`;
+  return `${base.split("#")[0]}#page=${page}&zoom=${zoom}&pagemode=none&navpanes=0`;
 }
 
 export function ReviewComposer({
@@ -261,13 +263,17 @@ export function ReviewComposer({
   const [availableArticles, setAvailableArticles] = useState(articles);
   const [articleId, setArticleId] = useState(initialArticleId ?? articles[0]?.id ?? 0);
   const [articleSearch, setArticleSearch] = useState("");
+  const [articleTag, setArticleTag] = useState("全部");
   const [rating, setRating] = useState(4);
   const [mustRead, setMustRead] = useState(false);
   const [reviewType, setReviewType] = useState<"short" | "long">("long");
   const [content, setContent] = useState("");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(
+    articles.find((article) => article.id === initialArticleId)?.lastReadPage ??
+      articles[0]?.lastReadPage ??
+      1,
+  );
   const [zoom, setZoom] = useState(100);
-  const [progress, setProgress] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [quoteDraft, setQuoteDraft] = useState("");
@@ -287,24 +293,54 @@ export function ReviewComposer({
   const cropImageRef = useRef<HTMLImageElement>(null);
 
   const selectedArticle = availableArticles.find((item) => item.id === articleId);
+  const searchableTags = useMemo(
+    () => ["全部", ...new Set(availableArticles.flatMap((article) => article.tags))],
+    [availableArticles],
+  );
   const filteredArticles = useMemo(() => {
-    const query = articleSearch.trim().toLocaleLowerCase();
-    if (!query) return availableArticles;
-    return availableArticles.filter((article) =>
-              [article.title, article.publisher, article.authors.join(" "), article.tags.join(" ")]
+    const terms = articleSearch.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    return availableArticles.filter((article) => {
+      if (articleTag !== "全部" && !article.tags.includes(articleTag)) return false;
+      const haystack = [article.title, article.publisher, article.authors.join(" "), article.tags.join(" ")]
         .join(" ")
-        .toLocaleLowerCase()
-        .includes(query),
-    );
-  }, [articleSearch, availableArticles]);
+        .toLocaleLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+  }, [articleSearch, articleTag, availableArticles]);
+
+  useEffect(() => {
+    if (!focusMode) return;
+    const exitOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFocusMode(false);
+    };
+    window.addEventListener("keydown", exitOnEscape);
+    return () => window.removeEventListener("keydown", exitOnEscape);
+  }, [focusMode]);
 
   function selectArticle(id: number) {
+    const article = availableArticles.find((item) => item.id === id);
     setArticleId(id);
     setPdfLoading(true);
-    setPage(1);
-    setProgress(0);
+    setPage(article?.lastReadPage ?? 1);
     setNotes([]);
     setCaptures([]);
+  }
+
+  async function saveReadingBookmark() {
+    if (!selectedArticle) return;
+    try {
+      await responseJson(await fetch(`/api/articles/${selectedArticle.id}/progress`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page }),
+      }));
+      setAvailableArticles((current) => current.map((article) =>
+        article.id === selectedArticle.id ? { ...article, lastReadPage: page } : article
+      ));
+      setMessage(`已标记读到第 ${page} 页，下次打开会从这里继续。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "阅读书签保存失败");
+    }
   }
 
   function useImportedArticle(article: ReaderArticle) {
@@ -466,6 +502,13 @@ export function ReviewComposer({
 
   return (
     <div className={`reader-workspace${focusMode ? " focus-mode" : ""}`}>
+      {focusMode && (
+        <div className="focus-status">
+          <span><i />专注阅读中</span>
+          <small>按 Esc 随时退出</small>
+          <button onClick={() => setFocusMode(false)} type="button">退出专注模式</button>
+        </div>
+      )}
       {pendingCapture && (
         <div className="crop-dialog" role="dialog" aria-modal="true" aria-label="框选论文图片">
           <div>
@@ -508,6 +551,22 @@ export function ReviewComposer({
           type="search"
           value={articleSearch}
         />
+        <div className="library-search-meta">
+          <span>找到 {filteredArticles.length} 篇</span>
+          {articleSearch && <button onClick={() => setArticleSearch("")} type="button">清空</button>}
+        </div>
+        <div className="library-tag-filter">
+          {searchableTags.map((tag) => (
+            <button
+              className={articleTag === tag ? "selected" : ""}
+              key={tag}
+              onClick={() => setArticleTag(tag)}
+              type="button"
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
         <div className="article-search-results">
           {filteredArticles.map((article) => (
             <button
@@ -522,6 +581,7 @@ export function ReviewComposer({
                 )}
               <strong>{article.title}</strong>
               <small>{article.tags.join(" · ")}</small>
+              {article.lastReadPage && <em>上次读到 P.{article.lastReadPage}</em>}
             </button>
           ))}
           {filteredArticles.length === 0 && <p>没有匹配文章</p>}
@@ -543,6 +603,10 @@ export function ReviewComposer({
                   )}
                 <h2>{selectedArticle.title}</h2>
                 <p>{selectedArticle.authors.join(", ")}</p>
+                <div className="reader-essential-meta">
+                  <strong>{selectedArticle.publishedAt ?? "日期暂无"}</strong>
+                  <span>{selectedArticle.tags.join(" · ")}</span>
+                </div>
               </div>
               <a href={selectedArticle.sourceUrl} rel="noreferrer" target="_blank">原文 ↗</a>
             </header>
@@ -572,7 +636,7 @@ export function ReviewComposer({
                 <span>{zoom}%</span>
                 <button onClick={() => setZoom((value) => Math.min(200, value + 10))} type="button">＋</button>
               </div>
-              <button onClick={() => setFocusMode((value) => !value)} type="button">
+              <button className={focusMode ? "active-focus" : ""} onClick={() => setFocusMode((value) => !value)} type="button">
                 {focusMode ? "退出专注" : "专注阅读"}
               </button>
               <button className="capture-button" disabled={capturing} onClick={captureScreen} type="button">
@@ -594,11 +658,18 @@ export function ReviewComposer({
               title={selectedArticle.title}
               />
             </div>
-            <div className="reading-progress">
-              <label>
-                阅读进度 <strong>{progress}%</strong>
-                <input max="100" min="0" onChange={(event) => setProgress(Number(event.target.value))} type="range" value={progress} />
-              </label>
+            <div className="reading-bookmark">
+              <div>
+                <span>阅读书签</span>
+                <strong>
+                  {selectedArticle.lastReadPage
+                    ? `上次读到 P.${selectedArticle.lastReadPage}`
+                    : "还没有保存阅读位置"}
+                </strong>
+              </div>
+              <button onClick={saveReadingBookmark} type="button">
+                ◉ 标记读到第 {page} 页
+              </button>
             </div>
           </>
         ) : (

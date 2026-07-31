@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-export type PageName = "recommended" | "categories" | "reading" | "review";
+export type PageName = "recommended" | "categories" | "reading" | "review" | "profile";
 
 function BrandW() {
   return <span className="brand-w">W</span>;
@@ -83,6 +83,7 @@ export function SiteHeader({
             <div>
               <p>当前登录用户</p>
               <strong>{username}</strong>
+              <a className="profile-link" href="/profile">我的主页 · 查看收到的赞</a>
               <form action="/api/auth/logout" method="post">
                 <button type="submit">退出登录</button>
               </form>

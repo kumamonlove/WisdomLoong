@@ -35,6 +35,8 @@ export type ArticleCardData = {
     rating: number;
     reviewType: "short" | "long";
     mustRead: boolean;
+    likeCount: number;
+    likedByViewer: boolean;
     updatedAt: string;
     attachments: { id: number; note: string }[];
     annotations: {
@@ -45,6 +47,12 @@ export type ArticleCardData = {
       content: string;
     }[];
   }[];
+  recommendationSignals?: {
+    reviewerCount: number;
+    longReviewCount: number;
+    mustReadCount: number;
+    likeCount: number;
+  };
 };
 
 export type ReaderArticle = {
@@ -57,6 +65,7 @@ export type ReaderArticle = {
   tags: string[];
   publishedAt: string | null;
   sourceUrl: string;
+  lastReadPage: number | null;
 };
 
 function firstValue(value: string | string[] | undefined) {
@@ -102,7 +111,13 @@ export async function getRecommendedArticles(userId: number) {
        NULL::text AS "reviewAuthor",
        NULL::text AS "reviewContent",
        review_group.rating,
-       review_group.reviews
+       review_group.reviews,
+       JSON_BUILD_OBJECT(
+         'reviewerCount', article_signals.reviewer_count,
+         'longReviewCount', article_signals.long_review_count,
+         'mustReadCount', article_signals.must_read_count,
+         'likeCount', article_signals.like_count
+       ) AS "recommendationSignals"
      FROM articles
      INNER JOIN LATERAL (
        SELECT
@@ -115,6 +130,8 @@ export async function getRecommendedArticles(userId: number) {
              'rating', reviews.rating,
              'reviewType', reviews.review_type,
              'mustRead', reviews.must_read,
+             'likeCount', COALESCE(likes.like_count, 0),
+             'likedByViewer', COALESCE(likes.liked_by_viewer, FALSE),
              'updatedAt', reviews.updated_at,
              'attachments', COALESCE(attachments.items, '[]'::json)
              ,'annotations', COALESCE(annotations.items, '[]'::json)
@@ -124,6 +141,13 @@ export async function getRecommendedArticles(userId: number) {
          ) AS reviews
        FROM reviews
        INNER JOIN users ON users.id = reviews.user_id
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(*)::int AS like_count,
+           BOOL_OR(review_likes.user_id = $1) AS liked_by_viewer
+         FROM review_likes
+         WHERE review_likes.review_id = reviews.id
+       ) likes ON TRUE
        LEFT JOIN LATERAL (
          SELECT JSON_AGG(
            JSON_BUILD_OBJECT(
@@ -153,6 +177,16 @@ export async function getRecommendedArticles(userId: number) {
          AND reviews.user_id <> $1
          AND reviews.rating >= 4
      ) review_group ON review_group.reviews IS NOT NULL
+     INNER JOIN LATERAL (
+       SELECT
+         COUNT(DISTINCT reviews.user_id)::int AS reviewer_count,
+         COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.review_type = 'long')::int AS long_review_count,
+         COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.must_read)::int AS must_read_count,
+         COUNT(DISTINCT review_likes.user_id)::int AS like_count
+       FROM reviews
+       LEFT JOIN review_likes ON review_likes.review_id = reviews.id
+       WHERE reviews.article_id = articles.id
+     ) article_signals ON TRUE
      ORDER BY review_group.rating DESC, articles.published_at DESC NULLS LAST`,
     [userId],
   );
@@ -264,12 +298,68 @@ export async function getReadingList(userId: number) {
   return result.rows;
 }
 
-export async function getArticlesForReview() {
+export async function getArticlesForReview(userId: number) {
   const result = await database.query<ReaderArticle>(
     `SELECT id, title, abstract, authors, publisher, category, tags,
-            published_at::text AS "publishedAt", source_url AS "sourceUrl"
+            published_at::text AS "publishedAt", source_url AS "sourceUrl",
+            reading_progress.page_number AS "lastReadPage"
      FROM articles
+     LEFT JOIN reading_progress
+       ON reading_progress.article_id = articles.id
+      AND reading_progress.user_id = $1
      ORDER BY created_at DESC`,
+    [userId],
   );
   return result.rows;
+}
+
+export async function getUserReviewProfile(userId: number) {
+  const [stats, reviews] = await Promise.all([
+    database.query<{
+      totalLikes: number;
+      longReviews: number;
+      shortReviews: number;
+    }>(
+      `SELECT
+         COUNT(review_likes.user_id)::int AS "totalLikes",
+         COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.review_type = 'long')::int AS "longReviews",
+         COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.review_type = 'short')::int AS "shortReviews"
+       FROM reviews
+       LEFT JOIN review_likes ON review_likes.review_id = reviews.id
+       WHERE reviews.user_id = $1`,
+      [userId],
+    ),
+    database.query<{
+      id: number;
+      title: string;
+      content: string;
+      rating: number;
+      reviewType: "short" | "long";
+      mustRead: boolean;
+      likeCount: number;
+      updatedAt: string;
+    }>(
+      `SELECT
+         reviews.id,
+         articles.title,
+         reviews.content,
+         reviews.rating,
+         reviews.review_type AS "reviewType",
+         reviews.must_read AS "mustRead",
+         COUNT(review_likes.user_id)::int AS "likeCount",
+         reviews.updated_at::text AS "updatedAt"
+       FROM reviews
+       INNER JOIN articles ON articles.id = reviews.article_id
+       LEFT JOIN review_likes ON review_likes.review_id = reviews.id
+       WHERE reviews.user_id = $1
+       GROUP BY reviews.id, articles.title
+       ORDER BY COUNT(review_likes.user_id) DESC, reviews.updated_at DESC`,
+      [userId],
+    ),
+  ]);
+
+  return {
+    stats: stats.rows[0] ?? { totalLikes: 0, longReviews: 0, shortReviews: 0 },
+    reviews: reviews.rows,
+  };
 }
