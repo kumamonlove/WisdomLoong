@@ -10,18 +10,18 @@ export default async function Home() {
     <KnowledgePage
       page="recommended"
       title="推荐阅读"
-      description="来自团队成员的高分评论与值得一读的文章"
+      description="团队成员读过、讨论并认为值得关注的文章"
       username={user.username}
     >
       <section className="list">
         <div className="list-title">
-          <h2>高分评论</h2>
+          <h2>大家在读</h2>
           <span>{articles.length} 篇</span>
         </div>
         <ArticleGrid
           articles={articles}
           emptyTitle="还没有推荐内容"
-          emptyDescription="其他成员发表高分评论后，文章会出现在这里。"
+          emptyDescription="团队成员阅读、批注或推荐文章后，内容会出现在这里。"
         />
       </section>
     </KnowledgePage>
