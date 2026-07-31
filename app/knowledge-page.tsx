@@ -187,7 +187,7 @@ export function ArticleGrid({
 export function KnowledgePage({
   page,
   username,
-  eyebrow = "ROBOTICS KNOWLEDGE HUB",
+  eyebrow = "WISDOMLOONG KNOWLEDGE LIBRARY",
   title,
   description,
   action,

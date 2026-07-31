@@ -11,7 +11,7 @@ export default async function ReadingListPage() {
     <KnowledgePage
       page="reading"
       title="待读列表"
-      description="团队文章库中你尚未读过或评论的文章；上传或推荐不等于已经读过"
+      description="集中管理你的下一篇阅读"
       username={user.username}
     >
       <section className="import-section" id="recommend-article">
