@@ -44,6 +44,7 @@ export type ArticleCardData = {
       quote: string;
       translation: string;
       content: string;
+      rect?: { x: number; y: number; width: number; height: number } | null;
     }[];
   }[];
   recommendationSignals?: {
@@ -75,6 +76,7 @@ export type ReaderArticle = {
       quote: string;
       translation: string;
       content: string;
+      rect?: { x: number; y: number; width: number; height: number } | null;
     }[];
   } | null;
 };
@@ -177,7 +179,13 @@ export async function getRecommendedArticles(userId: number) {
              'page', review_annotations.page_number,
              'quote', review_annotations.quote,
              'translation', review_annotations.translation,
-             'content', review_annotations.content
+             'content', review_annotations.content,
+             'rect', CASE WHEN review_annotations.rect_x IS NULL THEN NULL ELSE JSON_BUILD_OBJECT(
+               'x', review_annotations.rect_x,
+               'y', review_annotations.rect_y,
+               'width', review_annotations.rect_width,
+               'height', review_annotations.rect_height
+             ) END
            )
            ORDER BY review_annotations.page_number, review_annotations.id
          ) AS items
@@ -368,7 +376,13 @@ export async function getArticlesForReview(userId: number) {
            'page', review_annotations.page_number,
            'quote', review_annotations.quote,
            'translation', review_annotations.translation,
-           'content', review_annotations.content
+           'content', review_annotations.content,
+           'rect', CASE WHEN review_annotations.rect_x IS NULL THEN NULL ELSE JSON_BUILD_OBJECT(
+             'x', review_annotations.rect_x,
+             'y', review_annotations.rect_y,
+             'width', review_annotations.rect_width,
+             'height', review_annotations.rect_height
+           ) END
          )
          ORDER BY review_annotations.page_number, review_annotations.id
        ) AS items

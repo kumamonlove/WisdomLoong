@@ -14,6 +14,7 @@ type ReviewBody = {
     quote?: string;
     translation?: string;
     content?: string;
+    rect?: { x?: number; y?: number; width?: number; height?: number } | null;
   }[];
 };
 
@@ -60,12 +61,26 @@ export async function POST(request: Request) {
   }
   const annotations = (Array.isArray(body.annotations) ? body.annotations : [])
     .slice(0, 50)
-    .map((annotation) => ({
-      page: Math.max(1, Math.floor(Number(annotation.page) || 1)),
-      quote: annotation.quote?.trim().slice(0, 12_000) ?? "",
-      translation: annotation.translation?.trim().slice(0, 12_000) ?? "",
-      content: annotation.content?.trim().slice(0, 4_000) ?? "",
-    }))
+    .map((annotation) => {
+      const rect = annotation.rect;
+      const normalizedRect = rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)
+        ? {
+            x: Math.max(0, Math.min(100, Number(rect.x))),
+            y: Math.max(0, Math.min(100, Number(rect.y))),
+            width: Math.max(0, Math.min(100, Number(rect.width))),
+            height: Math.max(0, Math.min(100, Number(rect.height))),
+          }
+        : null;
+      return {
+        page: Math.max(1, Math.floor(Number(annotation.page) || 1)),
+        quote: annotation.quote?.trim().slice(0, 12_000) ?? "",
+        translation: annotation.translation?.trim().slice(0, 12_000) ?? "",
+        content: annotation.content?.trim().slice(0, 4_000) ?? "",
+        rect: normalizedRect && normalizedRect.width >= 1 && normalizedRect.height >= 1
+          ? normalizedRect
+          : null,
+      };
+    })
     .filter((annotation) => annotation.content);
 
   const client = await database.connect();
@@ -107,9 +122,20 @@ export async function POST(request: Request) {
     for (const annotation of annotations) {
       await client.query(
         `INSERT INTO review_annotations
-           (review_id, page_number, quote, translation, content)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [reviewId, annotation.page, annotation.quote, annotation.translation, annotation.content],
+           (review_id, page_number, quote, translation, content,
+            rect_x, rect_y, rect_width, rect_height)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          reviewId,
+          annotation.page,
+          annotation.quote,
+          annotation.translation,
+          annotation.content,
+          annotation.rect?.x ?? null,
+          annotation.rect?.y ?? null,
+          annotation.rect?.width ?? null,
+          annotation.rect?.height ?? null,
+        ],
       );
     }
     await client.query(

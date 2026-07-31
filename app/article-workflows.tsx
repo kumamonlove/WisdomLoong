@@ -6,12 +6,15 @@ import {
   useRef,
   useState,
   useEffect,
+  useCallback,
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { normalizeTags } from "@/lib/knowledge-types";
 import type { ReaderArticle } from "@/lib/knowledge";
 import { ReviewLikeButton } from "@/app/review-actions";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 type ArxivResult = {
   title: string;
@@ -477,12 +480,13 @@ function PdfDropImporter() {
   );
 }
 
-type Capture = { dataUrl: string; note: string };
+type AnnotationRect = { x: number; y: number; width: number; height: number };
 type ReadingNote = {
   page: number;
   quote: string;
   translation: string;
   content: string;
+  rect?: AnnotationRect | null;
 };
 type CommunityAnnotation = ReadingNote & {
   id: number;
@@ -501,19 +505,6 @@ type CommunityReview = {
   attachments: { id: number; reviewId: number; note: string }[];
 };
 
-function pdfUrl(
-  articleId: number,
-  sourceUrl: string,
-  page: number,
-  zoom: number,
-  localUrl = "",
-) {
-  const base = localUrl || (sourceUrl.includes("arxiv.org/")
-    ? `/api/articles/${articleId}/pdf`
-    : sourceUrl);
-  return `${base.split("#")[0]}#page=${page}&zoom=${zoom}&pagemode=none&navpanes=0`;
-}
-
 function arxivPageUrl(sourceUrl: string) {
   try {
     const parsed = new URL(sourceUrl);
@@ -523,6 +514,97 @@ function arxivPageUrl(sourceUrl: string) {
   } catch {
     return null;
   }
+}
+
+function PdfPageCanvas({
+  url,
+  page,
+  zoom,
+  onLoad,
+  onError,
+  children,
+}: {
+  url: string;
+  page: number;
+  zoom: number;
+  onLoad: () => void;
+  onError: () => void;
+  children: ReactNode;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let loadingTask: PDFDocumentLoadingTask | undefined;
+    setPdfDocument(null);
+    void (async () => {
+      try {
+        const pdfjs = await import("pdfjs-dist");
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+          "pdfjs-dist/build/pdf.worker.min.mjs",
+          import.meta.url,
+        ).toString();
+        const nextLoadingTask = pdfjs.getDocument(url);
+        loadingTask = nextLoadingTask;
+        const document = await nextLoadingTask.promise;
+        if (!cancelled) setPdfDocument(document);
+      } catch {
+        if (!cancelled) onError();
+      }
+    })();
+    return () => {
+      cancelled = true;
+      void loadingTask?.destroy();
+    };
+  }, [url, onError]);
+
+  useEffect(() => {
+    if (!pdfDocument) return;
+    let cancelled = false;
+    let renderTask: RenderTask | undefined;
+    void (async () => {
+      try {
+        const pdfPage = await pdfDocument.getPage(Math.min(Math.max(1, page), pdfDocument.numPages));
+        const viewport = pdfPage.getViewport({ scale: (zoom / 100) * (96 / 72) });
+        const canvas = canvasRef.current;
+        if (!canvas || cancelled) return;
+        const pixelRatio = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(viewport.width * pixelRatio);
+        canvas.height = Math.floor(viewport.height * pixelRatio);
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        setPageSize({ width: viewport.width, height: viewport.height });
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("canvas unavailable");
+        const nextRenderTask = pdfPage.render({
+          canvas,
+          canvasContext: context,
+          viewport,
+          transform: pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
+        });
+        renderTask = nextRenderTask;
+        await nextRenderTask.promise;
+        if (!cancelled) onLoad();
+      } catch (error) {
+        if (!cancelled && (error as Error).name !== "RenderingCancelledException") onError();
+      }
+    })();
+    return () => {
+      cancelled = true;
+      renderTask?.cancel();
+    };
+  }, [pdfDocument, page, zoom, onLoad, onError]);
+
+  return (
+    <div className="pdf-page-scroll">
+      <div className="pdf-page-canvas" style={{ width: pageSize.width || undefined, height: pageSize.height || undefined }}>
+        <canvas ref={canvasRef} />
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export function ReviewComposer({
@@ -560,7 +642,7 @@ export function ReviewComposer({
   const [communityAnnotations, setCommunityAnnotations] = useState<CommunityAnnotation[]>([]);
   const [discussionLoading, setDiscussionLoading] = useState(false);
   const [localCache, setLocalCache] = useState<{
-    status: "idle" | "loading" | "ready" | "unsupported" | "error";
+    status: "idle" | "loading" | "ready" | "unsupported" | "error" | "timeout";
     progress: number;
   }>({ status: "idle", progress: 0 });
   const [localPdfUrl, setLocalPdfUrl] = useState("");
@@ -571,18 +653,16 @@ export function ReviewComposer({
   const [translation, setTranslation] = useState("");
   const [translating, setTranslating] = useState(false);
   const [notes, setNotes] = useState<ReadingNote[]>(startingReview?.annotations ?? []);
-  const [captures, setCaptures] = useState<Capture[]>([]);
-  const [pendingCapture, setPendingCapture] = useState("");
-  const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null);
-  const [cropRect, setCropRect] = useState({ x: 0, y: 0, width: 100, height: 100 });
+  const [drawingAnnotation, setDrawingAnnotation] = useState(false);
+  const [annotationStart, setAnnotationStart] = useState<{ x: number; y: number } | null>(null);
+  const [annotationRect, setAnnotationRect] = useState<AnnotationRect | null>(null);
+  const [annotationPage, setAnnotationPage] = useState(page);
   const [tagDraft, setTagDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const [capturing, setCapturing] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(true);
+  const [pdfRenderAttempt, setPdfRenderAttempt] = useState(0);
   const [message, setMessage] = useState("");
-  const iframeRef = useRef<HTMLIFrameElement>(null);
   const readerFileInput = useRef<HTMLInputElement>(null);
-  const cropImageRef = useRef<HTMLImageElement>(null);
   const activeCacheArticle = useRef(0);
   const localPdfUrlRef = useRef("");
   const sessionPdfUrls = useRef(new Map<number, string>());
@@ -674,7 +754,9 @@ export function ReviewComposer({
     setReviewType(article?.ownReview?.reviewType ?? "long");
     setContent(article?.ownReview?.content ?? "");
     setNotes(article?.ownReview?.annotations ?? []);
-    setCaptures([]);
+    setDrawingAnnotation(false);
+    setAnnotationStart(null);
+    setAnnotationRect(null);
     setContextTab("discussion");
     const sessionUrl = sessionPdfUrls.current.get(id) ?? "";
     localPdfUrlRef.current = sessionUrl;
@@ -726,6 +808,9 @@ export function ReviewComposer({
     const cacheRequest = new Request(new URL(cacheKey, window.location.origin), {
       credentials: "same-origin",
     });
+    const controller = new AbortController();
+    let downloadTimedOut = false;
+    let timeoutId: number | undefined;
     try {
       const cache = "caches" in window
         ? await caches.open("wisdomloong-papers-v1")
@@ -745,7 +830,14 @@ export function ReviewComposer({
         }
       }
       setLocalCache({ status: "loading", progress: 1 });
-      const response = await fetch(cacheRequest, { cache: "default" });
+      timeoutId = window.setTimeout(() => {
+        downloadTimedOut = true;
+        controller.abort();
+      }, 150_000);
+      const response = await fetch(cacheRequest, {
+        cache: "default",
+        signal: controller.signal,
+      });
       if (!response.ok || !response.body) throw new Error("download failed");
       const total = Number(response.headers.get("content-length")) || 0;
       const reader = response.body.getReader();
@@ -777,12 +869,27 @@ export function ReviewComposer({
       }
     } catch {
       if (activeCacheArticle.current === id) {
-        setLocalCache({ status: "error", progress: 0 });
+        setLocalCache({ status: downloadTimedOut ? "timeout" : "error", progress: 0 });
       }
     } finally {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
       if (activeCacheArticle.current === id) activeCacheArticle.current = 0;
     }
   }
+
+  function retryPdfDownload() {
+    activeCacheArticle.current = 0;
+    setLocalCache({ status: "idle", progress: 0 });
+    setPdfLoading(true);
+    setPdfRenderAttempt((value) => value + 1);
+    void cachePdfLocally(articleId);
+  }
+
+  const handlePdfPageLoad = useCallback(() => setPdfLoading(false), []);
+  const handlePdfPageError = useCallback(() => {
+    setLocalCache({ status: "error", progress: 0 });
+    setPdfLoading(true);
+  }, []);
 
   async function saveReadingBookmark() {
     if (!selectedArticle) return;
@@ -819,39 +926,7 @@ export function ReviewComposer({
     }
   }
 
-  async function captureScreen() {
-    if (!navigator.mediaDevices?.getDisplayMedia) {
-      setMessage("当前浏览器不支持屏幕截图，请使用最新版 Chrome 或 Edge。");
-      return;
-    }
-    setCapturing(true);
-    setMessage("请选择当前论文标签页或窗口，画面只会在本次截图时读取。");
-    let stream: MediaStream | undefined;
-    try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-      const video = document.createElement("video");
-      video.srcObject = stream;
-      await video.play();
-      await new Promise((resolve) => setTimeout(resolve, 180));
-      const scale = Math.min(1, 1440 / video.videoWidth);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(video.videoWidth * scale);
-      canvas.height = Math.round(video.videoHeight * scale);
-      canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setPendingCapture(canvas.toDataURL("image/jpeg", 0.88));
-      setCropRect({ x: 0, y: 0, width: 100, height: 100 });
-      setMessage("拖动框选论文中的目标图片，再确认引用。");
-    } catch (error) {
-      if ((error as Error).name !== "NotAllowedError") {
-        setMessage("截图失败，请重试。");
-      }
-    } finally {
-      stream?.getTracks().forEach((track) => track.stop());
-      setCapturing(false);
-    }
-  }
-
-  function cropPoint(event: ReactPointerEvent<HTMLDivElement>) {
+  function annotationPoint(event: ReactPointerEvent<HTMLDivElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
     return {
       x: Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100)),
@@ -859,35 +934,23 @@ export function ReviewComposer({
     };
   }
 
-  function updateCrop(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!cropStart) return;
-    const point = cropPoint(event);
-    setCropRect({
-      x: Math.min(cropStart.x, point.x),
-      y: Math.min(cropStart.y, point.y),
-      width: Math.abs(point.x - cropStart.x),
-      height: Math.abs(point.y - cropStart.y),
+  function updateAnnotationRect(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!annotationStart) return;
+    const point = annotationPoint(event);
+    setAnnotationRect({
+      x: Math.min(annotationStart.x, point.x),
+      y: Math.min(annotationStart.y, point.y),
+      width: Math.abs(point.x - annotationStart.x),
+      height: Math.abs(point.y - annotationStart.y),
     });
   }
 
-  function confirmCrop() {
-    const image = cropImageRef.current;
-    if (!image || cropRect.width < 2 || cropRect.height < 2) return;
-    const sx = Math.round(image.naturalWidth * cropRect.x / 100);
-    const sy = Math.round(image.naturalHeight * cropRect.y / 100);
-    const sw = Math.round(image.naturalWidth * cropRect.width / 100);
-    const sh = Math.round(image.naturalHeight * cropRect.height / 100);
-    const canvas = document.createElement("canvas");
-    const scale = Math.min(1, 1200 / sw);
-    canvas.width = Math.max(1, Math.round(sw * scale));
-    canvas.height = Math.max(1, Math.round(sh * scale));
-    canvas.getContext("2d")?.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-    setCaptures((current) => [
-      ...current,
-      { dataUrl: canvas.toDataURL("image/jpeg", 0.86), note: `第 ${page} 页图表` },
-    ].slice(0, 4));
-    setPendingCapture("");
-    setMessage("图片区域已截取，可在右侧补充图表评论。");
+  function startDrawingAnnotation() {
+    setDrawingAnnotation(true);
+    setAnnotationRect(null);
+    setAnnotationPage(page);
+    setContextTab("notes");
+    setMessage("请在当前 PDF 页面上拖动画框；位置会随页码一起保存并分享给伙伴。");
   }
 
   async function readClipboard() {
@@ -934,7 +997,6 @@ export function ReviewComposer({
           reviewType,
           content: content.trim(),
           annotations: notes,
-          ...(captures.length > 0 ? { attachments: captures } : {}),
         }),
       });
       await responseJson(response);
@@ -945,7 +1007,6 @@ export function ReviewComposer({
       setMessage(selectedArticle?.ownReview
         ? "评论修改已保存。"
         : "评论已发布。文章已从你的待读列表中移除。");
-      setCaptures([]);
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "评论保存失败");
@@ -967,36 +1028,6 @@ export function ReviewComposer({
                 : "按 Esc 返回文章库"}
           </small>
           <button onClick={() => setFocusMode(false)} type="button">结束阅读</button>
-        </div>
-      )}
-      {pendingCapture && (
-        <div className="crop-dialog" role="dialog" aria-modal="true" aria-label="框选论文图片">
-          <div>
-            <header><div><strong>框选论文图片</strong><span>拖动鼠标，只保留需要评论的图表区域</span></div><button onClick={() => setPendingCapture("")} type="button">×</button></header>
-            <div
-              className="crop-stage"
-              onPointerDown={(event) => {
-                event.currentTarget.setPointerCapture(event.pointerId);
-                const point = cropPoint(event);
-                setCropStart(point);
-                setCropRect({ ...point, width: 0, height: 0 });
-              }}
-              onPointerMove={updateCrop}
-              onPointerUp={(event) => {
-                updateCrop(event);
-                setCropStart(null);
-              }}
-            >
-              <img alt="待裁剪的论文截图" draggable={false} ref={cropImageRef} src={pendingCapture} />
-              <span style={{
-                left: `${cropRect.x}%`,
-                top: `${cropRect.y}%`,
-                width: `${cropRect.width}%`,
-                height: `${cropRect.height}%`,
-              }} />
-            </div>
-            <footer><button onClick={() => setCropRect({ x: 0, y: 0, width: 100, height: 100 })} type="button">使用完整截图</button><button className="primary" onClick={confirmCrop} type="button">确认引用此区域</button></footer>
-          </div>
         </div>
       )}
       <aside className="article-library">
@@ -1103,8 +1134,8 @@ export function ReviewComposer({
                   <button onClick={() => readerFileInput.current?.click()} type="button">
                     ⇧ {localPdfName ? "更换本地 PDF" : "打开本地 PDF"}
                   </button>
-                  <button className="capture-button" disabled={capturing} onClick={captureScreen} type="button">
-                    {capturing ? "正在截图…" : "▣ 截图引用"}
+                  <button className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={startDrawingAnnotation} type="button">
+                    ▣ 画框批注
                   </button>
                 </div>
                 <input
@@ -1139,26 +1170,35 @@ export function ReviewComposer({
                   )}
                   {(!localPdfUrl || pdfLoading) && (
                     <div className="pdf-loading" role="status">
-                      <span />
+                      {localCache.status !== "error" && localCache.status !== "timeout" && <span />}
                       <strong>
                         {localCache.status === "loading"
                           ? `正在下载到本地阅读器 ${localCache.progress}%`
+                          : localCache.status === "timeout"
+                            ? "下载超时"
                           : localCache.status === "error"
                             ? "论文暂时无法加载"
                           : "正在打开本地论文"}
                       </strong>
-                      {localCache.status === "error" ? (
+                      {localCache.status === "error" || localCache.status === "timeout" ? (
                         <>
-                          <small>请打开 arXiv 页面下载 PDF，下载完成后把文件拖入这个阅读区域。</small>
-                          {selectedArxivPage ? (
-                            <a href={selectedArxivPage} rel="noreferrer" target="_blank">
-                              在新标签页打开 arXiv 下载页面 ↗
-                            </a>
-                          ) : (
-                            <button onClick={() => readerFileInput.current?.click()} type="button">
-                              选择已经下载的本地 PDF
-                            </button>
-                          )}
+                          <small>
+                            {localCache.status === "timeout"
+                              ? "已等待约 150 秒。你可以重试，或下载 PDF 后拖入这个阅读区域。"
+                              : "你可以重试，或下载 PDF 后拖入这个阅读区域。"}
+                          </small>
+                          <div className="pdf-fallback-actions">
+                            <button onClick={retryPdfDownload} type="button">重新下载</button>
+                            {selectedArxivPage ? (
+                              <a href={selectedArxivPage} rel="noreferrer" target="_blank">
+                                在新标签页打开 arXiv 下载页面 ↗
+                              </a>
+                            ) : (
+                              <button onClick={() => readerFileInput.current?.click()} type="button">
+                                选择已经下载的本地 PDF
+                              </button>
+                            )}
+                          </div>
                         </>
                       ) : (
                         <small>首次下载可能需要一些时间，请保持页面打开；完成后翻页不再访问网络。</small>
@@ -1166,12 +1206,71 @@ export function ReviewComposer({
                     </div>
                   )}
                   {localPdfUrl && (
-                    <iframe
-                      onLoad={() => setPdfLoading(false)}
-                      ref={iframeRef}
-                      src={pdfUrl(selectedArticle.id, selectedArticle.sourceUrl, page, zoom, localPdfUrl)}
-                      title={selectedArticle.title}
-                    />
+                    <PdfPageCanvas
+                      key={`${articleId}-${pdfRenderAttempt}`}
+                      onError={handlePdfPageError}
+                      onLoad={handlePdfPageLoad}
+                      page={page}
+                      url={localPdfUrl}
+                      zoom={zoom}
+                    >
+                      <div
+                      aria-label={drawingAnnotation ? "在当前 PDF 页拖动画框" : "PDF 画框批注层"}
+                      className={`pdf-annotation-layer${drawingAnnotation ? " is-drawing" : ""}`}
+                      onPointerDown={(event) => {
+                        if (!drawingAnnotation) return;
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                        const point = annotationPoint(event);
+                        setAnnotationStart(point);
+                        setAnnotationRect({ ...point, width: 0, height: 0 });
+                      }}
+                      onPointerMove={updateAnnotationRect}
+                      onPointerUp={(event) => {
+                        if (!annotationStart) return;
+                        const point = annotationPoint(event);
+                        const nextRect = {
+                          x: Math.min(annotationStart.x, point.x),
+                          y: Math.min(annotationStart.y, point.y),
+                          width: Math.abs(point.x - annotationStart.x),
+                          height: Math.abs(point.y - annotationStart.y),
+                        };
+                        setAnnotationStart(null);
+                        setDrawingAnnotation(false);
+                        if (nextRect.width < 1 || nextRect.height < 1) {
+                          setAnnotationRect(null);
+                          setMessage("画框太小，请重新拖动选择要批注的区域。");
+                          return;
+                        }
+                        setAnnotationRect(nextRect);
+                        setAnnotationPage(page);
+                        setMessage(`已框选第 ${page} 页，请在右侧填写批注并加入。`);
+                      }}
+                      >
+                      {communityAnnotations.filter((item) => item.page === page && item.rect).map((item) => (
+                        <span
+                          className="pdf-annotation-box is-community"
+                          key={`community-${item.id}`}
+                          style={{ left: `${item.rect!.x}%`, top: `${item.rect!.y}%`, width: `${item.rect!.width}%`, height: `${item.rect!.height}%` }}
+                          title={`${item.author}：${item.content}`}
+                        />
+                      ))}
+                      {notes.filter((item) => item.page === page && item.rect).map((item, index) => (
+                        <span
+                          className="pdf-annotation-box is-own"
+                          key={`own-${index}`}
+                          style={{ left: `${item.rect!.x}%`, top: `${item.rect!.y}%`, width: `${item.rect!.width}%`, height: `${item.rect!.height}%` }}
+                          title={`我的批注：${item.content}`}
+                        />
+                      ))}
+                      {annotationRect && annotationPage === page && (
+                        <span
+                          className="pdf-annotation-box is-pending"
+                          style={{ left: `${annotationRect.x}%`, top: `${annotationRect.y}%`, width: `${annotationRect.width}%`, height: `${annotationRect.height}%` }}
+                        />
+                      )}
+                      {drawingAnnotation && !annotationStart && <strong>拖动鼠标框选论文中的图片或段落</strong>}
+                      </div>
+                    </PdfPageCanvas>
                   )}
                 </div>
                 <div className="reading-bookmark">
@@ -1251,7 +1350,7 @@ export function ReviewComposer({
                     <header><span>{annotation.author.slice(0, 1).toUpperCase()}</span><strong>{annotation.author}</strong></header>
                     {annotation.quote && <blockquote>{annotation.quote}</blockquote>}
                     {annotation.translation && <p className="community-translation">{annotation.translation}</p>}
-                    <p>{annotation.content}</p>
+                    <p>{annotation.rect ? "▣ " : ""}{annotation.content}</p>
                   </article>
                 ))}
                 {communityAnnotations.every((item) => item.page !== page) && (
@@ -1264,7 +1363,7 @@ export function ReviewComposer({
                   {communityAnnotations.filter((item) => item.page !== page).map((annotation) => (
                     <button key={annotation.id} onClick={() => setPage(annotation.page)} type="button">
                       <strong>P.{annotation.page}</strong>
-                      <span><b>{annotation.author}</b>{annotation.content}</span>
+                      <span><b>{annotation.author}</b>{annotation.rect ? "▣ " : ""}{annotation.content}</span>
                     </button>
                   ))}
                 </div>
@@ -1341,8 +1440,11 @@ export function ReviewComposer({
         )}
         <section className="note-composer">
           <header>
-            <span>P.{page}</span>
-            <div><strong>记录这一页</strong><small>观点、疑问或值得分享的判断</small></div>
+            <span>P.{annotationRect ? annotationPage : page}</span>
+            <div>
+              <strong>{annotationRect ? "为画框区域添加批注" : "记录这一页"}</strong>
+              <small>{annotationRect ? "画框位置会与页码一起分享" : "观点、疑问或值得分享的判断"}</small>
+            </div>
           </header>
           <textarea
             onChange={(event) => setNoteDraft(event.target.value)}
@@ -1356,14 +1458,16 @@ export function ReviewComposer({
               disabled={!noteDraft.trim()}
               onClick={() => {
                 setNotes((current) => [...current, {
-                  page,
+                  page: annotationRect ? annotationPage : page,
                   quote: quoteDraft.trim(),
                   translation: translation.trim(),
                   content: noteDraft.trim(),
+                  rect: annotationRect,
                 }]);
                 setNoteDraft("");
                 setQuoteDraft("");
                 setTranslation("");
+                setAnnotationRect(null);
               }}
               type="button"
             >
@@ -1377,30 +1481,12 @@ export function ReviewComposer({
             <div key={`${note.page}-${index}`}>
               <button onClick={() => setPage(note.page)} type="button">
                 <strong>P.{note.page}</strong>
-                <span>{note.content}</span>
+                <span>{note.rect ? "▣ " : ""}{note.content}</span>
               </button>
               <button aria-label="删除这条批注" onClick={() => setNotes((current) => current.filter((_, itemIndex) => itemIndex !== index))} type="button">×</button>
             </div>
           ))}
         </div>
-        {captures.length > 0 && (
-          <div className="capture-list">
-            {captures.map((capture, index) => (
-              <div key={capture.dataUrl.slice(-24)}>
-                <img alt={`论文截图 ${index + 1}`} src={capture.dataUrl} />
-                <input
-                  aria-label={`截图 ${index + 1} 说明`}
-                  onChange={(event) => setCaptures((current) => current.map((item, itemIndex) =>
-                    itemIndex === index ? { ...item, note: event.target.value } : item
-                  ))}
-                  placeholder="这张图说明了什么？"
-                  value={capture.note}
-                />
-                <button onClick={() => setCaptures((current) => current.filter((_, itemIndex) => itemIndex !== index))} type="button">移除</button>
-              </div>
-            ))}
-          </div>
-        )}
         </div>
 
         <form className="review-form reader-review-form" hidden={contextTab !== "review"} onSubmit={submitReview}>

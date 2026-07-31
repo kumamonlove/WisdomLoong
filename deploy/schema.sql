@@ -185,8 +185,17 @@ CREATE TABLE IF NOT EXISTS review_annotations (
   quote TEXT NOT NULL DEFAULT '',
   translation TEXT NOT NULL DEFAULT '',
   content TEXT NOT NULL CHECK (CHAR_LENGTH(TRIM(content)) > 0),
+  rect_x REAL,
+  rect_y REAL,
+  rect_width REAL,
+  rect_height REAL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE review_annotations ADD COLUMN IF NOT EXISTS rect_x REAL;
+ALTER TABLE review_annotations ADD COLUMN IF NOT EXISTS rect_y REAL;
+ALTER TABLE review_annotations ADD COLUMN IF NOT EXISTS rect_width REAL;
+ALTER TABLE review_annotations ADD COLUMN IF NOT EXISTS rect_height REAL;
 
 CREATE INDEX IF NOT EXISTS review_annotations_review_idx
   ON review_annotations(review_id, page_number, id);

@@ -22,6 +22,7 @@ type DiscussionAnnotation = {
   quote: string;
   translation: string;
   content: string;
+  rect: { x: number; y: number; width: number; height: number } | null;
 };
 
 export async function GET(
@@ -64,7 +65,13 @@ export async function GET(
          review_annotations.page_number AS page,
          review_annotations.quote,
          review_annotations.translation,
-         review_annotations.content
+         review_annotations.content,
+         CASE WHEN review_annotations.rect_x IS NULL THEN NULL ELSE JSON_BUILD_OBJECT(
+           'x', review_annotations.rect_x,
+           'y', review_annotations.rect_y,
+           'width', review_annotations.rect_width,
+           'height', review_annotations.rect_height
+         ) END AS rect
        FROM review_annotations
        INNER JOIN reviews ON reviews.id = review_annotations.review_id
        INNER JOIN users ON users.id = reviews.user_id
