@@ -10,11 +10,11 @@ export default async function ReadingListPage() {
   return (
     <KnowledgePage
       page="reading"
-      title="待读文章"
-      description="团队文章库中你尚未读过或评论的文章"
+      title="待读列表"
+      description="团队文章库中你尚未读过或评论的文章；上传或推荐不等于已经读过"
       username={user.username}
     >
-      <section className="import-section">
+      <section className="import-section" id="recommend-article">
         <div className="section-heading">
           <span>ADD TO TEAM LIBRARY</span>
           <h2>推荐值得一读的文章</h2>
@@ -30,7 +30,7 @@ export default async function ReadingListPage() {
         </div>
         <ArticleGrid
           articles={articles}
-          emptyTitle="待读清单是空的"
+          emptyTitle="待读列表是空的"
           emptyDescription="团队导入新文章后，会自动出现在这里。"
           showReadAction
         />

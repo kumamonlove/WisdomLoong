@@ -27,7 +27,7 @@ export function MarkReadButton({ articleId }: { articleId: number }) {
       onClick={markRead}
       type="button"
     >
-      {done ? "✓ 已标记读过" : busy ? "正在标记…" : "标记已经读过"}
+      {done ? "✓ 已标记为已读" : busy ? "正在标记…" : "✓ 标记为已读"}
     </button>
   );
 }

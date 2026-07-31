@@ -117,6 +117,29 @@ CREATE INDEX IF NOT EXISTS reviews_user_created_idx
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS review_type VARCHAR(8) NOT NULL DEFAULT 'long';
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS must_read BOOLEAN NOT NULL DEFAULT FALSE;
 
+CREATE TABLE IF NOT EXISTS app_migrations (
+  migration_key TEXT PRIMARY KEY,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+WITH apply_once AS (
+  INSERT INTO app_migrations (migration_key)
+  VALUES ('2026-07-31-lcx-siyang-latest-reviews-short')
+  ON CONFLICT (migration_key) DO NOTHING
+  RETURNING migration_key
+),
+latest_reviews AS (
+  SELECT DISTINCT ON (LOWER(users.username)) reviews.id
+  FROM reviews
+  INNER JOIN users ON users.id = reviews.user_id
+  WHERE LOWER(users.username) IN ('lcx', 'siyang')
+  ORDER BY LOWER(users.username), reviews.updated_at DESC, reviews.id DESC
+)
+UPDATE reviews
+SET review_type = 'short'
+WHERE reviews.id IN (SELECT id FROM latest_reviews)
+  AND EXISTS (SELECT 1 FROM apply_once);
+
 CREATE TABLE IF NOT EXISTS review_attachments (
   id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,

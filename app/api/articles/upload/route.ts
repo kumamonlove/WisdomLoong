@@ -29,20 +29,20 @@ export async function POST(request: Request) {
 
   const file = form.get("file");
   const title = String(form.get("title") ?? "").trim();
-  const categoryValue = String(form.get("category") ?? "");
-  const category = articleCategories.find((item) => item === categoryValue);
+  const publisher = String(form.get("publisher") ?? "").trim() || "机构待补充";
   const publishedAt = String(form.get("publishedAt") ?? "").trim() || null;
   let submittedTags: unknown = [];
   try {
     submittedTags = JSON.parse(String(form.get("tags") ?? "[]"));
   } catch {
-    // 无法解析标签时仍保留知识分类。
+    // 后续由统一校验返回可理解的错误。
   }
-  const tags = normalizeTags([category, ...normalizeTags(submittedTags)]);
+  const tags = normalizeTags(submittedTags);
+  const category = articleCategories.find((item) => tags.includes(item)) ?? articleCategories[0];
 
-  if (!(file instanceof File) || !title || !category) {
+  if (!(file instanceof File) || !title || tags.length === 0) {
     return NextResponse.json(
-      { error: "PDF、文章名称和知识分类不能为空" },
+      { error: "PDF、文章名称和至少一个文章标签不能为空" },
       { status: 400 },
     );
   }
@@ -74,11 +74,12 @@ export async function POST(request: Request) {
            title, title_key, abstract, authors, publisher, category, tags,
            published_at, source_url, external_id, imported_by
          )
-         VALUES ($1, $2, '', '{}', '机构待补充', $3, $4, $5, $6, NULL, $7)
+         VALUES ($1, $2, '', '{}', $3, $4, $5, $6, $7, NULL, $8)
          RETURNING id`,
         [
           title,
           normalizeTitle(title),
+          publisher,
           category,
           tags,
           publishedAt,
@@ -99,9 +100,10 @@ export async function POST(request: Request) {
                  LIMIT 12
                )
              ),
-             published_at = COALESCE($5::date, published_at)
+             published_at = COALESCE($5::date, published_at),
+             publisher = CASE WHEN $6 <> '机构待补充' THEN $6 ELSE publisher END
          WHERE id = $1`,
-        [articleId, title, category, tags, publishedAt],
+        [articleId, title, category, tags, publishedAt, publisher],
       );
     }
 

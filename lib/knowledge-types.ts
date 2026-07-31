@@ -8,7 +8,7 @@ export const categories = [
 
 export const articleCategories = categories.slice(1);
 
-export type Category = (typeof categories)[number];
+export type Category = string;
 export type ArticleCategory = (typeof articleCategories)[number];
 export type SortOrder = "newest" | "oldest" | "rating";
 export type ReviewFilter = "all" | "reviewed" | "unreviewed";

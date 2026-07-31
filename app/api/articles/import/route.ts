@@ -30,16 +30,16 @@ export async function POST(request: Request) {
   const body = (await request.json()) as ImportBody;
   const title = body.title?.trim();
   const sourceUrl = body.sourceUrl?.trim();
-  const category = articleCategories.find((item) => item === body.category);
-  const tags = normalizeTags([category, ...normalizeTags(body.tags)]);
+  const tags = normalizeTags(body.tags);
+  const category = articleCategories.find((item) => tags.includes(item)) ?? articleCategories[0];
   const publisher =
     body.publisher?.trim() && body.publisher.trim().toLocaleLowerCase() !== "arxiv"
       ? body.publisher.trim()
       : "机构待补充";
 
-  if (!title || !sourceUrl || !category) {
+  if (!title || !sourceUrl || tags.length === 0) {
     return NextResponse.json(
-      { error: "文章名、原文链接和分类不能为空" },
+      { error: "文章名、原文链接和至少一个文章标签不能为空" },
       { status: 400 },
     );
   }

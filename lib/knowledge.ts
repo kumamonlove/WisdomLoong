@@ -1,6 +1,5 @@
 import { database } from "@/lib/db";
 import {
-  categories,
   type ArticleCategory,
   type Category,
   type ReviewFilter,
@@ -8,7 +7,6 @@ import {
 } from "@/lib/knowledge-types";
 
 export {
-  categories,
   articleCategories,
   type ArticleCategory,
   type Category,
@@ -75,8 +73,8 @@ function firstValue(value: string | string[] | undefined) {
 export function parseCategory(
   value: string | string[] | undefined,
 ): Category {
-  const selected = firstValue(value);
-  return categories.find((item) => item === selected) ?? "全部";
+  const selected = firstValue(value)?.trim();
+  return selected && selected.length <= 24 ? selected : "全部";
 }
 
 export function parseSort(value: string | string[] | undefined): SortOrder {
@@ -191,7 +189,8 @@ export async function getRecommendedArticles(userId: number) {
        LEFT JOIN review_likes ON review_likes.review_id = reviews.id
        WHERE reviews.article_id = articles.id
      ) article_signals ON TRUE
-     ORDER BY review_group.rating DESC, articles.published_at DESC NULLS LAST`,
+     ORDER BY review_group.rating DESC, articles.published_at DESC NULLS LAST
+     LIMIT 4`,
     [userId],
   );
 
@@ -262,10 +261,20 @@ export async function getCategoryArticles({
 }
 
 export async function getCategoryCounts() {
-  const result = await database.query<{ category: ArticleCategory; count: number }>(
-    `SELECT category, COUNT(*)::int AS count
-     FROM articles
-     GROUP BY category`,
+  const result = await database.query<{ category: string; count: number }>(
+    `SELECT category, count
+     FROM (
+       SELECT '全部'::text AS category, COUNT(*)::int AS count, 0 AS position
+       FROM articles
+       UNION ALL
+       SELECT tag AS category, COUNT(DISTINCT articles.id)::int AS count, 1 AS position
+       FROM articles
+       CROSS JOIN LATERAL UNNEST(
+         CASE WHEN CARDINALITY(articles.tags) > 0 THEN articles.tags ELSE ARRAY[articles.category] END
+       ) AS tag
+       GROUP BY tag
+     ) counts
+     ORDER BY position, count DESC, category`,
   );
   return new Map(result.rows.map((row) => [row.category, row.count]));
 }

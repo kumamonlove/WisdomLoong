@@ -64,7 +64,7 @@ export function SiteHeader({
               知识分类
             </a>
             <a className={page === "reading" ? "active" : ""} href="/reading-list">
-              待读文章
+              待读列表
             </a>
           </nav>
 

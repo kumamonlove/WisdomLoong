@@ -114,6 +114,8 @@ small,
 
 .brand-slash {
   width: auto;
+  padding: 0 1px;
+  font-weight: 950;
 }
 
 .wordmark-tail {
@@ -145,11 +147,11 @@ small,
 }
 
 .site-header.is-compact .wordmark {
-  width: 26px;
+  width: 32px;
 }
 
 .site-header.is-compact .wordmark-tail {
-  width: 6px;
+  width: 10px;
 }
 
 .site-header.is-compact .wordmark-prefix,
@@ -867,14 +869,16 @@ select {
 }
 
 .mark-read-button {
-  padding: 7px 10px;
-  color: var(--muted);
-  border: 1px solid var(--line);
+  padding: 9px 13px;
+  color: var(--white);
+  border: 1px solid var(--accent);
   border-radius: 999px;
-  background: transparent;
+  background: var(--accent);
   cursor: pointer;
-  font-size: 9px;
-  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 5px 14px rgba(214, 95, 64, 0.18);
+  transition: transform 160ms ease, background 160ms ease;
 }
 
 .mark-read-button:hover,
@@ -882,6 +886,7 @@ select {
   color: var(--white);
   border-color: var(--ink);
   background: var(--ink);
+  transform: translateY(-1px);
 }
 
 .empty {
@@ -1010,7 +1015,7 @@ select {
 
 .lookup-form {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 180px 240px;
+  grid-template-columns: minmax(260px, 1fr) 240px;
   align-items: end;
   gap: 16px;
 }
@@ -1599,6 +1604,21 @@ select {
   border-top: 1px solid var(--line);
 }
 
+.reader-import-link {
+  margin-top: 12px;
+  padding: 14px 0 4px;
+  display: block;
+  color: var(--accent);
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.reader-import-link:hover {
+  text-decoration: underline;
+}
+
 .reader-import summary {
   padding: 14px 0 4px;
   color: var(--accent);
@@ -1864,6 +1884,32 @@ select {
   background: #d0cec7;
 }
 
+.pdf-frame.is-dragging {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.reader-pdf-drop {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  color: var(--white);
+  background: rgba(24, 24, 22, 0.84);
+  pointer-events: none;
+}
+
+.reader-pdf-drop strong {
+  font-size: 18px;
+}
+
+.reader-pdf-drop small {
+  margin-top: 6px;
+  color: rgba(248, 246, 239, 0.76);
+}
+
 .paper-reader iframe {
   width: 100%;
   height: 720px;
@@ -1883,6 +1929,18 @@ select {
     linear-gradient(110deg, rgba(248, 246, 239, 0.88), rgba(231, 228, 218, 0.94)),
     var(--surface);
   text-align: center;
+}
+
+.pdf-loading button {
+  margin-top: 16px;
+  padding: 9px 13px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
 }
 
 .reader-paused {
@@ -3326,11 +3384,11 @@ select {
   }
 
   .site-header.is-compact .wordmark {
-    width: 23px;
+    width: 29px;
   }
 
   .site-header.is-compact .wordmark-tail {
-    width: 6px;
+    width: 9px;
   }
 
   nav {

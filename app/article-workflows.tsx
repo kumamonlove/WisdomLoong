@@ -9,11 +9,7 @@ import {
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import {
-  articleCategories,
-  normalizeTags,
-  type ArticleCategory,
-} from "@/lib/knowledge-types";
+import { normalizeTags } from "@/lib/knowledge-types";
 import type { ReaderArticle } from "@/lib/knowledge";
 import { ReviewLikeButton } from "@/app/review-actions";
 
@@ -64,9 +60,8 @@ function ArxivLookup({
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ArxivResult[]>([]);
-  const [category, setCategory] = useState<ArticleCategory>("Ego第一人称");
   const [publisher, setPublisher] = useState("");
-  const [tags, setTags] = useState<string[]>(["Ego第一人称"]);
+  const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
@@ -93,6 +88,10 @@ function ArxivLookup({
   }
 
   async function importArticle(article: ArxivResult) {
+    if (tags.length === 0) {
+      setMessage("请至少添加一个文章标签。");
+      return;
+    }
     setImportingId(article.externalId);
     setMessage("");
     try {
@@ -102,7 +101,6 @@ function ArxivLookup({
         body: JSON.stringify({
           ...article,
           publisher: publisher.trim() || article.publisher,
-          category,
           tags,
           addToReadingList,
         }),
@@ -116,7 +114,7 @@ function ArxivLookup({
         abstract: article.abstract,
         authors: article.authors,
         publisher: publisher.trim() || article.publisher,
-        category,
+        category: "Ego第一人称",
         tags,
         publishedAt: article.publishedAt,
         sourceUrl: article.sourceUrl,
@@ -149,23 +147,6 @@ function ArxivLookup({
           </div>
         </label>
         <label>
-          知识分类
-          <select
-            onChange={(event) => {
-              const nextCategory = event.target.value as ArticleCategory;
-              setCategory(nextCategory);
-              setTags((current) => normalizeTags([nextCategory, ...current]));
-            }}
-            value={category}
-          >
-            {articleCategories.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
           发布机构（选填）
           <input
             onChange={(event) => setPublisher(event.target.value)}
@@ -174,7 +155,7 @@ function ArxivLookup({
         </label>
       </form>
       <div className="tag-editor">
-        <span>文章标签（可添加多个）</span>
+        <span>文章标签（至少 1 个；新标签会自动出现在知识分类中）</span>
         {existingTags.some((tag) => !tags.includes(tag)) && (
           <div className="existing-tag-picker">
             <small>点击添加已有标签</small>
@@ -309,8 +290,8 @@ function PdfDropImporter() {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [publishedAt, setPublishedAt] = useState("");
-  const [category, setCategory] = useState<ArticleCategory>("Ego第一人称");
-  const [tags, setTags] = useState<string[]>(["Ego第一人称"]);
+  const [publisher, setPublisher] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -339,6 +320,10 @@ function PdfDropImporter() {
       setMessage("请先拖入或选择一份 PDF。");
       return;
     }
+    if (tags.length === 0) {
+      setMessage("请至少添加一个文章标签。");
+      return;
+    }
 
     setBusy(true);
     setMessage("");
@@ -346,8 +331,8 @@ function PdfDropImporter() {
       const form = new FormData();
       form.set("file", file);
       form.set("title", title);
-      form.set("category", category);
       form.set("tags", JSON.stringify(tags));
+      if (publisher.trim()) form.set("publisher", publisher.trim());
       if (publishedAt) form.set("publishedAt", publishedAt);
 
       const response = await fetch("/api/articles/upload", {
@@ -355,7 +340,7 @@ function PdfDropImporter() {
         body: form,
       });
       await responseJson(response);
-      setMessage("PDF 已保存到团队文章库，并加入所有尚未阅读成员的待读。");
+      setMessage("PDF 已保存到团队文章库并加入待读列表；上传不会把它标记为已读。");
       setFile(null);
       setTitle("");
       setPublishedAt("");
@@ -371,9 +356,7 @@ function PdfDropImporter() {
   return (
     <form className="pdf-drop-importer" onSubmit={upload}>
       <p className="pdf-download-hint">
-        还没有本地文件？先前往
-        <a href="https://arxiv.org/" rel="noreferrer" target="_blank"> arXiv 下载 PDF ↗</a>
-        ，下载完成后再拖动导入。
+        适用于 arXiv 搜索不到的文章：请先从论文官网或其他来源下载 PDF，再拖动导入。
       </p>
       <button
         className={`pdf-drop-zone${dragging ? " dragging" : ""}${file ? " has-file" : ""}`}
@@ -429,24 +412,17 @@ function PdfDropImporter() {
           />
         </label>
         <label>
-          知识分类
-          <select
-            onChange={(event) => {
-              const nextCategory = event.target.value as ArticleCategory;
-              setCategory(nextCategory);
-              setTags((current) => normalizeTags([nextCategory, ...current]));
-            }}
-            value={category}
-          >
-            {articleCategories.map((item) => (
-              <option key={item} value={item}>{item}</option>
-            ))}
-          </select>
+          发布机构（选填）
+          <input
+            onChange={(event) => setPublisher(event.target.value)}
+            placeholder="例如 Stanford University"
+            value={publisher}
+          />
         </label>
       </div>
 
       <div className="tag-editor">
-        <span>文章标签（可添加多个）</span>
+        <span>文章标签（至少 1 个；新标签会自动出现在知识分类中）</span>
         {existingTags.some((tag) => !tags.includes(tag)) && (
           <div className="existing-tag-picker">
             <small>点击添加已有标签</small>
@@ -493,7 +469,7 @@ function PdfDropImporter() {
       </div>
 
       {message && <p className="workflow-message" role="status">{message}</p>}
-      <button className="pdf-upload-submit" disabled={busy || !file} type="submit">
+      <button className="pdf-upload-submit" disabled={busy || !file || tags.length === 0} type="submit">
         {busy ? "正在上传并添加…" : "推荐给团队"}
       </button>
     </form>
@@ -573,6 +549,8 @@ export function ReviewComposer({
     progress: number;
   }>({ status: "idle", progress: 0 });
   const [localPdfUrl, setLocalPdfUrl] = useState("");
+  const [localPdfName, setLocalPdfName] = useState("");
+  const [readerDragging, setReaderDragging] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [quoteDraft, setQuoteDraft] = useState("");
   const [translation, setTranslation] = useState("");
@@ -588,6 +566,7 @@ export function ReviewComposer({
   const [pdfLoading, setPdfLoading] = useState(true);
   const [message, setMessage] = useState("");
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const readerFileInput = useRef<HTMLInputElement>(null);
   const cropImageRef = useRef<HTMLImageElement>(null);
   const activeCacheArticle = useRef(0);
   const localPdfUrlRef = useRef("");
@@ -665,8 +644,32 @@ export function ReviewComposer({
     if (localPdfUrlRef.current) URL.revokeObjectURL(localPdfUrlRef.current);
     localPdfUrlRef.current = "";
     setLocalPdfUrl("");
+    setLocalPdfName("");
     setLocalCache({ status: "idle", progress: 0 });
+    setFocusMode(false);
+  }
+
+  function beginReading() {
+    if (!selectedArticle) return;
+    setPdfLoading(true);
     setFocusMode(true);
+  }
+
+  function useReaderPdf(nextFile?: File) {
+    if (!nextFile) return;
+    if (nextFile.type !== "application/pdf" && !nextFile.name.toLowerCase().endsWith(".pdf")) {
+      setMessage("请选择 PDF 文件。");
+      return;
+    }
+    activeCacheArticle.current = 0;
+    if (localPdfUrlRef.current) URL.revokeObjectURL(localPdfUrlRef.current);
+    const objectUrl = URL.createObjectURL(nextFile);
+    localPdfUrlRef.current = objectUrl;
+    setLocalPdfUrl(objectUrl);
+    setLocalPdfName(nextFile.name);
+    setLocalCache({ status: "ready", progress: 100 });
+    setPdfLoading(true);
+    setMessage(`已在阅读器中打开本地文件 ${nextFile.name}，文件不会上传。`);
   }
 
   async function cachePdfLocally(id: number) {
@@ -737,14 +740,6 @@ export function ReviewComposer({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "阅读书签保存失败");
     }
-  }
-
-  function useImportedArticle(article: ReaderArticle) {
-    setAvailableArticles((current) => [
-      article,
-      ...current.filter((item) => item.id !== article.id),
-    ]);
-    selectArticle(article.id);
   }
 
   async function addTag() {
@@ -884,7 +879,7 @@ export function ReviewComposer({
         }),
       });
       await responseJson(response);
-      setMessage("评论已发布。文章已从你的待读清单中移除。");
+      setMessage("评论已发布。文章已从你的待读列表中移除。");
       setContent("");
       setNotes([]);
       setCaptures([]);
@@ -984,15 +979,13 @@ export function ReviewComposer({
               <strong>{article.title}</strong>
               <small>{article.tags.join(" · ")}</small>
               {article.lastReadPage && <em>上次读到 P.{article.lastReadPage}</em>}
-              <i className="start-reading-cue">开始阅读 →</i>
             </button>
           ))}
           {filteredArticles.length === 0 && <p>没有匹配文章</p>}
         </div>
-        <details className="reader-import">
-          <summary>＋ 推荐一篇新文章</summary>
-          <ArxivLookup addToReadingList={false} onImported={useImportedArticle} />
-        </details>
+        <a className="reader-import-link" href="/reading-list#recommend-article">
+          ＋ 推荐一篇新文章
+        </a>
       </aside>
 
       <section className="paper-reader">
@@ -1044,11 +1037,43 @@ export function ReviewComposer({
                     <button onClick={() => setZoom((value) => Math.min(200, value + 10))} type="button">＋</button>
                   </div>
                   <button className="active-focus" onClick={() => setFocusMode(false)} type="button">结束阅读</button>
+                  <button onClick={() => readerFileInput.current?.click()} type="button">
+                    ⇧ {localPdfName ? "更换本地 PDF" : "打开本地 PDF"}
+                  </button>
                   <button className="capture-button" disabled={capturing} onClick={captureScreen} type="button">
                     {capturing ? "正在截图…" : "▣ 截图引用"}
                   </button>
                 </div>
-                <div className={`pdf-frame${pdfLoading ? " is-loading" : ""}`}>
+                <input
+                  accept="application/pdf,.pdf"
+                  className="visually-hidden"
+                  onChange={(event) => useReaderPdf(event.target.files?.[0])}
+                  ref={readerFileInput}
+                  type="file"
+                />
+                <div
+                  className={`pdf-frame${pdfLoading ? " is-loading" : ""}${readerDragging ? " is-dragging" : ""}`}
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    setReaderDragging(true);
+                  }}
+                  onDragLeave={(event) => {
+                    event.preventDefault();
+                    if (event.currentTarget === event.target) setReaderDragging(false);
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setReaderDragging(false);
+                    useReaderPdf(event.dataTransfer.files[0]);
+                  }}
+                >
+                  {readerDragging && (
+                    <div className="reader-pdf-drop">
+                      <strong>松开即可在阅读器中打开</strong>
+                      <small>只在当前浏览器使用，不会重复上传文章</small>
+                    </div>
+                  )}
                   {(!localPdfUrl || pdfLoading) && (
                     <div className="pdf-loading" role="status">
                       <span />
@@ -1060,6 +1085,9 @@ export function ReviewComposer({
                           : "正在打开本地论文"}
                       </strong>
                       <small>下载只进行一次，完成后翻页和缩放不再访问网络</small>
+                      <button onClick={() => readerFileInput.current?.click()} type="button">
+                        加载不出来？拖入或选择本地 PDF
+                      </button>
                     </div>
                   )}
                   {localPdfUrl && (
@@ -1095,7 +1123,7 @@ export function ReviewComposer({
                       <span>伙伴评论</span>
                       <strong>{communityReviews.length} 条评论 · {communityAnnotations.length} 条逐页批注</strong>
                     </div>
-                    <button onClick={() => setFocusMode(true)} type="button">
+                    <button onClick={beginReading} type="button">
                       {selectedArticle.lastReadPage ? `从 P.${selectedArticle.lastReadPage} 继续阅读` : "开始阅读"}
                     </button>
                   </header>

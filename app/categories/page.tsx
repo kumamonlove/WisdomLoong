@@ -1,7 +1,6 @@
 import { ArticleGrid, KnowledgePage } from "@/app/knowledge-page";
 import { requireUser } from "@/lib/auth";
 import {
-  categories,
   getCategoryArticles,
   getCategoryCounts,
   parseCategory,
@@ -33,14 +32,16 @@ export default async function CategoriesPage({
   searchParams,
 }: CategoriesPageProps) {
   const [params, user] = await Promise.all([searchParams, requireUser()]);
-  const category = parseCategory(params.category);
+  const requestedCategory = parseCategory(params.category);
   const reviewFilter = parseReviewFilter(params.review);
   const sort = parseSort(params.sort);
-  const [articles, counts] = await Promise.all([
-    getCategoryArticles({ userId: user.id, category, reviewFilter, sort }),
-    getCategoryCounts(),
-  ]);
-  const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
+  const counts = await getCategoryCounts();
+  const categories: Category[] = ["全部", ...[...counts.keys()].filter((item) => item !== "全部")];
+  const category = requestedCategory === "全部" || counts.has(requestedCategory)
+    ? requestedCategory
+    : "全部";
+  const articles = await getCategoryArticles({ userId: user.id, category, reviewFilter, sort });
+  const total = counts.get("全部") ?? 0;
 
   return (
     <KnowledgePage
@@ -94,7 +95,7 @@ export default async function CategoriesPage({
         <ArticleGrid
           articles={articles}
           emptyTitle="没有符合条件的文章"
-          emptyDescription="可前往“待读文章”导入，或调整当前筛选条件。"
+          emptyDescription="可前往“待读列表”推荐文章，或调整当前筛选条件。"
         />
       </section>
     </KnowledgePage>
