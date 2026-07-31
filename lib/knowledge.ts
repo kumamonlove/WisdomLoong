@@ -284,8 +284,7 @@ export async function getReadingList(userId: number) {
        latest_reviewer.username AS "reviewAuthor",
        latest_review.content AS "reviewContent",
        latest_review.rating
-     FROM reading_list
-     INNER JOIN articles ON articles.id = reading_list.article_id
+     FROM articles
      LEFT JOIN LATERAL (
        SELECT reviews.user_id, reviews.content, reviews.rating
        FROM reviews
@@ -294,8 +293,17 @@ export async function getReadingList(userId: number) {
        LIMIT 1
      ) latest_review ON TRUE
      LEFT JOIN users latest_reviewer ON latest_reviewer.id = latest_review.user_id
-     WHERE reading_list.user_id = $1
-     ORDER BY reading_list.created_at DESC`,
+     WHERE NOT EXISTS (
+       SELECT 1 FROM article_reads
+       WHERE article_reads.user_id = $1
+         AND article_reads.article_id = articles.id
+     )
+       AND NOT EXISTS (
+         SELECT 1 FROM reviews
+         WHERE reviews.user_id = $1
+           AND reviews.article_id = articles.id
+       )
+     ORDER BY articles.created_at DESC`,
     [userId],
   );
 

@@ -11,14 +11,14 @@ export default async function ReadingListPage() {
     <KnowledgePage
       page="reading"
       title="待读文章"
-      description="保存你想读、但还没来得及读的文章"
+      description="团队文章库中你尚未读过或评论的文章"
       username={user.username}
     >
       <section className="import-section">
         <div className="section-heading">
-          <span>IMPORT FROM ARXIV</span>
+          <span>ADD TO TEAM LIBRARY</span>
           <h2>导入文章</h2>
-          <p>输入文章名，自动获取基本信息与原文链接，并加入你的个人待读清单。</p>
+          <p>从 arXiv 获取，或拖入本地 PDF；导入后全团队都能在阅读器中查看。</p>
         </div>
         <ReadingListImporter />
       </section>
@@ -31,7 +31,7 @@ export default async function ReadingListPage() {
         <ArticleGrid
           articles={articles}
           emptyTitle="待读清单是空的"
-          emptyDescription="在上方输入 arXiv 文章名，把想读的内容先保存下来。"
+          emptyDescription="团队导入新文章后，会自动出现在这里。"
           showReadAction
         />
       </section>

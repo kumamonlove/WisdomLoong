@@ -26,7 +26,7 @@ download_pdf() {
   echo "Prewarming PDF: article ${article_id}"
   if curl --location --fail --silent --show-error \
     --retry 2 --connect-timeout 10 --max-time 120 \
-    --user-agent "WisdomLoong/1.9 deployment prewarmer" \
+    --user-agent "WisdomLoong/1.10 deployment prewarmer" \
     --output "$temporary" \
     "https://arxiv.org/pdf/${arxiv_id}.pdf" &&
     [ "$(head -c 5 "$temporary")" = "%PDF-" ]; then

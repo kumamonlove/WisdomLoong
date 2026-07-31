@@ -235,7 +235,208 @@ function ArxivLookup({
 }
 
 export function ReadingListImporter() {
-  return <ArxivLookup addToReadingList />;
+  const [method, setMethod] = useState<"arxiv" | "pdf">("arxiv");
+
+  return (
+    <div className="reading-list-importer">
+      <div className="import-method-switch" role="tablist" aria-label="选择导入方式">
+        <button
+          aria-selected={method === "arxiv"}
+          className={method === "arxiv" ? "active" : ""}
+          onClick={() => setMethod("arxiv")}
+          role="tab"
+          type="button"
+        >
+          从 arXiv 获取
+          <small>输入标题，自动下载并缓存</small>
+        </button>
+        <button
+          aria-selected={method === "pdf"}
+          className={method === "pdf" ? "active" : ""}
+          onClick={() => setMethod("pdf")}
+          role="tab"
+          type="button"
+        >
+          上传本地 PDF
+          <small>拖入已经下载好的论文</small>
+        </button>
+      </div>
+      {method === "arxiv" ? <ArxivLookup addToReadingList /> : <PdfDropImporter />}
+    </div>
+  );
+}
+
+function PdfDropImporter() {
+  const router = useRouter();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
+  const [publishedAt, setPublishedAt] = useState("");
+  const [category, setCategory] = useState<ArticleCategory>("Ego第一人称");
+  const [tags, setTags] = useState<string[]>(["Ego第一人称"]);
+  const [tagDraft, setTagDraft] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  function chooseFile(nextFile?: File) {
+    if (!nextFile) return;
+    if (nextFile.type !== "application/pdf" && !nextFile.name.toLowerCase().endsWith(".pdf")) {
+      setMessage("请选择 PDF 文件。");
+      return;
+    }
+    setFile(nextFile);
+    setTitle((current) => current || nextFile.name.replace(/\.pdf$/i, ""));
+    setMessage("");
+  }
+
+  function addTag() {
+    setTags((current) => normalizeTags([...current, tagDraft]));
+    setTagDraft("");
+  }
+
+  async function upload(event: FormEvent) {
+    event.preventDefault();
+    if (!file) {
+      setMessage("请先拖入或选择一份 PDF。");
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      form.set("title", title);
+      form.set("category", category);
+      form.set("tags", JSON.stringify(tags));
+      if (publishedAt) form.set("publishedAt", publishedAt);
+
+      const response = await fetch("/api/articles/upload", {
+        method: "POST",
+        body: form,
+      });
+      await responseJson(response);
+      setMessage("PDF 已保存到团队文章库，并加入所有尚未阅读成员的待读。");
+      setFile(null);
+      setTitle("");
+      setPublishedAt("");
+      if (fileInput.current) fileInput.current.value = "";
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "上传失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="pdf-drop-importer" onSubmit={upload}>
+      <button
+        className={`pdf-drop-zone${dragging ? " dragging" : ""}${file ? " has-file" : ""}`}
+        onClick={() => fileInput.current?.click()}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setDragging(false);
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          chooseFile(event.dataTransfer.files[0]);
+        }}
+        type="button"
+      >
+        <span aria-hidden="true">{file ? "✓" : "⇧"}</span>
+        <strong>{file ? file.name : "把 PDF 拖到这里"}</strong>
+        <small>
+          {file
+            ? `${(file.size / 1024 / 1024).toFixed(1)} MB · 点击可重新选择`
+            : "或点击选择文件，最大 50 MB"}
+        </small>
+      </button>
+      <input
+        accept="application/pdf,.pdf"
+        className="visually-hidden"
+        onChange={(event) => chooseFile(event.target.files?.[0])}
+        ref={fileInput}
+        type="file"
+      />
+
+      <div className="pdf-upload-fields">
+        <label>
+          文章名称
+          <input
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="选择 PDF 后自动填写，也可以修改"
+            required
+            value={title}
+          />
+        </label>
+        <label>
+          论文日期（选填）
+          <input
+            onChange={(event) => setPublishedAt(event.target.value)}
+            type="date"
+            value={publishedAt}
+          />
+        </label>
+        <label>
+          知识分类
+          <select
+            onChange={(event) => {
+              const nextCategory = event.target.value as ArticleCategory;
+              setCategory(nextCategory);
+              setTags((current) => normalizeTags([nextCategory, ...current]));
+            }}
+            value={category}
+          >
+            {articleCategories.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="tag-editor">
+        <span>文章标签（可添加多个）</span>
+        <div className="tag-editor-row">
+          <div className="editable-tags">
+            {tags.map((tag) => (
+              <button
+                aria-label={`移除标签 ${tag}`}
+                key={tag}
+                onClick={() => setTags((current) => current.filter((item) => item !== tag))}
+                type="button"
+              >
+                {tag} ×
+              </button>
+            ))}
+          </div>
+          <input
+            onChange={(event) => setTagDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== ",") return;
+              event.preventDefault();
+              addTag();
+            }}
+            placeholder="输入标签后按 Enter"
+            value={tagDraft}
+          />
+          <button onClick={addTag} type="button">添加</button>
+        </div>
+      </div>
+
+      {message && <p className="workflow-message" role="status">{message}</p>}
+      <button className="pdf-upload-submit" disabled={busy || !file} type="submit">
+        {busy ? "正在上传并导入…" : "上传到团队文章库"}
+      </button>
+    </form>
+  );
 }
 
 type Capture = { dataUrl: string; note: string };
@@ -749,7 +950,9 @@ export function ReviewComposer({
                   <span>{selectedArticle.tags.join(" · ")}</span>
                 </div>
               </div>
-              <a href={selectedArticle.sourceUrl} rel="noreferrer" target="_blank">原文 ↗</a>
+              {!selectedArticle.sourceUrl.startsWith("/api/") && (
+                <a href={selectedArticle.sourceUrl} rel="noreferrer" target="_blank">来源页面 ↗</a>
+              )}
             </header>
             <div className="reader-tags">
               {selectedArticle.tags.map((tag) => <span key={tag}>{tag}</span>)}

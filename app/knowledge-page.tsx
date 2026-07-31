@@ -44,7 +44,7 @@ export function ArticleGrid({
             )}
           </div>
           <h3>
-            <a href={article.sourceUrl} rel="noreferrer" target="_blank">
+            <a href={`/reviews/new?article=${article.id}`}>
               {article.title}
             </a>
           </h3>

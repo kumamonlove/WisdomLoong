@@ -958,6 +958,56 @@ select {
   font-size: 13px;
 }
 
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.import-method-switch {
+  width: fit-content;
+  margin-bottom: 22px;
+  padding: 4px;
+  display: flex;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.import-method-switch button {
+  min-width: 190px;
+  padding: 10px 14px;
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  text-align: left;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.import-method-switch button small {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.78;
+}
+
+.import-method-switch button.active {
+  color: var(--white);
+  background: var(--ink);
+  box-shadow: 0 4px 14px rgba(26, 25, 23, 0.14);
+}
+
 .lookup-form {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) 180px 240px;
@@ -1072,6 +1122,107 @@ select {
   margin: 16px 0 0;
   color: var(--accent);
   font-size: 13px;
+}
+
+.pdf-drop-importer {
+  display: grid;
+}
+
+.pdf-drop-zone {
+  min-height: 154px;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  color: var(--muted);
+  border: 1.5px dashed rgba(103, 99, 88, 0.36);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(214, 95, 64, 0.07), transparent 50%),
+    rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.pdf-drop-zone:hover,
+.pdf-drop-zone.dragging {
+  color: var(--ink);
+  border-color: var(--accent);
+  background-color: rgba(214, 95, 64, 0.06);
+  transform: translateY(-1px);
+}
+
+.pdf-drop-zone.has-file {
+  color: var(--accent);
+  border-style: solid;
+  border-color: rgba(214, 95, 64, 0.42);
+}
+
+.pdf-drop-zone > span {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  border: 1px solid rgba(214, 95, 64, 0.24);
+  border-radius: 50%;
+  background: rgba(214, 95, 64, 0.08);
+  font-size: 18px;
+}
+
+.pdf-drop-zone strong {
+  font-size: 15px;
+}
+
+.pdf-drop-zone small {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pdf-upload-fields {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 180px 180px;
+  gap: 16px;
+}
+
+.pdf-upload-fields label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.pdf-upload-fields input,
+.pdf-upload-fields select {
+  width: 100%;
+  height: 44px;
+  padding: 0 13px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+  background: var(--white);
+}
+
+.pdf-upload-submit {
+  width: fit-content;
+  min-width: 180px;
+  margin-top: 18px;
+  padding: 12px 18px;
+  color: var(--white);
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: var(--ink);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.pdf-upload-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .lookup-results {
@@ -3207,6 +3358,19 @@ select {
   }
 
   .lookup-form {
+    grid-template-columns: 1fr;
+  }
+
+  .import-method-switch {
+    width: 100%;
+  }
+
+  .import-method-switch button {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .pdf-upload-fields {
     grid-template-columns: 1fr;
   }
 
