@@ -839,7 +839,7 @@ export function ReviewComposer({
     <div className={`reader-workspace${focusMode ? " focus-mode" : ""}`}>
       {focusMode && (
         <div className="focus-status">
-          <span><i />专注阅读中</span>
+          <span><i />扩展组件知识库中</span>
           <small>
             {localCache.status === "loading"
               ? `正在保存到本地 ${localCache.progress}%`
