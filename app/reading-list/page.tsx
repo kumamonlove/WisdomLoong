@@ -17,8 +17,8 @@ export default async function ReadingListPage() {
       <section className="import-section">
         <div className="section-heading">
           <span>ADD TO TEAM LIBRARY</span>
-          <h2>导入文章</h2>
-          <p>从 arXiv 获取，或拖入本地 PDF；导入后全团队都能在阅读器中查看。</p>
+          <h2>推荐值得一读的文章</h2>
+          <p>从 arXiv 获取，或拖入本地 PDF；添加后全团队都能在阅读器中查看。</p>
         </div>
         <ReadingListImporter />
       </section>

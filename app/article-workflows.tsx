@@ -109,7 +109,7 @@ function ArxivLookup({
       });
       const data = await responseJson(response);
       const articleId = Number(data.articleId);
-      setMessage(addToReadingList ? "已加入你的待读文章。" : "文章信息已导入，可以开始评论。");
+      setMessage(addToReadingList ? "已推荐给团队，并加入所有未读成员的待读。" : "文章已推荐，可以开始阅读。");
       onImported?.({
         id: articleId,
         title: article.title,
@@ -259,8 +259,8 @@ function ArxivLookup({
                   {importingId === article.externalId
                     ? "正在导入…"
                     : addToReadingList
-                      ? "加入待读"
-                      : "导入并开始阅读"}
+                      ? "推荐给团队"
+                      : "推荐并开始阅读"}
                 </button>
               </footer>
             </article>
@@ -494,7 +494,7 @@ function PdfDropImporter() {
 
       {message && <p className="workflow-message" role="status">{message}</p>}
       <button className="pdf-upload-submit" disabled={busy || !file} type="submit">
-        {busy ? "正在上传并导入…" : "上传到团队文章库"}
+        {busy ? "正在上传并添加…" : "推荐给团队"}
       </button>
     </form>
   );
@@ -990,7 +990,7 @@ export function ReviewComposer({
           {filteredArticles.length === 0 && <p>没有匹配文章</p>}
         </div>
         <details className="reader-import">
-          <summary>＋ 从 arXiv 导入新文章</summary>
+          <summary>＋ 推荐一篇新文章</summary>
           <ArxivLookup addToReadingList={false} onImported={useImportedArticle} />
         </details>
       </aside>
