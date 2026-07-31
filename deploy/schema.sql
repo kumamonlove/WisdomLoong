@@ -18,6 +18,15 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at);
 
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  token_hash CHAR(64) PRIMARY KEY,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS admin_sessions_expires_at_idx
+  ON admin_sessions(expires_at);
+
 CREATE TABLE IF NOT EXISTS articles (
   id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   title TEXT NOT NULL,

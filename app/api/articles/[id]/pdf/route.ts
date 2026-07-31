@@ -110,7 +110,7 @@ export async function GET(
   try {
     const response = await fetch(remoteUrl, {
       cache: "no-store",
-      headers: { "User-Agent": "WisdomLoong/1.3.1 PDF cache" },
+      headers: { "User-Agent": "WisdomLoong/1.3.2 PDF cache" },
       signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok || !response.body) throw new Error(`PDF source returned ${response.status}`);
