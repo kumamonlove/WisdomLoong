@@ -1091,6 +1091,17 @@ select {
   background: var(--white);
 }
 
+.tag-editor-row select {
+  min-width: 150px;
+  height: 34px;
+  padding: 0 30px 0 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  font-size: 11px;
+}
+
 .lookup-form select {
   height: 44px;
 }
@@ -1126,6 +1137,21 @@ select {
 
 .pdf-drop-importer {
   display: grid;
+}
+
+.pdf-download-hint {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  color: var(--muted);
+  border-left: 2px solid var(--accent);
+  background: rgba(214, 95, 64, 0.05);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.pdf-download-hint a {
+  color: var(--accent);
+  font-weight: 750;
 }
 
 .pdf-drop-zone {

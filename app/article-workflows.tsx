@@ -35,6 +35,25 @@ async function responseJson(response: Response) {
   return data;
 }
 
+function useExistingTags() {
+  const [existingTags, setExistingTags] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/articles/tags")
+      .then(responseJson)
+      .then((data) => {
+        if (active) setExistingTags(data.tags as string[]);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return existingTags;
+}
+
 function ArxivLookup({
   addToReadingList,
   onImported,
@@ -52,6 +71,7 @@ function ArxivLookup({
   const [busy, setBusy] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const existingTags = useExistingTags();
 
   async function search(event: FormEvent) {
     event.preventDefault();
@@ -149,7 +169,6 @@ function ArxivLookup({
           发布机构（选填）
           <input
             onChange={(event) => setPublisher(event.target.value)}
-            placeholder="如 Physical Intelligence（不是 arXiv）"
             value={publisher}
           />
         </label>
@@ -157,6 +176,21 @@ function ArxivLookup({
       <div className="tag-editor">
         <span>文章标签（可添加多个）</span>
         <div className="tag-editor-row">
+          <select
+            aria-label="选择已有标签"
+            defaultValue=""
+            onChange={(event) => {
+              if (event.target.value) {
+                setTags((current) => normalizeTags([...current, event.target.value]));
+                event.target.value = "";
+              }
+            }}
+          >
+            <option value="">选择已有标签</option>
+            {existingTags
+              .filter((tag) => !tags.includes(tag))
+              .map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+          </select>
           <div className="editable-tags">
             {tags.map((tag) => (
               <button
@@ -278,6 +312,7 @@ function PdfDropImporter() {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const existingTags = useExistingTags();
 
   function chooseFile(nextFile?: File) {
     if (!nextFile) return;
@@ -332,6 +367,11 @@ function PdfDropImporter() {
 
   return (
     <form className="pdf-drop-importer" onSubmit={upload}>
+      <p className="pdf-download-hint">
+        还没有本地文件？先前往
+        <a href="https://arxiv.org/" rel="noreferrer" target="_blank"> arXiv 下载 PDF ↗</a>
+        ，下载完成后再拖动导入。
+      </p>
       <button
         className={`pdf-drop-zone${dragging ? " dragging" : ""}${file ? " has-file" : ""}`}
         onClick={() => fileInput.current?.click()}
@@ -405,6 +445,21 @@ function PdfDropImporter() {
       <div className="tag-editor">
         <span>文章标签（可添加多个）</span>
         <div className="tag-editor-row">
+          <select
+            aria-label="选择已有标签"
+            defaultValue=""
+            onChange={(event) => {
+              if (event.target.value) {
+                setTags((current) => normalizeTags([...current, event.target.value]));
+                event.target.value = "";
+              }
+            }}
+          >
+            <option value="">选择已有标签</option>
+            {existingTags
+              .filter((tag) => !tags.includes(tag))
+              .map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+          </select>
           <div className="editable-tags">
             {tags.map((tag) => (
               <button
