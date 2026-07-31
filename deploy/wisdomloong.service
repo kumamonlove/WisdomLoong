@@ -14,6 +14,7 @@ Environment=PGHOST=/var/run/postgresql
 Environment=PGDATABASE=wisdomloong
 Environment=PGUSER=admin
 Environment=PDF_CACHE_DIR=/srv/wisdomloong/pdf-cache
+Environment=PDF_ACCEL_REDIRECT_PREFIX=/_pdf_cache_internal
 EnvironmentFile=/etc/wisdomloong.env
 ExecStart=/usr/bin/node server.js
 Restart=always

@@ -18,7 +18,19 @@ const cacheMaxAge = 60 * 60 * 24 * 30;
 
 type ArticleSource = { sourceUrl: string };
 
-function cachedResponse(filePath: string, size: number, rangeHeader: string | null) {
+function cachedResponse(articleId: number, filePath: string, size: number, rangeHeader: string | null) {
+  const redirectPrefix = process.env.PDF_ACCEL_REDIRECT_PREFIX;
+  if (redirectPrefix) {
+    return new NextResponse(null, {
+      headers: {
+        "Cache-Control": `private, max-age=${cacheMaxAge}, immutable`,
+        "Content-Type": "application/pdf",
+        "X-Accel-Redirect": `${redirectPrefix}/${articleId}.pdf`,
+        "X-WisdomLoong-Cache": "HIT",
+        "X-WisdomLoong-Delivery": "nginx-sendfile",
+      },
+    });
+  }
   const match = rangeHeader?.match(/^bytes=(\d*)-(\d*)$/);
   if (match) {
     const start = match[1] ? Number(match[1]) : 0;
@@ -68,7 +80,7 @@ export async function GET(
   try {
     const file = await stat(filePath);
     if (file.size > 0) {
-      return cachedResponse(filePath, file.size, request.headers.get("range"));
+      return cachedResponse(articleId, filePath, file.size, request.headers.get("range"));
     }
   } catch {
     // 首次访问时继续从论文源站获取。
@@ -79,7 +91,7 @@ export async function GET(
     try {
       await activeDownload;
       const file = await stat(filePath);
-      return cachedResponse(filePath, file.size, request.headers.get("range"));
+      return cachedResponse(articleId, filePath, file.size, request.headers.get("range"));
     } catch {
       // 上一次下载失败时由本次请求重试。
     }

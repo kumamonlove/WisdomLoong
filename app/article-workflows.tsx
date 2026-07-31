@@ -585,6 +585,7 @@ export function ReviewComposer({
   const cropImageRef = useRef<HTMLImageElement>(null);
   const activeCacheArticle = useRef(0);
   const localPdfUrlRef = useRef("");
+  const sessionPdfUrls = useRef(new Map<number, string>());
 
   const selectedArticle = availableArticles.find((item) => item.id === articleId);
   const selectedArxivPage = selectedArticle
@@ -615,8 +616,13 @@ export function ReviewComposer({
   }, [focusMode]);
 
   useEffect(() => {
+    if (navigator.storage?.persist) void navigator.storage.persist();
     if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/pdf-cache-worker.js");
+      void navigator.serviceWorker.getRegistrations().then((registrations) =>
+        Promise.all(registrations
+          .filter((registration) => registration.active?.scriptURL.endsWith("/pdf-cache-worker.js"))
+          .map((registration) => registration.unregister()))
+      );
     }
   }, []);
 
@@ -647,8 +653,15 @@ export function ReviewComposer({
     if (focusMode && articleId) void cachePdfLocally(articleId);
   }, [focusMode, articleId]);
 
+  useEffect(() => {
+    if (focusMode || !articleId || sessionPdfUrls.current.has(articleId)) return;
+    const preload = window.setTimeout(() => void cachePdfLocally(articleId), 600);
+    return () => window.clearTimeout(preload);
+  }, [focusMode, articleId]);
+
   useEffect(() => () => {
-    if (localPdfUrlRef.current) URL.revokeObjectURL(localPdfUrlRef.current);
+    sessionPdfUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    sessionPdfUrls.current.clear();
   }, []);
 
   function selectArticle(id: number) {
@@ -663,12 +676,15 @@ export function ReviewComposer({
     setNotes(article?.ownReview?.annotations ?? []);
     setCaptures([]);
     setContextTab("discussion");
-    if (localPdfUrlRef.current) URL.revokeObjectURL(localPdfUrlRef.current);
-    localPdfUrlRef.current = "";
-    setLocalPdfUrl("");
+    const sessionUrl = sessionPdfUrls.current.get(id) ?? "";
+    localPdfUrlRef.current = sessionUrl;
+    setLocalPdfUrl(sessionUrl);
     setLocalPdfName("");
-    setLocalCache({ status: "idle", progress: 0 });
+    setLocalCache(sessionUrl
+      ? { status: "ready", progress: 100 }
+      : { status: "idle", progress: 0 });
     setFocusMode(false);
+    if (!sessionUrl) window.setTimeout(() => void cachePdfLocally(id), 0);
   }
 
   function beginReading() {
@@ -684,8 +700,10 @@ export function ReviewComposer({
       return;
     }
     activeCacheArticle.current = 0;
-    if (localPdfUrlRef.current) URL.revokeObjectURL(localPdfUrlRef.current);
+    const previousUrl = sessionPdfUrls.current.get(articleId);
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
     const objectUrl = URL.createObjectURL(nextFile);
+    sessionPdfUrls.current.set(articleId, objectUrl);
     localPdfUrlRef.current = objectUrl;
     setLocalPdfUrl(objectUrl);
     setLocalPdfName(nextFile.name);
@@ -695,24 +713,39 @@ export function ReviewComposer({
   }
 
   async function cachePdfLocally(id: number) {
-    if (activeCacheArticle.current === id || localPdfUrlRef.current) return;
+    const sessionUrl = sessionPdfUrls.current.get(id);
+    if (sessionUrl) {
+      localPdfUrlRef.current = sessionUrl;
+      setLocalPdfUrl(sessionUrl);
+      setLocalCache({ status: "ready", progress: 100 });
+      return;
+    }
+    if (activeCacheArticle.current === id) return;
     activeCacheArticle.current = id;
     const cacheKey = `/api/articles/${id}/pdf`;
+    const cacheRequest = new Request(new URL(cacheKey, window.location.origin), {
+      credentials: "same-origin",
+    });
     try {
       const cache = "caches" in window
         ? await caches.open("wisdomloong-papers-v1")
         : null;
-      const cached = await cache?.match(cacheKey);
+      const cached = await cache?.match(cacheRequest);
       if (cached) {
         const blob = await cached.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        localPdfUrlRef.current = objectUrl;
-        setLocalPdfUrl(objectUrl);
-        setLocalCache({ status: "ready", progress: 100 });
-        return;
+        if (blob.size < 1024) {
+          await cache?.delete(cacheRequest);
+        } else {
+          const objectUrl = URL.createObjectURL(blob);
+          sessionPdfUrls.current.set(id, objectUrl);
+          localPdfUrlRef.current = objectUrl;
+          setLocalPdfUrl(objectUrl);
+          setLocalCache({ status: "ready", progress: 100 });
+          return;
+        }
       }
       setLocalCache({ status: "loading", progress: 1 });
-      const response = await fetch(cacheKey, { cache: "reload" });
+      const response = await fetch(cacheRequest, { cache: "default" });
       if (!response.ok || !response.body) throw new Error("download failed");
       const total = Number(response.headers.get("content-length")) || 0;
       const reader = response.body.getReader();
@@ -728,14 +761,19 @@ export function ReviewComposer({
         }
       }
       const blob = new Blob(chunks as BlobPart[], { type: "application/pdf" });
-      await cache?.put(cacheKey, new Response(blob, {
-          headers: { "Content-Type": "application/pdf", "Content-Length": String(blob.size) },
-        }));
       if (activeCacheArticle.current === id) {
         const objectUrl = URL.createObjectURL(blob);
+        sessionPdfUrls.current.set(id, objectUrl);
         localPdfUrlRef.current = objectUrl;
         setLocalPdfUrl(objectUrl);
         setLocalCache({ status: "ready", progress: 100 });
+      }
+      try {
+        await cache?.put(cacheRequest, new Response(blob, {
+          headers: { "Content-Type": "application/pdf", "Content-Length": String(blob.size) },
+        }));
+      } catch {
+        setMessage("论文已经打开，但浏览器未授予持久存储空间；下次可能需要重新读取。");
       }
     } catch {
       if (activeCacheArticle.current === id) {

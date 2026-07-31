@@ -87,9 +87,6 @@ export function SiteHeader({
               <form
                 action="/api/auth/logout"
                 method="post"
-                onSubmit={() => {
-                  if ("caches" in window) void caches.delete("wisdomloong-papers-v1");
-                }}
               >
                 <button type="submit">退出登录</button>
               </form>
