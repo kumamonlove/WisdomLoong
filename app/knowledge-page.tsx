@@ -163,7 +163,7 @@ export function ArticleGrid({
             className="article-link"
             href={`/reviews/new?article=${article.id}`}
           >
-            在阅读器中打开 <span aria-hidden="true">→</span>
+            开始阅读 <span aria-hidden="true">→</span>
           </a>
         </article>
       ))}

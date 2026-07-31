@@ -11,7 +11,8 @@ export default async function NewReviewPage({
   const user = await requireUser();
   const articles = await getArticlesForReview(user.id);
   const requestedId = Number((await searchParams).article);
-  const initialArticleId = articles.some((article) => article.id === requestedId)
+  const hasRequestedArticle = articles.some((article) => article.id === requestedId);
+  const initialArticleId = hasRequestedArticle
     ? requestedId
     : articles[0]?.id;
 
@@ -23,7 +24,11 @@ export default async function NewReviewPage({
       description="在专注阅读中摘取证据、整理思路，并留下值得分享的长评论"
       username={user.username}
     >
-      <ReviewComposer articles={articles} initialArticleId={initialArticleId} />
+      <ReviewComposer
+        articles={articles}
+        initialArticleId={initialArticleId}
+        startFocused={hasRequestedArticle}
+      />
     </KnowledgePage>
   );
 }

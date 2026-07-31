@@ -15,6 +15,7 @@ import {
   type ArticleCategory,
 } from "@/lib/knowledge-types";
 import type { ReaderArticle } from "@/lib/knowledge";
+import { ReviewLikeButton } from "@/app/review-actions";
 
 type ArxivResult = {
   title: string;
@@ -222,7 +223,7 @@ function ArxivLookup({
                     ? "正在导入…"
                     : addToReadingList
                       ? "加入待读"
-                      : "选择并评论"}
+                      : "导入并开始阅读"}
                 </button>
               </footer>
             </article>
@@ -244,6 +245,22 @@ type ReadingNote = {
   translation: string;
   content: string;
 };
+type CommunityAnnotation = ReadingNote & {
+  id: number;
+  reviewId: number;
+  author: string;
+};
+type CommunityReview = {
+  id: number;
+  author: string;
+  content: string;
+  rating: number;
+  reviewType: "short" | "long";
+  mustRead: boolean;
+  likeCount: number;
+  likedByViewer: boolean;
+  attachments: { id: number; reviewId: number; note: string }[];
+};
 
 function pdfUrl(articleId: number, sourceUrl: string, page: number, zoom: number) {
   const base = sourceUrl.includes("arxiv.org/")
@@ -255,9 +272,11 @@ function pdfUrl(articleId: number, sourceUrl: string, page: number, zoom: number
 export function ReviewComposer({
   articles,
   initialArticleId,
+  startFocused = false,
 }: {
   articles: ReaderArticle[];
   initialArticleId?: number;
+  startFocused?: boolean;
 }) {
   const router = useRouter();
   const [availableArticles, setAvailableArticles] = useState(articles);
@@ -274,7 +293,15 @@ export function ReviewComposer({
       1,
   );
   const [zoom, setZoom] = useState(100);
-  const [focusMode, setFocusMode] = useState(false);
+  const [focusMode, setFocusMode] = useState(startFocused);
+  const [contextTab, setContextTab] = useState<"discussion" | "notes" | "review">("discussion");
+  const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
+  const [communityAnnotations, setCommunityAnnotations] = useState<CommunityAnnotation[]>([]);
+  const [discussionLoading, setDiscussionLoading] = useState(false);
+  const [localCache, setLocalCache] = useState<{
+    status: "idle" | "loading" | "ready" | "unsupported" | "error";
+    progress: number;
+  }>({ status: "idle", progress: 0 });
   const [noteDraft, setNoteDraft] = useState("");
   const [quoteDraft, setQuoteDraft] = useState("");
   const [translation, setTranslation] = useState("");
@@ -291,6 +318,7 @@ export function ReviewComposer({
   const [message, setMessage] = useState("");
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const cropImageRef = useRef<HTMLImageElement>(null);
+  const activeCacheArticle = useRef(0);
 
   const selectedArticle = availableArticles.find((item) => item.id === articleId);
   const searchableTags = useMemo(
@@ -317,6 +345,39 @@ export function ReviewComposer({
     return () => window.removeEventListener("keydown", exitOnEscape);
   }, [focusMode]);
 
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/pdf-cache-worker.js");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!articleId) return;
+    let cancelled = false;
+    setDiscussionLoading(true);
+    fetch(`/api/articles/${articleId}/discussion`)
+      .then(responseJson)
+      .then((data) => {
+        if (cancelled) return;
+        setCommunityReviews((data.reviews as CommunityReview[]) ?? []);
+        setCommunityAnnotations((data.annotations as CommunityAnnotation[]) ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCommunityReviews([]);
+          setCommunityAnnotations([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDiscussionLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [articleId]);
+
+  useEffect(() => {
+    if (focusMode && articleId) void cachePdfLocally(articleId);
+  }, [focusMode, articleId]);
+
   function selectArticle(id: number) {
     const article = availableArticles.find((item) => item.id === id);
     setArticleId(id);
@@ -324,6 +385,46 @@ export function ReviewComposer({
     setPage(article?.lastReadPage ?? 1);
     setNotes([]);
     setCaptures([]);
+    setContextTab("discussion");
+    setFocusMode(true);
+  }
+
+  async function cachePdfLocally(id: number) {
+    if (!("caches" in window) || activeCacheArticle.current === id) return;
+    activeCacheArticle.current = id;
+    const cacheKey = `/api/articles/${id}/pdf`;
+    try {
+      const cache = await caches.open("wisdomloong-papers-v1");
+      if (await cache.match(cacheKey)) {
+        setLocalCache({ status: "ready", progress: 100 });
+        return;
+      }
+      setLocalCache({ status: "loading", progress: 1 });
+      const response = await fetch(cacheKey, { cache: "reload" });
+      if (!response.ok || !response.body) throw new Error("download failed");
+      const total = Number(response.headers.get("content-length")) || 0;
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.byteLength;
+        if (activeCacheArticle.current === id && total > 0) {
+          setLocalCache({ status: "loading", progress: Math.min(99, Math.round(received / total * 100)) });
+        }
+      }
+      const blob = new Blob(chunks as BlobPart[], { type: "application/pdf" });
+      await cache.put(cacheKey, new Response(blob, {
+        headers: { "Content-Type": "application/pdf", "Content-Length": String(blob.size) },
+      }));
+      if (activeCacheArticle.current === id) setLocalCache({ status: "ready", progress: 100 });
+    } catch {
+      if (activeCacheArticle.current === id) setLocalCache({ status: "error", progress: 0 });
+    } finally {
+      if (activeCacheArticle.current === id) activeCacheArticle.current = 0;
+    }
   }
 
   async function saveReadingBookmark() {
@@ -505,8 +606,14 @@ export function ReviewComposer({
       {focusMode && (
         <div className="focus-status">
           <span><i />专注阅读中</span>
-          <small>按 Esc 随时退出</small>
-          <button onClick={() => setFocusMode(false)} type="button">退出专注模式</button>
+          <small>
+            {localCache.status === "loading"
+              ? `正在保存到本地 ${localCache.progress}%`
+              : localCache.status === "ready"
+                ? "已存入本地阅读器"
+                : "按 Esc 返回文章库"}
+          </small>
+          <button onClick={() => setFocusMode(false)} type="button">结束阅读</button>
         </div>
       )}
       {pendingCapture && (
@@ -582,6 +689,7 @@ export function ReviewComposer({
               <strong>{article.title}</strong>
               <small>{article.tags.join(" · ")}</small>
               {article.lastReadPage && <em>上次读到 P.{article.lastReadPage}</em>}
+              <i className="start-reading-cue">开始阅读 →</i>
             </button>
           ))}
           {filteredArticles.length === 0 && <p>没有匹配文章</p>}
@@ -636,27 +744,39 @@ export function ReviewComposer({
                 <span>{zoom}%</span>
                 <button onClick={() => setZoom((value) => Math.min(200, value + 10))} type="button">＋</button>
               </div>
-              <button className={focusMode ? "active-focus" : ""} onClick={() => setFocusMode((value) => !value)} type="button">
-                {focusMode ? "退出专注" : "专注阅读"}
+              <button className="active-focus" onClick={() => setFocusMode(false)} type="button">
+                结束阅读
               </button>
               <button className="capture-button" disabled={capturing} onClick={captureScreen} type="button">
                 {capturing ? "正在截图…" : "▣ 截图引用"}
               </button>
             </div>
             <div className={`pdf-frame${pdfLoading ? " is-loading" : ""}`}>
-              {pdfLoading && (
+              {!focusMode && (
+                <div className="reader-paused">
+                  <span aria-hidden="true">◎</span>
+                  <strong>进入专注模式开始阅读</strong>
+                  <p>PDF、同行逐页批注和你的笔记会在同一个阅读空间中打开。</p>
+                  <button onClick={() => setFocusMode(true)} type="button">
+                    {selectedArticle.lastReadPage ? `从第 ${selectedArticle.lastReadPage} 页继续阅读` : "开始阅读"}
+                  </button>
+                </div>
+              )}
+              {focusMode && pdfLoading && (
                 <div className="pdf-loading" role="status">
                   <span />
                   <strong>正在从阿里云缓存加载论文</strong>
                   <small>文章信息已就绪，PDF 首次缓存后会立即打开</small>
                 </div>
               )}
-              <iframe
-              onLoad={() => setPdfLoading(false)}
-              ref={iframeRef}
-              src={pdfUrl(selectedArticle.id, selectedArticle.sourceUrl, page, zoom)}
-              title={selectedArticle.title}
-              />
+              {focusMode && (
+                <iframe
+                  onLoad={() => setPdfLoading(false)}
+                  ref={iframeRef}
+                  src={pdfUrl(selectedArticle.id, selectedArticle.sourceUrl, page, zoom)}
+                  title={selectedArticle.title}
+                />
+              )}
             </div>
             <div className="reading-bookmark">
               <div>
@@ -679,9 +799,85 @@ export function ReviewComposer({
 
       <aside className="reader-notebook">
         <div className="notebook-heading">
-          <span>阅读笔记</span>
-          <small>按页保存局部批注</small>
+          <span>阅读上下文</span>
+          <small>当前第 {page} 页</small>
         </div>
+        <div className="context-tabs">
+          <button className={contextTab === "discussion" ? "selected" : ""} onClick={() => setContextTab("discussion")} type="button">
+            同行批注 <span>{communityAnnotations.length}</span>
+          </button>
+          <button className={contextTab === "notes" ? "selected" : ""} onClick={() => setContextTab("notes")} type="button">
+            我的笔记 <span>{notes.length}</span>
+          </button>
+          <button className={contextTab === "review" ? "selected" : ""} onClick={() => setContextTab("review")} type="button">
+            整体评论
+          </button>
+        </div>
+        <div className="context-panel community-panel" hidden={contextTab !== "discussion"}>
+          {discussionLoading ? (
+            <p className="context-empty">正在加载同行观点…</p>
+          ) : (
+            <>
+              <div className="current-page-discussion">
+                <h3>第 {page} 页的批注</h3>
+                {communityAnnotations.filter((item) => item.page === page).map((annotation) => (
+                  <article key={annotation.id}>
+                    <header><span>{annotation.author.slice(0, 1).toUpperCase()}</span><strong>{annotation.author}</strong></header>
+                    {annotation.quote && <blockquote>{annotation.quote}</blockquote>}
+                    {annotation.translation && <p className="community-translation">{annotation.translation}</p>}
+                    <p>{annotation.content}</p>
+                  </article>
+                ))}
+                {communityAnnotations.every((item) => item.page !== page) && (
+                  <p className="context-empty">这一页还没有同行批注，你可以留下第一条。</p>
+                )}
+              </div>
+              {communityAnnotations.some((item) => item.page !== page) && (
+                <div className="other-page-discussion">
+                  <h3>其他页的批注</h3>
+                  {communityAnnotations.filter((item) => item.page !== page).map((annotation) => (
+                    <button key={annotation.id} onClick={() => setPage(annotation.page)} type="button">
+                      <strong>P.{annotation.page}</strong>
+                      <span><b>{annotation.author}</b>{annotation.content}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="community-overall-reviews">
+                <h3>成员整体评论</h3>
+                {communityReviews.map((review) => (
+                  <details key={review.id}>
+                    <summary>
+                      <span>{review.author.slice(0, 1).toUpperCase()}</span>
+                      <strong>{review.author}</strong>
+                      <small>★ {review.rating} · {review.reviewType === "long" ? "长评" : "短评"}</small>
+                    </summary>
+                    <p>{review.content}</p>
+                    {review.attachments.length > 0 && (
+                      <div className="community-images">
+                        {review.attachments.map((attachment) => (
+                          <figure key={attachment.id}>
+                            <img alt={attachment.note || "论文图表评论"} src={`/api/review-attachments/${attachment.id}`} />
+                            {attachment.note && <figcaption>{attachment.note}</figcaption>}
+                          </figure>
+                        ))}
+                      </div>
+                    )}
+                    {review.reviewType === "long" && (
+                      <ReviewLikeButton
+                        initialCount={review.likeCount}
+                        initiallyLiked={review.likedByViewer}
+                        reviewId={review.id}
+                      />
+                    )}
+                  </details>
+                ))}
+                {communityReviews.length === 0 && <p className="context-empty">还没有其他成员留下整体评论。</p>}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="context-panel" hidden={contextTab !== "notes"}>
         <section className="translation-assistant">
           <div>
             <strong>中译助手</strong>
@@ -755,8 +951,9 @@ export function ReviewComposer({
             ))}
           </div>
         )}
+        </div>
 
-        <form className="review-form reader-review-form" onSubmit={submitReview}>
+        <form className="review-form reader-review-form" hidden={contextTab !== "review"} onSubmit={submitReview}>
           <h2>留下评论</h2>
           <div className="review-type-switch">
             <button className={reviewType === "short" ? "selected" : ""} onClick={() => setReviewType("short")} type="button">

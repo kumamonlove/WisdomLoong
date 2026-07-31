@@ -84,7 +84,13 @@ export function SiteHeader({
               <p>当前登录用户</p>
               <strong>{username}</strong>
               <a className="profile-link" href="/profile">我的主页 · 查看收到的赞</a>
-              <form action="/api/auth/logout" method="post">
+              <form
+                action="/api/auth/logout"
+                method="post"
+                onSubmit={() => {
+                  if ("caches" in window) void caches.delete("wisdomloong-papers-v1");
+                }}
+              >
                 <button type="submit">退出登录</button>
               </form>
             </div>
