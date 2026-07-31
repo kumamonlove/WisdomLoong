@@ -175,22 +175,25 @@ function ArxivLookup({
       </form>
       <div className="tag-editor">
         <span>文章标签（可添加多个）</span>
+        {existingTags.some((tag) => !tags.includes(tag)) && (
+          <div className="existing-tag-picker">
+            <small>点击添加已有标签</small>
+            <div>
+              {existingTags
+                .filter((tag) => !tags.includes(tag))
+                .map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => setTags((current) => normalizeTags([...current, tag]))}
+                    type="button"
+                  >
+                    ＋ {tag}
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
         <div className="tag-editor-row">
-          <select
-            aria-label="选择已有标签"
-            defaultValue=""
-            onChange={(event) => {
-              if (event.target.value) {
-                setTags((current) => normalizeTags([...current, event.target.value]));
-                event.target.value = "";
-              }
-            }}
-          >
-            <option value="">选择已有标签</option>
-            {existingTags
-              .filter((tag) => !tags.includes(tag))
-              .map((tag) => <option key={tag} value={tag}>{tag}</option>)}
-          </select>
           <div className="editable-tags">
             {tags.map((tag) => (
               <button
@@ -444,22 +447,25 @@ function PdfDropImporter() {
 
       <div className="tag-editor">
         <span>文章标签（可添加多个）</span>
+        {existingTags.some((tag) => !tags.includes(tag)) && (
+          <div className="existing-tag-picker">
+            <small>点击添加已有标签</small>
+            <div>
+              {existingTags
+                .filter((tag) => !tags.includes(tag))
+                .map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => setTags((current) => normalizeTags([...current, tag]))}
+                    type="button"
+                  >
+                    ＋ {tag}
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
         <div className="tag-editor-row">
-          <select
-            aria-label="选择已有标签"
-            defaultValue=""
-            onChange={(event) => {
-              if (event.target.value) {
-                setTags((current) => normalizeTags([...current, event.target.value]));
-                event.target.value = "";
-              }
-            }}
-          >
-            <option value="">选择已有标签</option>
-            {existingTags
-              .filter((tag) => !tags.includes(tag))
-              .map((tag) => <option key={tag} value={tag}>{tag}</option>)}
-          </select>
           <div className="editable-tags">
             {tags.map((tag) => (
               <button

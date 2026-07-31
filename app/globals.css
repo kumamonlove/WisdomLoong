@@ -1058,6 +1058,41 @@ select {
   font-weight: 650;
 }
 
+.existing-tag-picker {
+  margin-top: 9px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.existing-tag-picker > small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.existing-tag-picker > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.existing-tag-picker button {
+  padding: 6px 9px;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.existing-tag-picker button:hover {
+  color: var(--accent);
+  border-color: rgba(214, 95, 64, 0.45);
+  background: rgba(214, 95, 64, 0.05);
+}
+
 .tag-editor-row {
   margin-top: 8px;
   display: flex;
@@ -1089,17 +1124,6 @@ select {
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--white);
-}
-
-.tag-editor-row select {
-  min-width: 150px;
-  height: 34px;
-  padding: 0 30px 0 10px;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--white);
-  font-size: 11px;
 }
 
 .lookup-form select {
@@ -3402,6 +3426,11 @@ select {
 
   .tag-editor-row {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .existing-tag-picker {
+    align-items: flex-start;
     flex-direction: column;
   }
 
