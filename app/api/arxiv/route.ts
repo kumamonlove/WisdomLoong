@@ -19,6 +19,17 @@ function element(xml: string, name: string) {
   return match ? decodeXml(match[1]) : "";
 }
 
+function inferPublisher(title: string) {
+  const normalized = title.toLocaleLowerCase();
+  if (normalized.includes("π0.5") || normalized.includes("pi0.5") || normalized.includes("π0")) {
+    return "Physical Intelligence";
+  }
+  if (normalized.includes("gemini robotics")) return "Google DeepMind";
+  if (normalized.includes("gr00t")) return "NVIDIA";
+  if (normalized.includes("openvla")) return "Stanford University";
+  return "机构待补充";
+}
+
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
@@ -41,7 +52,7 @@ export async function GET(request: Request) {
   try {
     const response = await fetch(`https://export.arxiv.org/api/query?${query}`, {
       headers: {
-        "User-Agent": "WisdomLoong/1.2 (internal research knowledge platform)",
+        "User-Agent": "WisdomLoong/1.3 (internal research knowledge platform)",
       },
       cache: "no-store",
       signal: AbortSignal.timeout(12_000),
@@ -70,7 +81,7 @@ export async function GET(request: Request) {
         abstract: element(entry, "summary"),
         authors,
         publishedAt: element(entry, "published").slice(0, 10),
-        publisher: "arXiv",
+        publisher: inferPublisher(element(entry, "title")),
         sourceUrl: decodeXml(alternateLink),
         externalId,
       };

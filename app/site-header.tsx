@@ -72,7 +72,7 @@ export function SiteHeader({
             className={`write-review-button${page === "review" ? " active" : ""}`}
             href="/reviews/new"
           >
-            撰写评论
+            阅读文章
           </a>
 
           <details className="account-menu">

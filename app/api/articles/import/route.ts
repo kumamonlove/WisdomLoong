@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { database } from "@/lib/db";
-import { articleCategories } from "@/lib/knowledge-types";
+import { articleCategories, normalizeTags } from "@/lib/knowledge-types";
 
 type ImportBody = {
   title?: string;
@@ -13,6 +13,7 @@ type ImportBody = {
   sourceUrl?: string;
   externalId?: string;
   addToReadingList?: boolean;
+  tags?: string[];
 };
 
 function normalizeTitle(title: string) {
@@ -29,6 +30,11 @@ export async function POST(request: Request) {
   const title = body.title?.trim();
   const sourceUrl = body.sourceUrl?.trim();
   const category = articleCategories.find((item) => item === body.category);
+  const tags = normalizeTags([category, ...normalizeTags(body.tags)]);
+  const publisher =
+    body.publisher?.trim() && body.publisher.trim().toLocaleLowerCase() !== "arxiv"
+      ? body.publisher.trim()
+      : "机构待补充";
 
   if (!title || !sourceUrl || !category) {
     return NextResponse.json(
@@ -63,10 +69,10 @@ export async function POST(request: Request) {
     if (!articleId) {
       const inserted = await client.query<{ id: number }>(
         `INSERT INTO articles (
-           title, title_key, abstract, authors, publisher, category,
+           title, title_key, abstract, authors, publisher, category, tags,
            published_at, source_url, external_id, imported_by
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING id`,
         [
           title,
@@ -75,8 +81,9 @@ export async function POST(request: Request) {
           Array.isArray(body.authors)
             ? body.authors.filter((author) => typeof author === "string").slice(0, 100)
             : [],
-          body.publisher?.trim() || "arXiv",
+          publisher,
           category,
+          tags,
           body.publishedAt || null,
           parsedUrl.toString(),
           body.externalId?.trim() || null,
@@ -84,6 +91,24 @@ export async function POST(request: Request) {
         ],
       );
       articleId = inserted.rows[0].id;
+    } else {
+      await client.query(
+        `UPDATE articles
+         SET publisher = CASE
+               WHEN $2 <> '机构待补充' THEN $2
+               WHEN LOWER(publisher) = 'arxiv' THEN '机构待补充'
+               ELSE publisher
+             END,
+             tags = (
+               SELECT ARRAY(
+                 SELECT DISTINCT tag
+                 FROM UNNEST(articles.tags || $3::text[]) AS tag
+                 LIMIT 12
+               )
+             )
+         WHERE id = $1`,
+        [articleId, publisher, tags],
+      );
     }
 
     if (body.addToReadingList !== false) {

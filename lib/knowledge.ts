@@ -20,6 +20,7 @@ export type ArticleCardData = {
   id: number;
   title: string;
   category: ArticleCategory;
+  tags: string[];
   publisher: string;
   publishedAt: string | null;
   sourceUrl: string;
@@ -27,6 +28,28 @@ export type ArticleCardData = {
   reviewAuthor: string | null;
   reviewContent: string | null;
   rating: number | null;
+  reviews?: {
+    id: number;
+    author: string;
+    content: string;
+    rating: number;
+    reviewType: "short" | "long";
+    mustRead: boolean;
+    updatedAt: string;
+    attachmentIds: number[];
+  }[];
+};
+
+export type ReaderArticle = {
+  id: number;
+  title: string;
+  abstract: string;
+  authors: string[];
+  publisher: string;
+  category: ArticleCategory;
+  tags: string[];
+  publishedAt: string | null;
+  sourceUrl: string;
 };
 
 function firstValue(value: string | string[] | undefined) {
@@ -64,19 +87,45 @@ export async function getRecommendedArticles(userId: number) {
        articles.id,
        articles.title,
        articles.category,
+       articles.tags,
        articles.publisher,
        articles.published_at::text AS "publishedAt",
        articles.source_url AS "sourceUrl",
        articles.authors,
-       users.username AS "reviewAuthor",
-       reviews.content AS "reviewContent",
-       reviews.rating
-     FROM reviews
-     INNER JOIN articles ON articles.id = reviews.article_id
-     INNER JOIN users ON users.id = reviews.user_id
-     WHERE reviews.user_id <> $1
-       AND reviews.rating >= 4
-     ORDER BY reviews.rating DESC, reviews.updated_at DESC`,
+       NULL::text AS "reviewAuthor",
+       NULL::text AS "reviewContent",
+       review_group.rating,
+       review_group.reviews
+     FROM articles
+     INNER JOIN LATERAL (
+       SELECT
+         ROUND(AVG(reviews.rating)::numeric, 1)::float AS rating,
+         JSON_AGG(
+           JSON_BUILD_OBJECT(
+             'id', reviews.id,
+             'author', users.username,
+             'content', reviews.content,
+             'rating', reviews.rating,
+             'reviewType', reviews.review_type,
+             'mustRead', reviews.must_read,
+             'updatedAt', reviews.updated_at,
+             'attachmentIds', COALESCE(attachments.ids, '[]'::json)
+           )
+           ORDER BY reviews.must_read DESC, reviews.review_type DESC,
+                    CHAR_LENGTH(reviews.content) DESC, reviews.updated_at DESC
+         ) AS reviews
+       FROM reviews
+       INNER JOIN users ON users.id = reviews.user_id
+       LEFT JOIN LATERAL (
+         SELECT JSON_AGG(review_attachments.id ORDER BY review_attachments.id) AS ids
+         FROM review_attachments
+         WHERE review_attachments.review_id = reviews.id
+       ) attachments ON TRUE
+       WHERE reviews.article_id = articles.id
+         AND reviews.user_id <> $1
+         AND reviews.rating >= 4
+     ) review_group ON review_group.reviews IS NOT NULL
+     ORDER BY review_group.rating DESC, articles.published_at DESC NULLS LAST`,
     [userId],
   );
 
@@ -95,7 +144,7 @@ export async function getCategoryArticles({
   sort: SortOrder;
 }) {
   const conditions = [
-    `($1::text = '全部' OR articles.category = $1)`,
+    `($1::text = '全部' OR articles.category = $1 OR $1 = ANY(articles.tags))`,
     `(
       $2::text = 'all'
       OR ($2 = 'reviewed' AND own_review.id IS NOT NULL)
@@ -114,6 +163,7 @@ export async function getCategoryArticles({
        articles.id,
        articles.title,
        articles.category,
+       articles.tags,
        articles.publisher,
        articles.published_at::text AS "publishedAt",
        articles.source_url AS "sourceUrl",
@@ -160,6 +210,7 @@ export async function getReadingList(userId: number) {
        articles.id,
        articles.title,
        articles.category,
+       articles.tags,
        articles.publisher,
        articles.published_at::text AS "publishedAt",
        articles.source_url AS "sourceUrl",
@@ -186,12 +237,9 @@ export async function getReadingList(userId: number) {
 }
 
 export async function getArticlesForReview() {
-  const result = await database.query<{
-    id: number;
-    title: string;
-    category: ArticleCategory;
-  }>(
-    `SELECT id, title, category
+  const result = await database.query<ReaderArticle>(
+    `SELECT id, title, abstract, authors, publisher, category, tags,
+            published_at::text AS "publishedAt", source_url AS "sourceUrl"
      FROM articles
      ORDER BY created_at DESC`,
   );

@@ -26,9 +26,13 @@ export function ArticleGrid({
   return (
     <div className="article-grid">
       {articles.map((article) => (
-        <article className="article-card" key={`${article.id}-${article.reviewAuthor ?? ""}`}>
+        <article className="article-card" key={article.id}>
           <div className="article-card-topline">
-            <span className="tag">{article.category}</span>
+            <div className="card-tags">
+              {(article.tags?.length ? article.tags : [article.category]).map((tag) => (
+                <span className="tag" key={tag}>{tag}</span>
+              ))}
+            </div>
             {article.rating !== null && (
               <span className="rating" aria-label={`评分 ${article.rating}`}>
                 ★ {article.rating}
@@ -56,7 +60,42 @@ export function ArticleGrid({
               <dd>{article.publisher}</dd>
             </div>
           </dl>
-          {article.reviewAuthor && (
+          {article.reviews && article.reviews.length > 0 ? (
+            <div className="review-collection">
+              <div className="review-collection-heading">
+                <strong>{article.reviews.length} 位成员的评论</strong>
+                <span>长评论优先</span>
+              </div>
+              {article.reviews.map((review) => (
+                <details className="long-review" key={review.id}>
+                  <summary>
+                    <span className="mini-avatar" aria-hidden="true">
+                      {review.author.slice(0, 1).toUpperCase()}
+                    </span>
+                    <strong>{review.author}</strong>
+                    <span>★ {review.rating}</span>
+                    {review.mustRead && <em className="must-read-badge">✦ 必读</em>}
+                    <small>{review.reviewType === "short" ? "短评" : `${review.content.length} 字长评`}</small>
+                  </summary>
+                  <div>
+                    <p>{review.content}</p>
+                    {review.attachmentIds.length > 0 && (
+                      <div className="review-attachments">
+                        {review.attachmentIds.map((id) => (
+                          <img
+                            alt={`${review.author} 的论文截图`}
+                            key={id}
+                            loading="lazy"
+                            src={`/api/review-attachments/${id}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
+              ))}
+            </div>
+          ) : article.reviewAuthor ? (
             <div className="review-preview">
               <p>
                 <span className="mini-avatar" aria-hidden="true">
@@ -66,14 +105,12 @@ export function ArticleGrid({
               </p>
               {article.reviewContent && <blockquote>{article.reviewContent}</blockquote>}
             </div>
-          )}
+          ) : null}
           <a
             className="article-link"
-            href={article.sourceUrl}
-            rel="noreferrer"
-            target="_blank"
+            href={`/reviews/new?article=${article.id}`}
           >
-            阅读原文 <span aria-hidden="true">↗</span>
+            在阅读器中打开 <span aria-hidden="true">→</span>
           </a>
         </article>
       ))}

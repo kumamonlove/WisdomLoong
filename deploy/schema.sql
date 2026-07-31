@@ -24,8 +24,9 @@ CREATE TABLE IF NOT EXISTS articles (
   title_key TEXT NOT NULL UNIQUE,
   abstract TEXT NOT NULL DEFAULT '',
   authors TEXT[] NOT NULL DEFAULT '{}',
-  publisher TEXT NOT NULL DEFAULT 'arXiv',
+  publisher TEXT NOT NULL DEFAULT '机构待补充',
   category VARCHAR(32) NOT NULL,
+  tags TEXT[] NOT NULL DEFAULT '{}',
   published_at DATE,
   source_url TEXT NOT NULL,
   external_id VARCHAR(128),
@@ -41,6 +42,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS articles_external_id_idx
   WHERE external_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS articles_category_idx ON articles(category);
 CREATE INDEX IF NOT EXISTS articles_published_at_idx ON articles(published_at DESC);
+
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE articles ALTER COLUMN publisher SET DEFAULT '机构待补充';
+UPDATE articles SET tags = ARRAY[category] WHERE CARDINALITY(tags) = 0;
+UPDATE articles SET publisher = '机构待补充' WHERE LOWER(publisher) = 'arxiv';
+UPDATE articles SET publisher = 'Physical Intelligence'
+  WHERE LOWER(title) LIKE '%pi0.5%' OR title LIKE '%π0.5%';
+CREATE INDEX IF NOT EXISTS articles_tags_idx ON articles USING GIN(tags);
 
 CREATE TABLE IF NOT EXISTS reading_list (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -58,6 +67,9 @@ CREATE TABLE IF NOT EXISTS reviews (
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
   rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
   content TEXT NOT NULL CHECK (CHAR_LENGTH(TRIM(content)) > 0),
+  review_type VARCHAR(8) NOT NULL DEFAULT 'long'
+    CHECK (review_type IN ('short', 'long')),
+  must_read BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (user_id, article_id)
@@ -67,3 +79,18 @@ CREATE INDEX IF NOT EXISTS reviews_article_rating_idx
   ON reviews(article_id, rating DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS reviews_user_created_idx
   ON reviews(user_id, created_at DESC);
+
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS review_type VARCHAR(8) NOT NULL DEFAULT 'long';
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS must_read BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS review_attachments (
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
+  content_type VARCHAR(32) NOT NULL,
+  image_data BYTEA NOT NULL,
+  note VARCHAR(200) NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS review_attachments_review_idx
+  ON review_attachments(review_id, id);
