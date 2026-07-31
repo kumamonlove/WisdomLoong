@@ -262,10 +262,16 @@ type CommunityReview = {
   attachments: { id: number; reviewId: number; note: string }[];
 };
 
-function pdfUrl(articleId: number, sourceUrl: string, page: number, zoom: number) {
-  const base = sourceUrl.includes("arxiv.org/")
+function pdfUrl(
+  articleId: number,
+  sourceUrl: string,
+  page: number,
+  zoom: number,
+  localUrl = "",
+) {
+  const base = localUrl || (sourceUrl.includes("arxiv.org/")
     ? `/api/articles/${articleId}/pdf`
-    : sourceUrl;
+    : sourceUrl);
   return `${base.split("#")[0]}#page=${page}&zoom=${zoom}&pagemode=none&navpanes=0`;
 }
 
@@ -273,10 +279,12 @@ export function ReviewComposer({
   articles,
   initialArticleId,
   startFocused = false,
+  translationEnabled = false,
 }: {
   articles: ReaderArticle[];
   initialArticleId?: number;
   startFocused?: boolean;
+  translationEnabled?: boolean;
 }) {
   const router = useRouter();
   const [availableArticles, setAvailableArticles] = useState(articles);
@@ -302,6 +310,7 @@ export function ReviewComposer({
     status: "idle" | "loading" | "ready" | "unsupported" | "error";
     progress: number;
   }>({ status: "idle", progress: 0 });
+  const [localPdfUrl, setLocalPdfUrl] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
   const [quoteDraft, setQuoteDraft] = useState("");
   const [translation, setTranslation] = useState("");
@@ -319,6 +328,7 @@ export function ReviewComposer({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const cropImageRef = useRef<HTMLImageElement>(null);
   const activeCacheArticle = useRef(0);
+  const localPdfUrlRef = useRef("");
 
   const selectedArticle = availableArticles.find((item) => item.id === articleId);
   const searchableTags = useMemo(
@@ -378,6 +388,10 @@ export function ReviewComposer({
     if (focusMode && articleId) void cachePdfLocally(articleId);
   }, [focusMode, articleId]);
 
+  useEffect(() => () => {
+    if (localPdfUrlRef.current) URL.revokeObjectURL(localPdfUrlRef.current);
+  }, []);
+
   function selectArticle(id: number) {
     const article = availableArticles.find((item) => item.id === id);
     setArticleId(id);
@@ -386,16 +400,27 @@ export function ReviewComposer({
     setNotes([]);
     setCaptures([]);
     setContextTab("discussion");
+    if (localPdfUrlRef.current) URL.revokeObjectURL(localPdfUrlRef.current);
+    localPdfUrlRef.current = "";
+    setLocalPdfUrl("");
+    setLocalCache({ status: "idle", progress: 0 });
     setFocusMode(true);
   }
 
   async function cachePdfLocally(id: number) {
-    if (!("caches" in window) || activeCacheArticle.current === id) return;
+    if (activeCacheArticle.current === id || localPdfUrlRef.current) return;
     activeCacheArticle.current = id;
     const cacheKey = `/api/articles/${id}/pdf`;
     try {
-      const cache = await caches.open("wisdomloong-papers-v1");
-      if (await cache.match(cacheKey)) {
+      const cache = "caches" in window
+        ? await caches.open("wisdomloong-papers-v1")
+        : null;
+      const cached = await cache?.match(cacheKey);
+      if (cached) {
+        const blob = await cached.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        localPdfUrlRef.current = objectUrl;
+        setLocalPdfUrl(objectUrl);
         setLocalCache({ status: "ready", progress: 100 });
         return;
       }
@@ -416,12 +441,20 @@ export function ReviewComposer({
         }
       }
       const blob = new Blob(chunks as BlobPart[], { type: "application/pdf" });
-      await cache.put(cacheKey, new Response(blob, {
-        headers: { "Content-Type": "application/pdf", "Content-Length": String(blob.size) },
-      }));
-      if (activeCacheArticle.current === id) setLocalCache({ status: "ready", progress: 100 });
+      await cache?.put(cacheKey, new Response(blob, {
+          headers: { "Content-Type": "application/pdf", "Content-Length": String(blob.size) },
+        }));
+      if (activeCacheArticle.current === id) {
+        const objectUrl = URL.createObjectURL(blob);
+        localPdfUrlRef.current = objectUrl;
+        setLocalPdfUrl(objectUrl);
+        setLocalCache({ status: "ready", progress: 100 });
+      }
     } catch {
-      if (activeCacheArticle.current === id) setLocalCache({ status: "error", progress: 0 });
+      if (activeCacheArticle.current === id) {
+        setLocalPdfUrl(`/api/articles/${id}/pdf`);
+        setLocalCache({ status: "error", progress: 0 });
+      }
     } finally {
       if (activeCacheArticle.current === id) activeCacheArticle.current = 0;
     }
@@ -733,64 +766,87 @@ export function ReviewComposer({
               />
               <button onClick={() => void addTag()} type="button">添加</button>
             </div>
-            <div className="reader-toolbar">
-              <div>
-                <button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">←</button>
-                <label>第 <input min="1" onChange={(event) => setPage(Math.max(1, Number(event.target.value)))} type="number" value={page} /> 页</label>
-                <button onClick={() => setPage((value) => value + 1)} type="button">→</button>
-              </div>
-              <div>
-                <button onClick={() => setZoom((value) => Math.max(60, value - 10))} type="button">−</button>
-                <span>{zoom}%</span>
-                <button onClick={() => setZoom((value) => Math.min(200, value + 10))} type="button">＋</button>
-              </div>
-              <button className="active-focus" onClick={() => setFocusMode(false)} type="button">
-                结束阅读
-              </button>
-              <button className="capture-button" disabled={capturing} onClick={captureScreen} type="button">
-                {capturing ? "正在截图…" : "▣ 截图引用"}
-              </button>
-            </div>
-            <div className={`pdf-frame${pdfLoading ? " is-loading" : ""}`}>
-              {!focusMode && (
-                <div className="reader-paused">
-                  <span aria-hidden="true">◎</span>
-                  <strong>进入专注模式开始阅读</strong>
-                  <p>PDF、同行逐页批注和你的笔记会在同一个阅读空间中打开。</p>
-                  <button onClick={() => setFocusMode(true)} type="button">
-                    {selectedArticle.lastReadPage ? `从第 ${selectedArticle.lastReadPage} 页继续阅读` : "开始阅读"}
+            {focusMode ? (
+              <>
+                <div className="reader-toolbar">
+                  <div>
+                    <button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">←</button>
+                    <label>第 <input min="1" onChange={(event) => setPage(Math.max(1, Number(event.target.value)))} type="number" value={page} /> 页</label>
+                    <button onClick={() => setPage((value) => value + 1)} type="button">→</button>
+                  </div>
+                  <div>
+                    <button onClick={() => setZoom((value) => Math.max(60, value - 10))} type="button">−</button>
+                    <span>{zoom}%</span>
+                    <button onClick={() => setZoom((value) => Math.min(200, value + 10))} type="button">＋</button>
+                  </div>
+                  <button className="active-focus" onClick={() => setFocusMode(false)} type="button">结束阅读</button>
+                  <button className="capture-button" disabled={capturing} onClick={captureScreen} type="button">
+                    {capturing ? "正在截图…" : "▣ 截图引用"}
                   </button>
                 </div>
-              )}
-              {focusMode && pdfLoading && (
-                <div className="pdf-loading" role="status">
-                  <span />
-                  <strong>正在从阿里云缓存加载论文</strong>
-                  <small>文章信息已就绪，PDF 首次缓存后会立即打开</small>
+                <div className={`pdf-frame${pdfLoading ? " is-loading" : ""}`}>
+                  {(!localPdfUrl || pdfLoading) && (
+                    <div className="pdf-loading" role="status">
+                      <span />
+                      <strong>
+                        {localCache.status === "loading"
+                          ? `正在下载到本地阅读器 ${localCache.progress}%`
+                          : localCache.status === "error"
+                            ? "本地保存失败，正在直接打开论文"
+                          : "正在打开本地论文"}
+                      </strong>
+                      <small>下载只进行一次，完成后翻页和缩放不再访问网络</small>
+                    </div>
+                  )}
+                  {localPdfUrl && (
+                    <iframe
+                      onLoad={() => setPdfLoading(false)}
+                      ref={iframeRef}
+                      src={pdfUrl(selectedArticle.id, selectedArticle.sourceUrl, page, zoom, localPdfUrl)}
+                      title={selectedArticle.title}
+                    />
+                  )}
                 </div>
-              )}
-              {focusMode && (
-                <iframe
-                  onLoad={() => setPdfLoading(false)}
-                  ref={iframeRef}
-                  src={pdfUrl(selectedArticle.id, selectedArticle.sourceUrl, page, zoom)}
-                  title={selectedArticle.title}
-                />
-              )}
-            </div>
-            <div className="reading-bookmark">
-              <div>
-                <span>阅读书签</span>
-                <strong>
-                  {selectedArticle.lastReadPage
-                    ? `上次读到 P.${selectedArticle.lastReadPage}`
-                    : "还没有保存阅读位置"}
-                </strong>
+                <div className="reading-bookmark">
+                  <div>
+                    <span>阅读书签</span>
+                    <strong>
+                      {selectedArticle.lastReadPage
+                        ? `上次读到 P.${selectedArticle.lastReadPage}`
+                        : "还没有保存阅读位置"}
+                    </strong>
+                  </div>
+                  <button onClick={saveReadingBookmark} type="button">◉ 标记读到第 {page} 页</button>
+                </div>
+              </>
+            ) : (
+              <div className="article-reading-preview">
+                <section>
+                  <span>摘要</span>
+                  <p>{selectedArticle.abstract || "这篇文章暂时没有摘要。"}</p>
+                </section>
+                <section>
+                  <header>
+                    <div>
+                      <span>伙伴评论</span>
+                      <strong>{communityReviews.length} 条评论 · {communityAnnotations.length} 条逐页批注</strong>
+                    </div>
+                    <button onClick={() => setFocusMode(true)} type="button">
+                      {selectedArticle.lastReadPage ? `从 P.${selectedArticle.lastReadPage} 继续阅读` : "开始阅读"}
+                    </button>
+                  </header>
+                  <div className="preview-comments">
+                    {communityReviews.slice(0, 3).map((review) => (
+                      <article key={review.id}>
+                        <span>{review.author.slice(0, 1).toUpperCase()}</span>
+                        <div><strong>{review.author} · ★ {review.rating}</strong><p>{review.content}</p></div>
+                      </article>
+                    ))}
+                    {!discussionLoading && communityReviews.length === 0 && <p>还没有伙伴评论，开始阅读后可以留下第一条。</p>}
+                  </div>
+                </section>
               </div>
-              <button onClick={saveReadingBookmark} type="button">
-                ◉ 标记读到第 {page} 页
-              </button>
-            </div>
+            )}
           </>
         ) : (
           <div className="empty"><h3>先选择一篇文章</h3><p>也可以从 arXiv 导入新文章。</p></div>
@@ -804,7 +860,7 @@ export function ReviewComposer({
         </div>
         <div className="context-tabs">
           <button className={contextTab === "discussion" ? "selected" : ""} onClick={() => setContextTab("discussion")} type="button">
-            同行批注 <span>{communityAnnotations.length}</span>
+            伙伴批注 <span>{communityAnnotations.length}</span>
           </button>
           <button className={contextTab === "notes" ? "selected" : ""} onClick={() => setContextTab("notes")} type="button">
             我的笔记 <span>{notes.length}</span>
@@ -815,7 +871,7 @@ export function ReviewComposer({
         </div>
         <div className="context-panel community-panel" hidden={contextTab !== "discussion"}>
           {discussionLoading ? (
-            <p className="context-empty">正在加载同行观点…</p>
+            <p className="context-empty">正在加载伙伴观点…</p>
           ) : (
             <>
               <div className="current-page-discussion">
@@ -829,7 +885,7 @@ export function ReviewComposer({
                   </article>
                 ))}
                 {communityAnnotations.every((item) => item.page !== page) && (
-                  <p className="context-empty">这一页还没有同行批注，你可以留下第一条。</p>
+                  <p className="context-empty">这一页还没有伙伴批注，你可以留下第一条。</p>
                 )}
               </div>
               {communityAnnotations.some((item) => item.page !== page) && (
@@ -878,59 +934,79 @@ export function ReviewComposer({
           )}
         </div>
         <div className="context-panel" hidden={contextTab !== "notes"}>
-        <section className="translation-assistant">
-          <div>
-            <strong>中译助手</strong>
-            <button onClick={readClipboard} type="button">从剪贴板粘贴</button>
-          </div>
-          <textarea
-            onChange={(event) => {
-              setQuoteDraft(event.target.value);
-              setTranslation("");
-            }}
-            placeholder="在论文中复制英文段落，然后点“从剪贴板粘贴”…"
-            rows={4}
-            value={quoteDraft}
-          />
-          <button disabled={!quoteDraft.trim() || translating} onClick={translateQuote} type="button">
-            {translating ? "百炼正在翻译…" : "翻译成中文"}
-          </button>
-          {translation && (
-            <div className="translation-result">
-              <span>中文译文</span>
-              <p>{translation}</p>
+        {translationEnabled ? (
+          <section className="translation-assistant">
+            <div>
+              <strong>中译助手</strong>
+              <button onClick={readClipboard} type="button">从剪贴板粘贴</button>
             </div>
-          )}
-        </section>
-        <textarea
-          onChange={(event) => setNoteDraft(event.target.value)}
-          placeholder={`针对第 ${page} 页原文、译文或图表写下你的批注…`}
-          rows={4}
-          value={noteDraft}
-        />
-        <button
-          disabled={!noteDraft.trim()}
-          onClick={() => {
-            setNotes((current) => [...current, {
-              page,
-              quote: quoteDraft.trim(),
-              translation: translation.trim(),
-              content: noteDraft.trim(),
-            }]);
-            setNoteDraft("");
-            setQuoteDraft("");
-            setTranslation("");
-          }}
-          type="button"
-        >
-          保存页码笔记
-        </button>
-        <div className="saved-notes">
-          {notes.map((note, index) => (
-            <button key={`${note.page}-${index}`} onClick={() => setPage(note.page)} type="button">
-              <strong>P.{note.page}</strong>
-              <span>{note.content}</span>
+            <textarea
+              onChange={(event) => {
+                setQuoteDraft(event.target.value);
+                setTranslation("");
+              }}
+              placeholder="在论文中复制英文段落，然后点“从剪贴板粘贴”…"
+              rows={4}
+              value={quoteDraft}
+            />
+            <button disabled={!quoteDraft.trim() || translating} onClick={translateQuote} type="button">
+              {translating ? "百炼正在翻译…" : "翻译成中文"}
             </button>
+            {translation && (
+              <div className="translation-result">
+                <span>中文译文</span>
+                <p>{translation}</p>
+              </div>
+            )}
+          </section>
+        ) : (
+          <section className="translation-assistant coming-soon">
+            <div><strong>中译助手</strong><span>即将上线</span></div>
+            <p>选中论文原文，一键获得适合学术阅读的中文翻译。</p>
+          </section>
+        )}
+        <section className="note-composer">
+          <header>
+            <span>P.{page}</span>
+            <div><strong>记录这一页</strong><small>观点、疑问或值得分享的判断</small></div>
+          </header>
+          <textarea
+            onChange={(event) => setNoteDraft(event.target.value)}
+            placeholder="写下你对这一页的理解…"
+            rows={5}
+            value={noteDraft}
+          />
+          <footer>
+            <span>发布长评时可作为逐页批注分享</span>
+            <button
+              disabled={!noteDraft.trim()}
+              onClick={() => {
+                setNotes((current) => [...current, {
+                  page,
+                  quote: quoteDraft.trim(),
+                  translation: translation.trim(),
+                  content: noteDraft.trim(),
+                }]);
+                setNoteDraft("");
+                setQuoteDraft("");
+                setTranslation("");
+              }}
+              type="button"
+            >
+              ＋ 加入我的批注
+            </button>
+          </footer>
+        </section>
+        <div className="saved-notes">
+          {notes.length > 0 && <h3>已记录 {notes.length} 条</h3>}
+          {notes.map((note, index) => (
+            <div key={`${note.page}-${index}`}>
+              <button onClick={() => setPage(note.page)} type="button">
+                <strong>P.{note.page}</strong>
+                <span>{note.content}</span>
+              </button>
+              <button aria-label="删除这条批注" onClick={() => setNotes((current) => current.filter((_, itemIndex) => itemIndex !== index))} type="button">×</button>
+            </div>
           ))}
         </div>
         {captures.length > 0 && (

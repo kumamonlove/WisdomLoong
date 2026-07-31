@@ -28,6 +28,7 @@ export default async function NewReviewPage({
         articles={articles}
         initialArticleId={initialArticleId}
         startFocused={hasRequestedArticle}
+        translationEnabled={Boolean(process.env.DASHSCOPE_API_KEY)}
       />
     </KnowledgePage>
   );
