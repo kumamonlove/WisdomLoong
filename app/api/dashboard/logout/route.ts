@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { deleteAdminSession } from "@/lib/admin-auth";
 
-export async function POST(request: Request) {
+export async function POST() {
   await deleteAdminSession();
-  return NextResponse.redirect(new URL("/dashboard/login", request.url), 303);
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: "/dashboard/login" },
+  });
 }

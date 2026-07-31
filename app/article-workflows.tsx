@@ -227,9 +227,9 @@ export function ReadingListImporter() {
 type Capture = { dataUrl: string; note: string };
 type ReadingNote = { page: number; content: string };
 
-function pdfUrl(sourceUrl: string, page: number, zoom: number) {
-  const base = sourceUrl.includes("arxiv.org/abs/")
-    ? `${sourceUrl.replace("/abs/", "/pdf/")}.pdf`
+function pdfUrl(articleId: number, sourceUrl: string, page: number, zoom: number) {
+  const base = sourceUrl.includes("arxiv.org/")
+    ? `/api/articles/${articleId}/pdf`
     : sourceUrl;
   return `${base.split("#")[0]}#page=${page}&zoom=${zoom}`;
 }
@@ -259,6 +259,7 @@ export function ReviewComposer({
   const [tagDraft, setTagDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(true);
   const [message, setMessage] = useState("");
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -276,6 +277,7 @@ export function ReviewComposer({
 
   function selectArticle(id: number) {
     setArticleId(id);
+    setPdfLoading(true);
     setPage(1);
     setProgress(0);
     setNotes([]);
@@ -454,12 +456,21 @@ export function ReviewComposer({
                 {capturing ? "正在截图…" : "▣ 截图引用"}
               </button>
             </div>
-            <iframe
-              key={`${articleId}-${page}-${zoom}`}
+            <div className={`pdf-frame${pdfLoading ? " is-loading" : ""}`}>
+              {pdfLoading && (
+                <div className="pdf-loading" role="status">
+                  <span />
+                  <strong>正在从阿里云缓存加载论文</strong>
+                  <small>文章信息已就绪，PDF 首次缓存后会立即打开</small>
+                </div>
+              )}
+              <iframe
+              onLoad={() => setPdfLoading(false)}
               ref={iframeRef}
-              src={pdfUrl(selectedArticle.sourceUrl, page, zoom)}
+              src={pdfUrl(selectedArticle.id, selectedArticle.sourceUrl, page, zoom)}
               title={selectedArticle.title}
-            />
+              />
+            </div>
             <div className="reading-progress">
               <label>
                 阅读进度 <strong>{progress}%</strong>

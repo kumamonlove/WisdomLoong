@@ -6,8 +6,14 @@ export async function POST(request: Request) {
   const username = String(form.get("username") ?? "");
   const password = String(form.get("password") ?? "");
   if (!verifyAdminCredentials(username, password)) {
-    return NextResponse.redirect(new URL("/dashboard/login?error=1", request.url), 303);
+    return new NextResponse(null, {
+      status: 303,
+      headers: { Location: "/dashboard/login?error=1" },
+    });
   }
   await createAdminSession();
-  return NextResponse.redirect(new URL("/dashboard", request.url), 303);
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: "/dashboard" },
+  });
 }
