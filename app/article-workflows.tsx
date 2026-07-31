@@ -542,10 +542,11 @@ function PdfPageCanvas({
     void (async () => {
       try {
         const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        const workerUrl = new URL(
           "pdfjs-dist/build/pdf.worker.min.mjs",
           import.meta.url,
         ).toString();
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.12.3`;
         const nextLoadingTask = pdfjs.getDocument(url);
         loadingTask = nextLoadingTask;
         const document = await nextLoadingTask.promise;
