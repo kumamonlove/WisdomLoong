@@ -1,7 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   articleCategories,
   normalizeTags,
@@ -191,7 +197,12 @@ function ArxivLookup({
             <article key={article.externalId}>
               <div>
                 <span>{article.externalId}</span>
-                <span>{publisher.trim() || article.publisher} · {article.publishedAt}</span>
+                <span>
+                  {(publisher.trim() || article.publisher) !== "机构待补充"
+                    ? `${publisher.trim() || article.publisher} · `
+                    : ""}
+                  {article.publishedAt}
+                </span>
               </div>
               <h3>{article.title}</h3>
               <p className="lookup-authors">{article.authors.join(", ")}</p>
@@ -225,7 +236,12 @@ export function ReadingListImporter() {
 }
 
 type Capture = { dataUrl: string; note: string };
-type ReadingNote = { page: number; content: string };
+type ReadingNote = {
+  page: number;
+  quote: string;
+  translation: string;
+  content: string;
+};
 
 function pdfUrl(articleId: number, sourceUrl: string, page: number, zoom: number) {
   const base = sourceUrl.includes("arxiv.org/")
@@ -254,21 +270,28 @@ export function ReviewComposer({
   const [progress, setProgress] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
+  const [quoteDraft, setQuoteDraft] = useState("");
+  const [translation, setTranslation] = useState("");
+  const [translating, setTranslating] = useState(false);
   const [notes, setNotes] = useState<ReadingNote[]>([]);
   const [captures, setCaptures] = useState<Capture[]>([]);
+  const [pendingCapture, setPendingCapture] = useState("");
+  const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null);
+  const [cropRect, setCropRect] = useState({ x: 0, y: 0, width: 100, height: 100 });
   const [tagDraft, setTagDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(true);
   const [message, setMessage] = useState("");
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const cropImageRef = useRef<HTMLImageElement>(null);
 
   const selectedArticle = availableArticles.find((item) => item.id === articleId);
   const filteredArticles = useMemo(() => {
     const query = articleSearch.trim().toLocaleLowerCase();
     if (!query) return availableArticles;
     return availableArticles.filter((article) =>
-      [article.title, article.publisher, article.authors.join(" "), article.tags.join(" ")]
+              [article.title, article.publisher, article.authors.join(" "), article.tags.join(" ")]
         .join(" ")
         .toLocaleLowerCase()
         .includes(query),
@@ -329,11 +352,9 @@ export function ReviewComposer({
       canvas.width = Math.round(video.videoWidth * scale);
       canvas.height = Math.round(video.videoHeight * scale);
       canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setCaptures((current) => [
-        ...current,
-        { dataUrl: canvas.toDataURL("image/jpeg", 0.82), note: `第 ${page} 页` },
-      ].slice(0, 4));
-      setMessage("截图已附在评论中，可补充图片说明。");
+      setPendingCapture(canvas.toDataURL("image/jpeg", 0.88));
+      setCropRect({ x: 0, y: 0, width: 100, height: 100 });
+      setMessage("拖动框选论文中的目标图片，再确认引用。");
     } catch (error) {
       if ((error as Error).name !== "NotAllowedError") {
         setMessage("截图失败，请重试。");
@@ -344,13 +365,78 @@ export function ReviewComposer({
     }
   }
 
+  function cropPoint(event: ReactPointerEvent<HTMLDivElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100)),
+      y: Math.max(0, Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100)),
+    };
+  }
+
+  function updateCrop(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!cropStart) return;
+    const point = cropPoint(event);
+    setCropRect({
+      x: Math.min(cropStart.x, point.x),
+      y: Math.min(cropStart.y, point.y),
+      width: Math.abs(point.x - cropStart.x),
+      height: Math.abs(point.y - cropStart.y),
+    });
+  }
+
+  function confirmCrop() {
+    const image = cropImageRef.current;
+    if (!image || cropRect.width < 2 || cropRect.height < 2) return;
+    const sx = Math.round(image.naturalWidth * cropRect.x / 100);
+    const sy = Math.round(image.naturalHeight * cropRect.y / 100);
+    const sw = Math.round(image.naturalWidth * cropRect.width / 100);
+    const sh = Math.round(image.naturalHeight * cropRect.height / 100);
+    const canvas = document.createElement("canvas");
+    const scale = Math.min(1, 1200 / sw);
+    canvas.width = Math.max(1, Math.round(sw * scale));
+    canvas.height = Math.max(1, Math.round(sh * scale));
+    canvas.getContext("2d")?.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    setCaptures((current) => [
+      ...current,
+      { dataUrl: canvas.toDataURL("image/jpeg", 0.86), note: `第 ${page} 页图表` },
+    ].slice(0, 4));
+    setPendingCapture("");
+    setMessage("图片区域已截取，可在右侧补充图表评论。");
+  }
+
+  async function readClipboard() {
+    try {
+      const value = await navigator.clipboard.readText();
+      setQuoteDraft(value);
+      setTranslation("");
+      if (!value.trim()) setMessage("剪贴板里没有可翻译的文字。");
+    } catch {
+      setMessage("无法读取剪贴板，请直接粘贴论文原文。");
+    }
+  }
+
+  async function translateQuote() {
+    if (!quoteDraft.trim()) return;
+    setTranslating(true);
+    setMessage("");
+    try {
+      const data = await responseJson(await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: quoteDraft }),
+      }));
+      setTranslation(String(data.translation ?? ""));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "翻译失败");
+    } finally {
+      setTranslating(false);
+    }
+  }
+
   async function submitReview(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setMessage("");
-    const readingNotes = notes.length
-      ? `\n\n阅读笔记\n${notes.map((note) => `P.${note.page}　${note.content}`).join("\n")}`
-      : "";
     try {
       const response = await fetch("/api/reviews", {
         method: "POST",
@@ -360,7 +446,8 @@ export function ReviewComposer({
           rating,
           mustRead,
           reviewType,
-          content: `${content.trim()}${readingNotes}`,
+          content: content.trim(),
+          annotations: notes,
           attachments: captures,
         }),
       });
@@ -379,6 +466,36 @@ export function ReviewComposer({
 
   return (
     <div className={`reader-workspace${focusMode ? " focus-mode" : ""}`}>
+      {pendingCapture && (
+        <div className="crop-dialog" role="dialog" aria-modal="true" aria-label="框选论文图片">
+          <div>
+            <header><div><strong>框选论文图片</strong><span>拖动鼠标，只保留需要评论的图表区域</span></div><button onClick={() => setPendingCapture("")} type="button">×</button></header>
+            <div
+              className="crop-stage"
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                const point = cropPoint(event);
+                setCropStart(point);
+                setCropRect({ ...point, width: 0, height: 0 });
+              }}
+              onPointerMove={updateCrop}
+              onPointerUp={(event) => {
+                updateCrop(event);
+                setCropStart(null);
+              }}
+            >
+              <img alt="待裁剪的论文截图" draggable={false} ref={cropImageRef} src={pendingCapture} />
+              <span style={{
+                left: `${cropRect.x}%`,
+                top: `${cropRect.y}%`,
+                width: `${cropRect.width}%`,
+                height: `${cropRect.height}%`,
+              }} />
+            </div>
+            <footer><button onClick={() => setCropRect({ x: 0, y: 0, width: 100, height: 100 })} type="button">使用完整截图</button><button className="primary" onClick={confirmCrop} type="button">确认引用此区域</button></footer>
+          </div>
+        </div>
+      )}
       <aside className="article-library">
         <div className="library-heading">
           <span>文章库</span>
@@ -399,7 +516,10 @@ export function ReviewComposer({
               onClick={() => selectArticle(article.id)}
               type="button"
             >
-              <span>{article.publisher}</span>
+              {article.publisher !== "机构待补充" &&
+                article.publisher.toLocaleLowerCase() !== "arxiv" && (
+                  <span>{article.publisher}</span>
+                )}
               <strong>{article.title}</strong>
               <small>{article.tags.join(" · ")}</small>
             </button>
@@ -417,7 +537,10 @@ export function ReviewComposer({
           <>
             <header className="reader-titlebar">
               <div>
-                <span>{selectedArticle.publisher}</span>
+                {selectedArticle.publisher !== "机构待补充" &&
+                  selectedArticle.publisher.toLocaleLowerCase() !== "arxiv" && (
+                    <span>{selectedArticle.publisher}</span>
+                  )}
                 <h2>{selectedArticle.title}</h2>
                 <p>{selectedArticle.authors.join(", ")}</p>
               </div>
@@ -486,19 +609,50 @@ export function ReviewComposer({
       <aside className="reader-notebook">
         <div className="notebook-heading">
           <span>阅读笔记</span>
-          <small>自动带入评论</small>
+          <small>按页保存局部批注</small>
         </div>
+        <section className="translation-assistant">
+          <div>
+            <strong>中译助手</strong>
+            <button onClick={readClipboard} type="button">从剪贴板粘贴</button>
+          </div>
+          <textarea
+            onChange={(event) => {
+              setQuoteDraft(event.target.value);
+              setTranslation("");
+            }}
+            placeholder="在论文中复制英文段落，然后点“从剪贴板粘贴”…"
+            rows={4}
+            value={quoteDraft}
+          />
+          <button disabled={!quoteDraft.trim() || translating} onClick={translateQuote} type="button">
+            {translating ? "百炼正在翻译…" : "翻译成中文"}
+          </button>
+          {translation && (
+            <div className="translation-result">
+              <span>中文译文</span>
+              <p>{translation}</p>
+            </div>
+          )}
+        </section>
         <textarea
           onChange={(event) => setNoteDraft(event.target.value)}
-          placeholder={`记录第 ${page} 页的重要观点…`}
+          placeholder={`针对第 ${page} 页原文、译文或图表写下你的批注…`}
           rows={4}
           value={noteDraft}
         />
         <button
           disabled={!noteDraft.trim()}
           onClick={() => {
-            setNotes((current) => [...current, { page, content: noteDraft.trim() }]);
+            setNotes((current) => [...current, {
+              page,
+              quote: quoteDraft.trim(),
+              translation: translation.trim(),
+              content: noteDraft.trim(),
+            }]);
             setNoteDraft("");
+            setQuoteDraft("");
+            setTranslation("");
           }}
           type="button"
         >
@@ -507,7 +661,8 @@ export function ReviewComposer({
         <div className="saved-notes">
           {notes.map((note, index) => (
             <button key={`${note.page}-${index}`} onClick={() => setPage(note.page)} type="button">
-              <strong>P.{note.page}</strong><span>{note.content}</span>
+              <strong>P.{note.page}</strong>
+              <span>{note.content}</span>
             </button>
           ))}
         </div>

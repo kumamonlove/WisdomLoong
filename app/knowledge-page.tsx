@@ -55,10 +55,14 @@ export function ArticleGrid({
                   : "暂无"}
               </dd>
             </div>
-            <div>
-              <dt>发布机构</dt>
-              <dd>{article.publisher}</dd>
-            </div>
+            {article.publisher &&
+              article.publisher !== "机构待补充" &&
+              article.publisher.toLocaleLowerCase() !== "arxiv" && (
+                <div>
+                  <dt>发布机构</dt>
+                  <dd>{article.publisher}</dd>
+                </div>
+              )}
           </dl>
           {article.reviews && article.reviews.length > 0 ? (
             <div className="review-collection">
@@ -79,15 +83,30 @@ export function ArticleGrid({
                   </summary>
                   <div>
                     <p>{review.content}</p>
-                    {review.attachmentIds.length > 0 && (
+                    {review.annotations.length > 0 && (
+                      <div className="shared-annotations">
+                        <h4>逐页批注</h4>
+                        {review.annotations.map((annotation) => (
+                          <article key={annotation.id}>
+                            <strong>P.{annotation.page}</strong>
+                            {annotation.quote && <blockquote>{annotation.quote}</blockquote>}
+                            {annotation.translation && <p className="annotation-translation">{annotation.translation}</p>}
+                            <p>{annotation.content}</p>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                    {review.attachments.length > 0 && (
                       <div className="review-attachments">
-                        {review.attachmentIds.map((id) => (
-                          <img
-                            alt={`${review.author} 的论文截图`}
-                            key={id}
-                            loading="lazy"
-                            src={`/api/review-attachments/${id}`}
-                          />
+                        {review.attachments.map((attachment) => (
+                          <figure key={attachment.id}>
+                            <img
+                              alt={attachment.note || `${review.author} 的论文截图`}
+                              loading="lazy"
+                              src={`/api/review-attachments/${attachment.id}`}
+                            />
+                            {attachment.note && <figcaption>{attachment.note}</figcaption>}
+                          </figure>
                         ))}
                       </div>
                     )}

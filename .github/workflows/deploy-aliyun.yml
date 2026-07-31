@@ -52,6 +52,8 @@ jobs:
           ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
           ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
           REGISTRATION_INVITE_CODE: ${{ secrets.REGISTRATION_INVITE_CODE }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          DASHSCOPE_BASE_URL: ${{ secrets.DASHSCOPE_BASE_URL }}
         run: |
           if [ -z "$REGISTRATION_INVITE_CODE" ]; then
             echo "REGISTRATION_INVITE_CODE secret is required" >&2
@@ -60,6 +62,14 @@ jobs:
           umask 077
           printf 'REGISTRATION_INVITE_CODE=%s\n' \
             "$REGISTRATION_INVITE_CODE" > /tmp/wisdomloong.env
+          if [ -n "$DASHSCOPE_API_KEY" ]; then
+            printf 'DASHSCOPE_API_KEY=%s\n' "$DASHSCOPE_API_KEY" \
+              >> /tmp/wisdomloong.env
+          fi
+          if [ -n "$DASHSCOPE_BASE_URL" ]; then
+            printf 'DASHSCOPE_BASE_URL=%s\n' "$DASHSCOPE_BASE_URL" \
+              >> /tmp/wisdomloong.env
+          fi
           scp "/tmp/wisdomloong-${GITHUB_SHA}.tgz" \
             /tmp/wisdomloong.env \
             deploy/nginx.conf \

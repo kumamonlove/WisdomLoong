@@ -36,7 +36,14 @@ export type ArticleCardData = {
     reviewType: "short" | "long";
     mustRead: boolean;
     updatedAt: string;
-    attachmentIds: number[];
+    attachments: { id: number; note: string }[];
+    annotations: {
+      id: number;
+      page: number;
+      quote: string;
+      translation: string;
+      content: string;
+    }[];
   }[];
 };
 
@@ -109,7 +116,8 @@ export async function getRecommendedArticles(userId: number) {
              'reviewType', reviews.review_type,
              'mustRead', reviews.must_read,
              'updatedAt', reviews.updated_at,
-             'attachmentIds', COALESCE(attachments.ids, '[]'::json)
+             'attachments', COALESCE(attachments.items, '[]'::json)
+             ,'annotations', COALESCE(annotations.items, '[]'::json)
            )
            ORDER BY reviews.must_read DESC, reviews.review_type DESC,
                     CHAR_LENGTH(reviews.content) DESC, reviews.updated_at DESC
@@ -117,10 +125,30 @@ export async function getRecommendedArticles(userId: number) {
        FROM reviews
        INNER JOIN users ON users.id = reviews.user_id
        LEFT JOIN LATERAL (
-         SELECT JSON_AGG(review_attachments.id ORDER BY review_attachments.id) AS ids
+         SELECT JSON_AGG(
+           JSON_BUILD_OBJECT(
+             'id', review_attachments.id,
+             'note', review_attachments.note
+           )
+           ORDER BY review_attachments.id
+         ) AS items
          FROM review_attachments
          WHERE review_attachments.review_id = reviews.id
        ) attachments ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT JSON_AGG(
+           JSON_BUILD_OBJECT(
+             'id', review_annotations.id,
+             'page', review_annotations.page_number,
+             'quote', review_annotations.quote,
+             'translation', review_annotations.translation,
+             'content', review_annotations.content
+           )
+           ORDER BY review_annotations.page_number, review_annotations.id
+         ) AS items
+         FROM review_annotations
+         WHERE review_annotations.review_id = reviews.id
+       ) annotations ON TRUE
        WHERE reviews.article_id = articles.id
          AND reviews.user_id <> $1
          AND reviews.rating >= 4

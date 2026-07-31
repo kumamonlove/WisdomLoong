@@ -643,10 +643,70 @@ select {
   gap: 8px;
 }
 
+.review-attachments figure {
+  margin: 0;
+}
+
 .review-attachments img {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
+}
+
+.review-attachments figcaption {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.shared-annotations {
+  margin-top: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.shared-annotations h4 {
+  margin: 0 0 2px;
+  font-size: 11px;
+}
+
+.shared-annotations article {
+  position: relative;
+  padding: 12px 12px 12px 44px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(248, 246, 239, 0.75);
+}
+
+.shared-annotations article > strong {
+  position: absolute;
+  top: 13px;
+  left: 10px;
+  color: var(--accent);
+  font-size: 9px;
+}
+
+.shared-annotations blockquote {
+  margin: 0 0 7px;
+  padding-left: 8px;
+  overflow: hidden;
+  color: var(--muted);
+  border-left: 2px solid var(--line);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.shared-annotations article > p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.shared-annotations .annotation-translation {
+  margin-bottom: 7px;
+  color: #5d5542;
+  font-size: 10px;
 }
 
 .mini-avatar {
@@ -1331,6 +1391,165 @@ select {
   font-size: 11px;
   line-height: 1.55;
   resize: vertical;
+}
+
+.translation-assistant {
+  margin-bottom: 14px;
+  padding: 11px;
+  border: 1px solid rgba(214, 95, 64, 0.22);
+  border-radius: 9px;
+  background: rgba(214, 95, 64, 0.045);
+}
+
+.translation-assistant > div:first-child {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.translation-assistant strong,
+.translation-assistant span {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.translation-assistant button {
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.translation-assistant > textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+  background: var(--white);
+  font-size: 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.translation-assistant > button {
+  width: 100%;
+  margin-top: 5px;
+  color: var(--white);
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.translation-result {
+  margin-top: 8px;
+  display: block !important;
+}
+
+.translation-result p {
+  margin: 5px 0 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--white);
+  font-size: 10px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.crop-dialog {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background: rgba(24, 24, 22, 0.78);
+  backdrop-filter: blur(6px);
+}
+
+.crop-dialog > div {
+  width: min(1000px, 100%);
+  max-height: calc(100vh - 48px);
+  padding: 16px;
+  overflow: auto;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.35);
+}
+
+.crop-dialog header,
+.crop-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.crop-dialog header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.crop-dialog header span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.crop-dialog button {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.crop-dialog header > button {
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  font-size: 24px;
+}
+
+.crop-stage {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 14px auto;
+  overflow: hidden;
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+  background: #3b3a36;
+}
+
+.crop-stage img {
+  width: auto;
+  max-width: 100%;
+  max-height: calc(100vh - 190px);
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.crop-stage > span {
+  position: absolute;
+  border: 2px solid var(--accent);
+  background: rgba(214, 95, 64, 0.12);
+  box-shadow: 0 0 0 9999px rgba(24, 24, 22, 0.5);
+  pointer-events: none;
+}
+
+.crop-dialog footer {
+  justify-content: flex-end;
+}
+
+.crop-dialog footer .primary {
+  color: var(--white);
+  border-color: var(--ink);
+  background: var(--ink);
 }
 
 .reader-notebook > button {

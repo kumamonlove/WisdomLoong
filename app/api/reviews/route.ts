@@ -9,6 +9,12 @@ type ReviewBody = {
   reviewType?: "short" | "long";
   mustRead?: boolean;
   attachments?: { dataUrl?: string; note?: string }[];
+  annotations?: {
+    page?: number;
+    quote?: string;
+    translation?: string;
+    content?: string;
+  }[];
 };
 
 export async function POST(request: Request) {
@@ -52,6 +58,15 @@ export async function POST(request: Request) {
       note: attachment.note?.trim().slice(0, 200) ?? "",
     });
   }
+  const annotations = (Array.isArray(body.annotations) ? body.annotations : [])
+    .slice(0, 50)
+    .map((annotation) => ({
+      page: Math.max(1, Math.floor(Number(annotation.page) || 1)),
+      quote: annotation.quote?.trim().slice(0, 12_000) ?? "",
+      translation: annotation.translation?.trim().slice(0, 12_000) ?? "",
+      content: annotation.content?.trim().slice(0, 4_000) ?? "",
+    }))
+    .filter((annotation) => annotation.content);
 
   const client = await database.connect();
   try {
@@ -82,6 +97,15 @@ export async function POST(request: Request) {
         `INSERT INTO review_attachments (review_id, content_type, image_data, note)
          VALUES ($1, $2, $3, $4)`,
         [reviewId, attachment.contentType, attachment.data, attachment.note],
+      );
+    }
+    await client.query("DELETE FROM review_annotations WHERE review_id = $1", [reviewId]);
+    for (const annotation of annotations) {
+      await client.query(
+        `INSERT INTO review_annotations
+           (review_id, page_number, quote, translation, content)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [reviewId, annotation.page, annotation.quote, annotation.translation, annotation.content],
       );
     }
     await client.query(

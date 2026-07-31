@@ -103,3 +103,16 @@ CREATE TABLE IF NOT EXISTS review_attachments (
 
 CREATE INDEX IF NOT EXISTS review_attachments_review_idx
   ON review_attachments(review_id, id);
+
+CREATE TABLE IF NOT EXISTS review_annotations (
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
+  page_number INTEGER NOT NULL CHECK (page_number > 0),
+  quote TEXT NOT NULL DEFAULT '',
+  translation TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL CHECK (CHAR_LENGTH(TRIM(content)) > 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS review_annotations_review_idx
+  ON review_annotations(review_id, page_number, id);
