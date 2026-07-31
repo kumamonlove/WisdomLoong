@@ -147,7 +147,7 @@ WHERE reviews.id IN (SELECT id FROM latest_reviews)
 
 WITH apply_once AS (
   INSERT INTO app_migrations (migration_key)
-  VALUES ('2026-07-31-pi05-must-read')
+  VALUES ('2026-07-31-pi05-must-read-v2')
   ON CONFLICT (migration_key) DO NOTHING
   RETURNING migration_key
 ),
@@ -157,6 +157,8 @@ pi05_reviews AS (
   INNER JOIN articles ON articles.id = reviews.article_id
   WHERE LOWER(articles.title) LIKE '%pi0.5%'
      OR articles.title LIKE '%π0.5%'
+     OR LOWER(articles.title) LIKE '%pi_{0.5}%'
+     OR articles.title LIKE '%π_{0.5}%'
   ORDER BY articles.id, reviews.updated_at DESC, reviews.id DESC
 )
 UPDATE reviews

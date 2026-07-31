@@ -26,6 +26,7 @@ export type ArticleCardData = {
   reviewAuthor: string | null;
   reviewContent: string | null;
   rating: number | null;
+  mustRead?: boolean;
   reviews?: {
     id: number;
     author: string;
@@ -64,6 +65,18 @@ export type ReaderArticle = {
   publishedAt: string | null;
   sourceUrl: string;
   lastReadPage: number | null;
+  ownReview: {
+    rating: number;
+    content: string;
+    reviewType: "short" | "long";
+    mustRead: boolean;
+    annotations: {
+      page: number;
+      quote: string;
+      translation: string;
+      content: string;
+    }[];
+  } | null;
 };
 
 function firstValue(value: string | string[] | undefined) {
@@ -235,7 +248,8 @@ export async function getCategoryArticles({
        articles.authors,
        latest_reviewer.username AS "reviewAuthor",
        latest_review.content AS "reviewContent",
-       review_stats.average_rating AS rating
+       review_stats.average_rating AS rating,
+       review_stats.must_read AS "mustRead"
      FROM articles
      LEFT JOIN reviews own_review
        ON own_review.article_id = articles.id AND own_review.user_id = $3
@@ -248,7 +262,9 @@ export async function getCategoryArticles({
      ) latest_review ON TRUE
      LEFT JOIN users latest_reviewer ON latest_reviewer.id = latest_review.user_id
      LEFT JOIN LATERAL (
-       SELECT ROUND(AVG(reviews.rating)::numeric, 1)::float AS average_rating
+       SELECT
+         ROUND(AVG(reviews.rating)::numeric, 1)::float AS average_rating,
+         BOOL_OR(reviews.must_read) AS must_read
        FROM reviews
        WHERE reviews.article_id = articles.id
      ) review_stats ON TRUE
@@ -292,7 +308,12 @@ export async function getReadingList(userId: number) {
        articles.authors,
        latest_reviewer.username AS "reviewAuthor",
        latest_review.content AS "reviewContent",
-       latest_review.rating
+       latest_review.rating,
+       EXISTS (
+         SELECT 1 FROM reviews
+         WHERE reviews.article_id = articles.id
+           AND reviews.must_read
+       ) AS "mustRead"
      FROM articles
      LEFT JOIN LATERAL (
        SELECT reviews.user_id, reviews.content, reviews.rating
@@ -321,14 +342,40 @@ export async function getReadingList(userId: number) {
 
 export async function getArticlesForReview(userId: number) {
   const result = await database.query<ReaderArticle>(
-    `SELECT id, title, abstract, authors, publisher, category, tags,
-            published_at::text AS "publishedAt", source_url AS "sourceUrl",
-            reading_progress.page_number AS "lastReadPage"
+    `SELECT
+            articles.id, articles.title, articles.abstract, articles.authors,
+            articles.publisher, articles.category, articles.tags,
+            articles.published_at::text AS "publishedAt",
+            articles.source_url AS "sourceUrl",
+            reading_progress.page_number AS "lastReadPage",
+            CASE WHEN own_review.id IS NULL THEN NULL ELSE JSON_BUILD_OBJECT(
+              'rating', own_review.rating,
+              'content', own_review.content,
+              'reviewType', own_review.review_type,
+              'mustRead', own_review.must_read,
+              'annotations', COALESCE(own_annotations.items, '[]'::json)
+            ) END AS "ownReview"
      FROM articles
      LEFT JOIN reading_progress
        ON reading_progress.article_id = articles.id
       AND reading_progress.user_id = $1
-     ORDER BY created_at DESC`,
+     LEFT JOIN reviews own_review
+       ON own_review.article_id = articles.id
+      AND own_review.user_id = $1
+     LEFT JOIN LATERAL (
+       SELECT JSON_AGG(
+         JSON_BUILD_OBJECT(
+           'page', review_annotations.page_number,
+           'quote', review_annotations.quote,
+           'translation', review_annotations.translation,
+           'content', review_annotations.content
+         )
+         ORDER BY review_annotations.page_number, review_annotations.id
+       ) AS items
+       FROM review_annotations
+       WHERE review_annotations.review_id = own_review.id
+     ) own_annotations ON TRUE
+     ORDER BY articles.created_at DESC`,
     [userId],
   );
   return result.rows;

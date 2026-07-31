@@ -119,6 +119,7 @@ function ArxivLookup({
         publishedAt: article.publishedAt,
         sourceUrl: article.sourceUrl,
         lastReadPage: null,
+        ownReview: null,
       });
       router.refresh();
     } catch (error) {
@@ -536,14 +537,17 @@ export function ReviewComposer({
   translationEnabled?: boolean;
 }) {
   const router = useRouter();
+  const startingArticleId = initialArticleId ?? articles[0]?.id ?? 0;
+  const startingArticle = articles.find((article) => article.id === startingArticleId);
+  const startingReview = startingArticle?.ownReview;
   const [availableArticles, setAvailableArticles] = useState(articles);
-  const [articleId, setArticleId] = useState(initialArticleId ?? articles[0]?.id ?? 0);
+  const [articleId, setArticleId] = useState(startingArticleId);
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
-  const [rating, setRating] = useState(4);
-  const [mustRead, setMustRead] = useState(false);
-  const [reviewType, setReviewType] = useState<"short" | "long">("long");
-  const [content, setContent] = useState("");
+  const [rating, setRating] = useState(startingReview?.rating ?? 4);
+  const [mustRead, setMustRead] = useState(startingReview?.mustRead ?? false);
+  const [reviewType, setReviewType] = useState<"short" | "long">(startingReview?.reviewType ?? "long");
+  const [content, setContent] = useState(startingReview?.content ?? "");
   const [page, setPage] = useState(
     articles.find((article) => article.id === initialArticleId)?.lastReadPage ??
       articles[0]?.lastReadPage ??
@@ -566,7 +570,7 @@ export function ReviewComposer({
   const [quoteDraft, setQuoteDraft] = useState("");
   const [translation, setTranslation] = useState("");
   const [translating, setTranslating] = useState(false);
-  const [notes, setNotes] = useState<ReadingNote[]>([]);
+  const [notes, setNotes] = useState<ReadingNote[]>(startingReview?.annotations ?? []);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [pendingCapture, setPendingCapture] = useState("");
   const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null);
@@ -652,7 +656,11 @@ export function ReviewComposer({
     setArticleId(id);
     setPdfLoading(true);
     setPage(article?.lastReadPage ?? 1);
-    setNotes([]);
+    setRating(article?.ownReview?.rating ?? 4);
+    setMustRead(article?.ownReview?.mustRead ?? false);
+    setReviewType(article?.ownReview?.reviewType ?? "long");
+    setContent(article?.ownReview?.content ?? "");
+    setNotes(article?.ownReview?.annotations ?? []);
     setCaptures([]);
     setContextTab("discussion");
     if (localPdfUrlRef.current) URL.revokeObjectURL(localPdfUrlRef.current);
@@ -888,13 +896,17 @@ export function ReviewComposer({
           reviewType,
           content: content.trim(),
           annotations: notes,
-          attachments: captures,
+          ...(captures.length > 0 ? { attachments: captures } : {}),
         }),
       });
       await responseJson(response);
-      setMessage("评论已发布。文章已从你的待读列表中移除。");
-      setContent("");
-      setNotes([]);
+      const updatedReview = { rating, mustRead, reviewType, content: content.trim(), annotations: notes };
+      setAvailableArticles((current) => current.map((article) =>
+        article.id === articleId ? { ...article, ownReview: updatedReview } : article
+      ));
+      setMessage(selectedArticle?.ownReview
+        ? "评论修改已保存。"
+        : "评论已发布。文章已从你的待读列表中移除。");
       setCaptures([]);
       router.refresh();
     } catch (error) {
@@ -1156,7 +1168,10 @@ export function ReviewComposer({
                     {communityReviews.slice(0, 3).map((review) => (
                       <article key={review.id}>
                         <span>{review.author.slice(0, 1).toUpperCase()}</span>
-                        <div><strong>{review.author} · ★ {review.rating}</strong><p>{review.content}</p></div>
+                        <div>
+                          <strong>{review.author} · {review.mustRead ? "✦ 必读" : `★ ${review.rating}`}</strong>
+                          <p>{review.content}</p>
+                        </div>
                       </article>
                     ))}
                     {!discussionLoading && communityReviews.length === 0 && <p>还没有伙伴评论，开始阅读后可以留下第一条。</p>}
@@ -1223,7 +1238,11 @@ export function ReviewComposer({
                     <summary>
                       <span>{review.author.slice(0, 1).toUpperCase()}</span>
                       <strong>{review.author}</strong>
-                      <small>★ {review.rating} · {review.reviewType === "long" ? "长评" : "短评"}</small>
+                      <small>
+                        {review.mustRead ? "✦ 必读" : `★ ${review.rating}`}
+                        {" · "}
+                        {review.reviewType === "long" ? "长评" : "短评"}
+                      </small>
                     </summary>
                     <p>{review.content}</p>
                     {review.attachments.length > 0 && (
@@ -1347,7 +1366,7 @@ export function ReviewComposer({
         </div>
 
         <form className="review-form reader-review-form" hidden={contextTab !== "review"} onSubmit={submitReview}>
-          <h2>留下评论</h2>
+          <h2>{selectedArticle?.ownReview ? "修改我的评论" : "留下评论"}</h2>
           <div className="review-type-switch">
             <button className={reviewType === "short" ? "selected" : ""} onClick={() => setReviewType("short")} type="button">
               <strong>短评</strong><span>一句话判断</span>
@@ -1402,7 +1421,11 @@ export function ReviewComposer({
           </label>
           {message && <p className="workflow-message" role="status">{message}</p>}
           <button disabled={busy || articleId === 0} type="submit">
-            {busy ? "正在发布…" : `发布${reviewType === "short" ? "短评" : "长评"}`}
+            {busy
+              ? "正在保存…"
+              : selectedArticle?.ownReview
+                ? "保存修改"
+                : `发布${reviewType === "short" ? "短评" : "长评"}`}
           </button>
         </form>
       </aside>

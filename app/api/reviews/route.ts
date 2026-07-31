@@ -91,8 +91,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "没有找到这篇文章" }, { status: 404 });
     }
     const reviewId = result.rows[0].id;
-    await client.query("DELETE FROM review_attachments WHERE review_id = $1", [reviewId]);
-    for (const attachment of parsedAttachments) {
+    const attachmentCount = await client.query<{ count: number }>(
+      "SELECT COUNT(*)::int AS count FROM review_attachments WHERE review_id = $1",
+      [reviewId],
+    );
+    const availableAttachmentSlots = Math.max(0, 4 - (attachmentCount.rows[0]?.count ?? 0));
+    for (const attachment of parsedAttachments.slice(0, availableAttachmentSlots)) {
       await client.query(
         `INSERT INTO review_attachments (review_id, content_type, image_data, note)
          VALUES ($1, $2, $3, $4)`,

@@ -30,8 +30,9 @@ export default async function ProfilePage() {
           <article key={review.id}>
             <div>
               <span>{review.reviewType === "long" ? "长评" : "短评"}</span>
-              {review.mustRead && <em className="must-read-badge">✦ 必读</em>}
-              <small>★ {review.rating}</small>
+              {review.mustRead
+                ? <em className="must-read-badge">✦ 必读</em>
+                : <small>★ {review.rating}</small>}
             </div>
             <h3>{review.title}</h3>
             <p>{review.content}</p>

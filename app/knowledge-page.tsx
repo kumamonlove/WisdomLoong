@@ -31,7 +31,7 @@ export function ArticleGrid({
     <div className="article-grid">
       {articles.map((article) => (
         <article
-          className={`article-card${article.recommendationSignals?.mustReadCount ? " must-read-card" : ""}`}
+          className={`article-card${article.mustRead || article.recommendationSignals?.mustReadCount ? " must-read-card" : ""}`}
           key={article.id}
         >
           <div className="article-card-topline">
@@ -40,7 +40,7 @@ export function ArticleGrid({
                 <span className="tag" key={tag}>{tag}</span>
               ))}
             </div>
-            {article.recommendationSignals?.mustReadCount ? (
+            {article.mustRead || article.recommendationSignals?.mustReadCount ? (
               <span className="must-read-rating" aria-label="必读，优先于五星推荐">
                 ✦ 必读
               </span>
@@ -114,8 +114,9 @@ export function ArticleGrid({
                       {review.author.slice(0, 1).toUpperCase()}
                     </span>
                     <strong>{review.author}</strong>
-                    <span>★ {review.rating}</span>
-                    {review.mustRead && <em className="must-read-badge">✦ 必读</em>}
+                    {review.mustRead
+                      ? <em className="must-read-badge">✦ 必读</em>
+                      : <span>★ {review.rating}</span>}
                     <small>{review.reviewType === "short" ? "短评" : `${review.content.length} 字长评`}</small>
                   </summary>
                   <div>
