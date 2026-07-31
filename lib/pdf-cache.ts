@@ -49,7 +49,7 @@ export async function warmPdfCache(articleId: number, sourceUrl: string) {
   const temporaryPath = `${filePath}.${process.pid}.tmp`;
   const download = fetch(remoteUrl, {
     cache: "no-store",
-    headers: { "User-Agent": "WisdomLoong/1.7 PDF prewarmer" },
+    headers: { "User-Agent": "WisdomLoong/1.8 PDF prewarmer" },
     signal: AbortSignal.timeout(180_000),
   })
     .then(async (response) => {

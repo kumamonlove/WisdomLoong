@@ -48,7 +48,7 @@ export type ArticleCardData = {
     }[];
   }[];
   recommendationSignals?: {
-    reviewerCount: number;
+    readCount: number;
     longReviewCount: number;
     mustReadCount: number;
     likeCount: number;
@@ -113,7 +113,7 @@ export async function getRecommendedArticles(userId: number) {
        review_group.rating,
        review_group.reviews,
        JSON_BUILD_OBJECT(
-         'reviewerCount', article_signals.reviewer_count,
+         'readCount', article_signals.read_count,
          'longReviewCount', article_signals.long_review_count,
          'mustReadCount', article_signals.must_read_count,
          'likeCount', article_signals.like_count
@@ -179,7 +179,11 @@ export async function getRecommendedArticles(userId: number) {
      ) review_group ON review_group.reviews IS NOT NULL
      INNER JOIN LATERAL (
        SELECT
-         COUNT(DISTINCT reviews.user_id)::int AS reviewer_count,
+         (
+           SELECT COUNT(*)::int
+           FROM article_reads
+           WHERE article_reads.article_id = articles.id
+         ) AS read_count,
          COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.review_type = 'long')::int AS long_review_count,
          COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.must_read)::int AS must_read_count,
          COUNT(DISTINCT review_likes.user_id)::int AS like_count

@@ -32,6 +32,7 @@ export default async function ReadingListPage() {
           articles={articles}
           emptyTitle="待读清单是空的"
           emptyDescription="在上方输入 arXiv 文章名，把想读的内容先保存下来。"
+          showReadAction
         />
       </section>
     </KnowledgePage>

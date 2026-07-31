@@ -70,6 +70,20 @@ CREATE TABLE IF NOT EXISTS reading_list (
 CREATE INDEX IF NOT EXISTS reading_list_user_created_idx
   ON reading_list(user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS article_reads (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, article_id)
+);
+
+CREATE INDEX IF NOT EXISTS article_reads_article_idx
+  ON article_reads(article_id, read_at DESC);
+
+INSERT INTO article_reads (user_id, article_id, read_at)
+SELECT user_id, article_id, updated_at FROM reviews
+ON CONFLICT (user_id, article_id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS reading_progress (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,

@@ -1,6 +1,7 @@
 import packageInfo from "@/package.json";
 import { SiteHeader, type PageName } from "@/app/site-header";
 import { ReviewLikeButton } from "@/app/review-actions";
+import { MarkReadButton } from "@/app/reading-actions";
 import type { ArticleCardData } from "@/lib/knowledge";
 
 const appVersion = `v${packageInfo.version}`;
@@ -9,10 +10,12 @@ export function ArticleGrid({
   articles,
   emptyTitle,
   emptyDescription,
+  showReadAction = false,
 }: {
   articles: ArticleCardData[];
   emptyTitle: string;
   emptyDescription: string;
+  showReadAction?: boolean;
 }) {
   if (articles.length === 0) {
     return (
@@ -47,10 +50,10 @@ export function ArticleGrid({
           </h3>
           {article.recommendationSignals && (
             <div className="recommendation-hooks">
-              {article.recommendationSignals.reviewerCount > 0 && (
+              {article.recommendationSignals.readCount > 0 && (
                 <span className="primary-hook">
                   <i aria-hidden="true">◉</i>
-                  已有 {article.recommendationSignals.reviewerCount} 位成员读过并留下判断
+                  已有 {article.recommendationSignals.readCount} 位成员读过
                 </span>
               )}
               {article.recommendationSignals.mustReadCount > 0 && (
@@ -159,12 +162,15 @@ export function ArticleGrid({
               {article.reviewContent && <blockquote>{article.reviewContent}</blockquote>}
             </div>
           ) : null}
-          <a
-            className="article-link"
-            href={`/reviews/new?article=${article.id}`}
-          >
-            开始阅读 <span aria-hidden="true">→</span>
-          </a>
+          <div className="article-card-actions">
+            <a
+              className="article-link"
+              href={`/reviews/new?article=${article.id}`}
+            >
+              开始阅读 <span aria-hidden="true">→</span>
+            </a>
+            {showReadAction && <MarkReadButton articleId={article.id} />}
+          </div>
         </article>
       ))}
     </div>

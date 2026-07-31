@@ -112,6 +112,13 @@ export async function POST(request: Request) {
       "DELETE FROM reading_list WHERE user_id = $1 AND article_id = $2",
       [user.id, articleId],
     );
+    await client.query(
+      `INSERT INTO article_reads (user_id, article_id)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, article_id)
+       DO UPDATE SET read_at = NOW()`,
+      [user.id, articleId],
+    );
     await client.query("COMMIT");
     return NextResponse.json({ ok: true });
   } catch (error) {

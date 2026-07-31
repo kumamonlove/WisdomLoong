@@ -826,12 +826,38 @@ select {
 }
 
 .article-link {
-  margin-top: auto;
-  padding-top: 22px;
+  padding: 0;
   color: var(--ink);
   font-size: 12px;
   font-weight: 700;
   text-decoration: none;
+}
+
+.article-card-actions {
+  margin-top: auto;
+  padding-top: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mark-read-button {
+  padding: 7px 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.mark-read-button:hover,
+.mark-read-button.done {
+  color: var(--white);
+  border-color: var(--ink);
+  background: var(--ink);
 }
 
 .empty {
