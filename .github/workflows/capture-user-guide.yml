@@ -71,6 +71,7 @@ jobs:
 
           await page.goto(`${baseUrl}/categories`, { waitUntil: 'domcontentloaded' });
           await page.waitForSelector('.article-card');
+          const readerHref = await page.locator('.article-card h3 a').first().getAttribute('href');
           await shot('03-article-library');
           const metadata = page.locator('.card-metadata-editor').first();
           await metadata.locator('summary').click();
@@ -81,14 +82,10 @@ jobs:
           await page.waitForSelector('.import-section');
           await shot('05-reading-list');
 
-          await page.goto(`${baseUrl}/reviews/new`, { waitUntil: 'domcontentloaded' });
-          await page.waitForSelector('.reader-workspace');
-          const startReading = page.locator('.article-reading-preview button').filter({ hasText: /开始阅读|继续阅读/ }).first();
-          if (await startReading.count()) {
-            await startReading.click();
-            await page.waitForSelector('.reader-workspace.focus-mode');
-            await page.waitForTimeout(5000);
-          }
+          if (!readerHref) throw new Error('No article was available for the reader screenshots');
+          await page.goto(`${baseUrl}${readerHref}`, { waitUntil: 'domcontentloaded' });
+          await page.waitForSelector('.reader-workspace.focus-mode');
+          await page.waitForTimeout(5000);
           await shot('06-reader-annotations');
 
           const translationTab = page.locator('.workspace-tabs button').filter({ hasText: '翻译' }).first();
