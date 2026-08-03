@@ -551,7 +551,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.10`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.11`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -838,7 +838,7 @@ function PdfContinuousCanvas({
       try {
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.10`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.11`;
         loadingTask = pdfjs.getDocument(url);
         const document = await loadingTask.promise;
         if (!cancelled) {
@@ -1902,21 +1902,19 @@ export function ReviewComposer({
           <em>{viewingPartnerNote ? `${activeNoteAuthor}的笔记` : `P.${page}`}</em>
         </div>
         <nav className="workspace-tabs" aria-label="阅读工作台功能">
-          <button className={contextTab === "annotations" ? "selected" : ""} onClick={() => setContextTab("annotations")} type="button">
+          <button className={contextTab === "annotations" ? "selected" : ""} onClick={() => { setContextTab("annotations"); setMessage(""); }} type="button">
             <i aria-hidden="true">▣</i><strong>批注</strong><span>{notes.length}</span>
           </button>
-          <button className={contextTab === "translate" ? "selected" : ""} onClick={() => setContextTab("translate")} type="button">
+          <button className={contextTab === "translate" ? "selected" : ""} onClick={() => { setContextTab("translate"); setMessage(""); }} type="button">
             <i aria-hidden="true">译</i><strong>翻译</strong>{quoteDraft && <span>1</span>}
           </button>
-          <button className={contextTab === "community" ? "selected" : ""} onClick={() => setContextTab("community")} type="button">
+          <button className={contextTab === "community" ? "selected" : ""} onClick={() => { setContextTab("community"); setMessage(""); }} type="button">
             <i aria-hidden="true">◎</i><strong>伙伴</strong><span>{communityReviews.length}</span>
           </button>
-          <button className={contextTab === "publish" ? "selected" : ""} onClick={() => setContextTab("publish")} type="button">
+          <button className={contextTab === "publish" ? "selected" : ""} onClick={() => { setContextTab("publish"); setMessage(""); }} type="button">
             <i aria-hidden="true">↑</i><strong>发布</strong>
           </button>
         </nav>
-        {message && <p className="reader-workbench-message" role="status">{message}</p>}
-
         <div className="context-panel annotation-workspace" hidden={contextTab !== "annotations"}>
           <header className="workbench-section-heading"><div><strong>当前页伙伴批注</strong><small>悬浮查看，点击复用同一画框</small></div><span>{currentPageAnnotations.length}</span></header>
           {viewingPartnerNote ? (
@@ -2019,6 +2017,7 @@ export function ReviewComposer({
               />
               <button disabled={!quoteDraft.trim() || translating} onClick={translateQuote} type="button">{translating ? "正在翻译…" : "翻译成中文"}</button>
               {translation && <div className="translation-result"><span>中文译文</span><p>{translation}</p></div>}
+              {message && <p className="context-inline-message" role="status">{message}</p>}
             </section>
           ) : (
             <section className="translation-assistant coming-soon"><div><strong>学术翻译</strong><span>暂不可用</span></div><p>翻译服务配置完成后，可直接选中 PDF 原文翻译。</p></section>
@@ -2048,90 +2047,93 @@ export function ReviewComposer({
         </div>
 
         <form className="review-form reader-review-form" hidden={contextTab !== "publish"} onSubmit={submitReview}>
-          <header className="workbench-section-heading"><div><strong>完成阅读并发布</strong><small>选择推荐等级，附上读书笔记与评论</small></div></header>
-          <h2>{selectedArticle?.ownReview ? "修改读书笔记与评论" : "发布读书笔记与评论"}</h2>
-          <div className={`star-rating rating-${rating ?? "unrated"}${mustRead ? " is-must-read" : ""}`}>
-            <span>我的推荐等级</span>
-            <div>
-              {[1, 2, 3, 4, 5].map((value) => (
-                <button
-                  aria-label={`${value} 星`}
-                  className={value <= (rating ?? 0) ? "filled" : ""}
-                  key={value}
-                  onClick={() => {
-                    setRating(value);
-                    setMustRead(false);
-                  }}
-                  type="button"
-                >★</button>
-              ))}
-              <strong>{mustRead ? "✦ 必读" : rating === null ? "请选择评分" : `${rating}.0`}</strong>
+          <header className="workbench-section-heading"><div><strong>{selectedArticle?.ownReview ? "修改并重新发布" : "发布读书笔记与评论"}</strong><small>依次完成下面 3 个步骤</small></div></header>
+          <section className="publish-step">
+            <header className="publish-step-heading"><span>1</span><div><strong>选择推荐等级</strong><small>必须评分，也可以直接标记为必读</small></div><em className={rating !== null ? "ready" : ""}>{rating !== null ? "已完成" : "待完成"}</em></header>
+            <div className={`star-rating rating-${rating ?? "unrated"}${mustRead ? " is-must-read" : ""}`}>
+              <div>
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    aria-label={`${value} 星`}
+                    className={value <= (rating ?? 0) ? "filled" : ""}
+                    key={value}
+                    onClick={() => {
+                      setRating(value);
+                      setMustRead(false);
+                    }}
+                    type="button"
+                  >★</button>
+                ))}
+                <strong>{mustRead ? "✦ 必读" : rating === null ? "请选择评分" : `${rating}.0`}</strong>
+              </div>
             </div>
-          </div>
-          <label className={`must-read-toggle${mustRead ? " selected" : ""}`}>
-            <input
-              checked={mustRead}
-              onChange={(event) => {
-                setMustRead(event.target.checked);
-                setRating(event.target.checked ? 5 : null);
-              }}
-              type="checkbox"
-            />
-            <span aria-hidden="true">✦</span>
-            <div><strong>必读</strong><small>高于五星 · 向团队重点推荐</small></div>
-            <em>五星之上</em>
-          </label>
-          <section className="reading-note-builder">
-            <header>
-              <div><strong>读书笔记 PDF</strong><small>把画框截图与对应批注排版成 PDF，或上传自己的成稿</small></div>
-              {selectedArticle?.ownReview?.noteFileName && !notePdfFile && <span>已有笔记</span>}
-            </header>
-            <div className="reading-note-methods">
-              <button
-                disabled={generatingNotePdf || !localPdfUrl || notes.every((note) => !note.rect)}
-                onClick={() => void buildNotePdf()}
-                type="button"
-              >
-                <strong>{generatingNotePdf ? "正在生成…" : "从我的截图框生成"}</strong>
-                <small>{notes.filter((note) => note.rect).length} 个截图框可用</small>
-              </button>
-              <button onClick={() => notePdfInput.current?.click()} type="button">
-                <strong>上传本地读书笔记 PDF</strong>
-                <small>从电脑选择 · 最大 30 MB</small>
-              </button>
-            </div>
-            <input
-              accept="application/pdf,.pdf"
-              className="visually-hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) useNotePdf(file, "uploaded");
-              }}
-              ref={notePdfInput}
-              type="file"
-            />
-            {notePdfFile && <p><strong>{notePdfFile.name}</strong><span>{notePdfSource === "generated" ? "由截图框生成" : "个人上传"} · {(notePdfFile.size / 1024 / 1024).toFixed(1)} MB</span></p>}
-            {notePdfPreviewUrl && <iframe src={`${notePdfPreviewUrl}#toolbar=1`} title="待读书笔记 PDF 预览" />}
-            {!notePdfFile && selectedArticle?.ownReview?.noteFileName && (
-              <a href={`/reviews/new?article=${articleId}&note=${selectedArticle.ownReview.id}`}>在阅读器打开已发布的读书笔记</a>
-            )}
+            <label className={`must-read-toggle${mustRead ? " selected" : ""}`}>
+              <input
+                checked={mustRead}
+                onChange={(event) => {
+                  setMustRead(event.target.checked);
+                  setRating(event.target.checked ? 5 : null);
+                }}
+                type="checkbox"
+              />
+              <span aria-hidden="true">✦</span>
+              <div><strong>必读</strong><small>高于五星 · 向团队重点推荐</small></div>
+              <em>五星之上</em>
+            </label>
           </section>
-          <label>
-            评论
-            <textarea
-              onChange={(event) => setContent(event.target.value)}
-              placeholder="梳理论文问题、方法、证据、局限，以及它为什么值得团队关注…"
-              required
-              rows={12}
-              value={content}
-            />
-            <small>{content.length} 字</small>
-          </label>
-          <div className="publish-readiness" aria-label="发布前检查">
-            <span className={rating !== null ? "ready" : ""}>{rating !== null ? "✓" : "1"} 推荐等级</span>
-            <span className={hasReadingNote ? "ready" : ""}>{hasReadingNote ? "✓" : "2"} 读书笔记 PDF</span>
-            <span className={content.trim() ? "ready" : ""}>{content.trim() ? "✓" : "3"} 评论</span>
-          </div>
+          <section className="publish-step">
+            <header className="publish-step-heading"><span>2</span><div><strong>准备读书笔记 PDF</strong><small>从画框生成，或上传已经写好的 PDF</small></div><em className={hasReadingNote ? "ready" : ""}>{hasReadingNote ? "已完成" : "待完成"}</em></header>
+            <section className="reading-note-builder">
+              <header>
+                <div><strong>选择一种方式</strong><small>新文件会随这次评论一起发布</small></div>
+                {selectedArticle?.ownReview?.noteFileName && !notePdfFile && <span>已有笔记</span>}
+              </header>
+              <div className="reading-note-methods">
+                <button
+                  disabled={generatingNotePdf || !localPdfUrl || notes.every((note) => !note.rect)}
+                  onClick={() => void buildNotePdf()}
+                  type="button"
+                >
+                  <strong>{generatingNotePdf ? "正在生成…" : "从我的截图框生成"}</strong>
+                  <small>{notes.filter((note) => note.rect).length} 个截图框可用</small>
+                </button>
+                <button onClick={() => notePdfInput.current?.click()} type="button">
+                  <strong>上传本地读书笔记 PDF</strong>
+                  <small>从电脑选择 · 最大 30 MB</small>
+                </button>
+              </div>
+              <input
+                accept="application/pdf,.pdf"
+                className="visually-hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) useNotePdf(file, "uploaded");
+                }}
+                ref={notePdfInput}
+                type="file"
+              />
+              {notePdfFile && <p><strong>{notePdfFile.name}</strong><span>{notePdfSource === "generated" ? "由截图框生成" : "个人上传"} · {(notePdfFile.size / 1024 / 1024).toFixed(1)} MB</span></p>}
+              {notePdfPreviewUrl && <iframe src={`${notePdfPreviewUrl}#toolbar=1`} title="待读书笔记 PDF 预览" />}
+              {!notePdfFile && selectedArticle?.ownReview?.noteFileName && (
+                <a href={`/reviews/new?article=${articleId}&note=${selectedArticle.ownReview.id}`}>在阅读器打开已发布的读书笔记</a>
+              )}
+            </section>
+          </section>
+          <section className="publish-step">
+            <header className="publish-step-heading"><span>3</span><div><strong>写评论</strong><small>说明方法、证据、局限和推荐理由</small></div><em className={content.trim() ? "ready" : ""}>{content.trim() ? "已完成" : "待完成"}</em></header>
+            <label>
+              <textarea
+                aria-label="评论"
+                onChange={(event) => setContent(event.target.value)}
+                placeholder="写下你对这篇论文的完整判断…"
+                required
+                rows={12}
+                value={content}
+              />
+              <small>{content.length} 字</small>
+            </label>
+          </section>
+          {message && <p className="context-inline-message" role="status">{message}</p>}
           <button disabled={busy || articleId === 0 || rating === null || !content.trim() || !hasReadingNote} type="submit">
             {busy
               ? "正在保存…"
