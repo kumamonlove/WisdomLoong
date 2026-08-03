@@ -551,7 +551,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.5`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.6`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -836,7 +836,7 @@ function PdfContinuousCanvas({
       try {
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.5`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.6`;
         loadingTask = pdfjs.getDocument(url);
         const document = await loadingTask.promise;
         if (!cancelled) setPdfDocument(document);
@@ -901,7 +901,7 @@ export function ReviewComposer({
   const [articleId, setArticleId] = useState(startingArticleId);
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
-  const [rating, setRating] = useState(startingReview?.rating ?? 4);
+  const [rating, setRating] = useState<number | null>(startingReview?.rating ?? null);
   const [mustRead, setMustRead] = useState(startingReview?.mustRead ?? false);
   const [content, setContent] = useState(startingReview?.content ?? "");
   const [page, setPage] = useState(
@@ -970,6 +970,9 @@ export function ReviewComposer({
   const selectedArxivPage = selectedArticle
     ? arxivPageUrl(selectedArticle.sourceUrl)
     : null;
+  const selectedHasPublisher = Boolean(
+    selectedArticle && selectedArticle.publisher !== "机构待补充" && selectedArticle.publisher.toLocaleLowerCase() !== "arxiv",
+  );
   const searchableTags = useMemo(
     () => ["全部", ...new Set(availableArticles.flatMap((article) => article.tags))],
     [availableArticles],
@@ -1097,7 +1100,7 @@ export function ReviewComposer({
     setPdfLoading(true);
     setArticlePdfReady(false);
     setPage(article?.lastReadPage ?? 1);
-    setRating(article?.ownReview?.rating ?? 4);
+    setRating(article?.ownReview?.rating ?? null);
     setMustRead(article?.ownReview?.mustRead ?? false);
     setContent(article?.ownReview?.content ?? "");
     setNotes((article?.ownReview?.annotations ?? []).filter((note) => note.rect));
@@ -1465,6 +1468,11 @@ export function ReviewComposer({
 
   async function submitReview(event: FormEvent) {
     event.preventDefault();
+    const selectedRating = rating;
+    if (selectedRating === null) {
+      setMessage("请先选择推荐星级，或标记为必读。");
+      return;
+    }
     if (!notePdfFile && !selectedArticle?.ownReview?.noteFileName) {
       setMessage("请先从画框批注生成读书笔记 PDF，或上传自己的 PDF。");
       return;
@@ -1482,7 +1490,7 @@ export function ReviewComposer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           articleId,
-          rating,
+          rating: selectedRating,
           mustRead,
           content: content.trim(),
           annotations: notes,
@@ -1492,7 +1500,7 @@ export function ReviewComposer({
       const saved = await responseJson(response);
       const updatedReview = {
         id: Number(saved.reviewId) || selectedArticle?.ownReview?.id || 0,
-        rating,
+        rating: selectedRating,
         mustRead,
         reviewType: "long" as const,
         content: content.trim(),
@@ -1753,7 +1761,9 @@ export function ReviewComposer({
                   }}
                   value={publisherDraft}
                 />
-                <button disabled={!publisherDraft.trim()} onClick={() => void savePublisher()} type="button">保存</button>
+                <button disabled={!publisherDraft.trim()} onClick={() => void savePublisher()} type="button">
+                  {selectedHasPublisher ? "保存修改" : "添加并保存"}
+                </button>
               </label>
             </div>
             {focusMode ? (
@@ -2120,13 +2130,13 @@ export function ReviewComposer({
         <form className="review-form reader-review-form" hidden={contextTab !== "publish"} onSubmit={submitReview}>
           <header className="workbench-section-heading"><div><strong>完成阅读并发布</strong><small>选择推荐等级，附上读书笔记与评论</small></div></header>
           <h2>{selectedArticle?.ownReview ? "修改读书笔记与评论" : "发布读书笔记与评论"}</h2>
-          <div className={`star-rating rating-${rating}${mustRead ? " is-must-read" : ""}`}>
+          <div className={`star-rating rating-${rating ?? "unrated"}${mustRead ? " is-must-read" : ""}`}>
             <span>我的推荐等级</span>
             <div>
               {[1, 2, 3, 4, 5].map((value) => (
                 <button
                   aria-label={`${value} 星`}
-                  className={value <= rating ? "filled" : ""}
+                  className={value <= (rating ?? 0) ? "filled" : ""}
                   key={value}
                   onClick={() => {
                     setRating(value);
@@ -2135,7 +2145,7 @@ export function ReviewComposer({
                   type="button"
                 >★</button>
               ))}
-              <strong>{mustRead ? "✦ 必读" : `${rating}.0`}</strong>
+              <strong>{mustRead ? "✦ 必读" : rating === null ? "请选择评分" : `${rating}.0`}</strong>
             </div>
           </div>
           <label className={`must-read-toggle${mustRead ? " selected" : ""}`}>
@@ -2143,7 +2153,7 @@ export function ReviewComposer({
               checked={mustRead}
               onChange={(event) => {
                 setMustRead(event.target.checked);
-                if (event.target.checked) setRating(5);
+                setRating(event.target.checked ? 5 : null);
               }}
               type="checkbox"
             />
@@ -2197,7 +2207,7 @@ export function ReviewComposer({
             />
             <small>{content.length} 字</small>
           </label>
-          <button disabled={busy || articleId === 0 || !content.trim() || (!notePdfFile && !selectedArticle?.ownReview?.noteFileName)} type="submit">
+          <button disabled={busy || articleId === 0 || rating === null || !content.trim() || (!notePdfFile && !selectedArticle?.ownReview?.noteFileName)} type="submit">
             {busy
               ? "正在保存…"
               : selectedArticle?.ownReview

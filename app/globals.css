@@ -653,6 +653,113 @@ select {
   white-space: nowrap;
 }
 
+.card-metadata-editor {
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.card-metadata-editor > summary {
+  width: fit-content;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.card-metadata-editor > summary::before {
+  margin-right: 5px;
+  color: var(--accent);
+  content: "＋";
+}
+
+.card-metadata-editor[open] > summary::before {
+  content: "−";
+}
+
+.card-metadata-editor > summary::-webkit-details-marker {
+  display: none;
+}
+
+.card-metadata-editor > div {
+  margin-top: 10px;
+  padding: 11px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(248, 246, 239, .72);
+}
+
+.card-metadata-editor section {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.card-metadata-editor section > strong {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.card-metadata-editor label {
+  display: flex;
+  gap: 5px;
+}
+
+.card-metadata-editor input {
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+  background: var(--white);
+  font-size: 9px;
+}
+
+.card-metadata-editor button {
+  min-height: 28px;
+  padding: 4px 8px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.card-metadata-editor button:disabled {
+  cursor: default;
+  opacity: .4;
+}
+
+.card-metadata-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.card-metadata-tags button {
+  min-height: 23px;
+  padding: 3px 6px;
+  color: var(--accent);
+  border-color: rgba(214, 95, 64, .22);
+  border-radius: 999px;
+}
+
+.card-metadata-editor > div > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--accent);
+  font-size: 8px;
+}
+
 .review-preview {
   margin-top: 22px;
   padding: 14px;
@@ -3449,6 +3556,12 @@ select {
   font-size: 20px;
 }
 
+.star-rating.rating-unrated strong {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
 .star-rating.is-must-read strong {
   color: #7b5811;
   font-size: 13px;
@@ -4292,6 +4405,14 @@ select {
 
   .article-card {
     min-height: 290px;
+  }
+
+  .card-metadata-editor > div {
+    grid-template-columns: 1fr;
+  }
+
+  .card-metadata-editor > div > p {
+    grid-column: auto;
   }
 
   .reader-metadata-editor {

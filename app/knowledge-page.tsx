@@ -3,6 +3,7 @@ import { SiteHeader, type PageName } from "@/app/site-header";
 import { ReadingNoteLikeButton } from "@/app/review-actions";
 import { MarkReadButton } from "@/app/reading-actions";
 import { MathTitle } from "@/app/math-title";
+import { ArticleMetadataEditor } from "@/app/article-metadata-editor";
 import type { ArticleCardData } from "@/lib/knowledge";
 
 const appVersion = `v${packageInfo.version}`;
@@ -102,6 +103,11 @@ export function ArticleGrid({
                 </div>
               )}
           </dl>
+          <ArticleMetadataEditor
+            articleId={article.id}
+            initialPublisher={article.publisher ?? "机构待补充"}
+            initialTags={article.tags?.length ? article.tags : [article.category]}
+          />
           {article.reviews && article.reviews.length > 0 ? (
             <div className="review-collection">
               <div className="review-collection-heading">
