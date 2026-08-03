@@ -21,18 +21,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const apiKey = process.env.DASHSCOPE_API_KEY;
+  const apiKey = process.env.TRANSLATION_API_KEY ?? process.env.DASHSCOPE_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "论文翻译尚未配置百炼 API Key，请联系管理员" },
+      { error: "论文翻译尚未配置 API Key，请联系管理员" },
       { status: 503 },
     );
   }
 
   const baseUrl = (
+    process.env.TRANSLATION_BASE_URL ??
     process.env.DASHSCOPE_BASE_URL ??
-    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    "https://api.silra.cn/v1"
   ).replace(/\/$/, "");
+  const model = process.env.TRANSLATION_MODEL ?? "deepseek-chat";
 
   try {
     const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -42,20 +44,23 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.DASHSCOPE_TRANSLATION_MODEL ?? "qwen-mt-flash",
-        messages: [{ role: "user", content: text }],
-        translation_options: {
-          source_lang: "auto",
-          target_lang: "Chinese",
-          domains: "Academic paper in robotics, artificial intelligence, machine learning, computer vision, reinforcement learning, or embodied intelligence. Translate into precise, fluent Simplified Chinese academic prose. Preserve equations, symbols, variable names, citations, model names, dataset names, and standard English abbreviations. Use consistent technical terminology and do not add explanations that are absent from the source.",
-        },
+        model,
+        temperature: 0.1,
+        max_tokens: Math.min(8_000, Math.max(512, text.length * 2)),
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert academic translator specializing in robotics, artificial intelligence, machine learning, computer vision, reinforcement learning, and embodied intelligence. Translate the user's text into precise, fluent Simplified Chinese academic prose. Preserve equations, symbols, variable names, citations, model names, dataset names, and standard English abbreviations. Keep terminology consistent. Return only the translation; never add explanations, commentary, headings, or quotation marks.",
+          },
+          { role: "user", content: text },
+        ],
       }),
       signal: AbortSignal.timeout(45_000),
     });
     const data = (await response.json()) as TranslationResponse;
     const translation = data.choices?.[0]?.message?.content?.trim();
     if (!response.ok || !translation) {
-      console.error("DashScope translation failed", response.status, data.error?.message);
+      console.error("Translation gateway failed", response.status, data.error?.message);
       throw new Error("invalid translation response");
     }
     return NextResponse.json({ translation });

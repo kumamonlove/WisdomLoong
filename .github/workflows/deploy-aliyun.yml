@@ -54,6 +54,9 @@ jobs:
           REGISTRATION_INVITE_CODE: ${{ secrets.REGISTRATION_INVITE_CODE }}
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
           DASHSCOPE_BASE_URL: ${{ secrets.DASHSCOPE_BASE_URL }}
+          TRANSLATION_API_KEY: ${{ secrets.TRANSLATION_API_KEY }}
+          TRANSLATION_BASE_URL: ${{ secrets.TRANSLATION_BASE_URL }}
+          TRANSLATION_MODEL: ${{ secrets.TRANSLATION_MODEL }}
         run: |
           if [ -z "$REGISTRATION_INVITE_CODE" ]; then
             echo "REGISTRATION_INVITE_CODE secret is required" >&2
@@ -68,6 +71,18 @@ jobs:
           fi
           if [ -n "$DASHSCOPE_BASE_URL" ]; then
             printf 'DASHSCOPE_BASE_URL=%s\n' "$DASHSCOPE_BASE_URL" \
+              >> /tmp/wisdomloong.env
+          fi
+          if [ -n "$TRANSLATION_API_KEY" ]; then
+            printf 'TRANSLATION_API_KEY=%s\n' "$TRANSLATION_API_KEY" \
+              >> /tmp/wisdomloong.env
+          fi
+          if [ -n "$TRANSLATION_BASE_URL" ]; then
+            printf 'TRANSLATION_BASE_URL=%s\n' "$TRANSLATION_BASE_URL" \
+              >> /tmp/wisdomloong.env
+          fi
+          if [ -n "$TRANSLATION_MODEL" ]; then
+            printf 'TRANSLATION_MODEL=%s\n' "$TRANSLATION_MODEL" \
               >> /tmp/wisdomloong.env
           fi
           scp "/tmp/wisdomloong-${GITHUB_SHA}.tgz" \

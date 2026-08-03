@@ -550,7 +550,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.2`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.3`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -701,7 +701,7 @@ function PdfPageCanvas({
           "pdfjs-dist/build/pdf.worker.min.mjs",
           import.meta.url,
         ).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.2`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.3`;
         const nextLoadingTask = pdfjs.getDocument(url);
         loadingTask = nextLoadingTask;
         const document = await nextLoadingTask.promise;
@@ -938,7 +938,7 @@ function PdfContinuousCanvas({
       try {
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.2`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.3`;
         loadingTask = pdfjs.getDocument(url);
         const document = await loadingTask.promise;
         if (!cancelled) setPdfDocument(document);
@@ -1430,7 +1430,7 @@ export function ReviewComposer({
     setContextTab("notes");
     setMessage(translationEnabled
       ? `已选中第 ${pageNumber} 页原文，点击右侧“翻译成中文”。`
-      : "已选中论文原文；翻译服务尚未配置百炼 API Key。");
+      : "已选中论文原文；翻译服务尚未配置 API Key。");
   }
 
   function useNotePdf(file: File, source: "generated" | "uploaded") {
@@ -2019,7 +2019,7 @@ export function ReviewComposer({
         {translationEnabled ? (
           <section className="translation-assistant">
             <div>
-              <strong>论文中译 · Qwen-MT Flash</strong>
+              <strong>论文中译 · DeepSeek</strong>
               <button onClick={readClipboard} type="button">从剪贴板粘贴</button>
             </div>
             <textarea
@@ -2032,7 +2032,7 @@ export function ReviewComposer({
               value={quoteDraft}
             />
             <button disabled={!quoteDraft.trim() || translating} onClick={translateQuote} type="button">
-              {translating ? "百炼正在翻译…" : "翻译成中文"}
+              {translating ? "正在翻译…" : "翻译成中文"}
             </button>
             {translation && (
               <div className="translation-result">
