@@ -2580,7 +2580,7 @@ select {
 
 .notebook-heading > div small {
   color: var(--muted);
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 500;
   letter-spacing: 0;
 }
@@ -2589,7 +2589,7 @@ select {
   max-width: 130px;
   overflow: hidden;
   color: var(--accent);
-  font-size: 8px;
+  font-size: 9px;
   font-style: normal;
   letter-spacing: 0;
   text-overflow: ellipsis;
@@ -2609,6 +2609,7 @@ select {
 .workspace-tabs button {
   position: relative;
   min-width: 0;
+  min-height: 48px;
   padding: 7px 2px 6px;
   display: grid;
   place-items: center;
@@ -2621,13 +2622,13 @@ select {
 }
 
 .workspace-tabs button i {
-  font-size: 11px;
+  font-size: 13px;
   font-style: normal;
   line-height: 1;
 }
 
 .workspace-tabs button strong {
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .workspace-tabs button > span {
@@ -2642,7 +2643,7 @@ select {
   color: var(--white);
   border-radius: 999px;
   background: var(--accent);
-  font-size: 7px;
+  font-size: 8px;
 }
 
 .workspace-tabs button.selected {
@@ -2658,7 +2659,7 @@ select {
   border: 1px solid rgba(188, 137, 18, .24);
   border-radius: 7px;
   background: rgba(255, 248, 216, .52);
-  font-size: 8px;
+  font-size: 9px;
   line-height: 1.5;
 }
 
@@ -2681,7 +2682,7 @@ select {
 
 .workbench-section-heading small {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 9px;
   line-height: 1.4;
 }
 
@@ -2693,7 +2694,7 @@ select {
   color: var(--accent);
   border-radius: 999px;
   background: rgba(214, 95, 64, .09);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 800;
 }
 
@@ -3418,7 +3419,7 @@ select {
 .reading-note-builder > header small,
 .reading-note-builder > p span {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .reading-note-builder > header > span {
@@ -3454,12 +3455,55 @@ select {
 }
 
 .reading-note-methods strong {
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .reading-note-methods small {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 9px;
+}
+
+.publish-readiness {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.publish-readiness span {
+  min-height: 34px;
+  padding: 7px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.publish-readiness span.ready {
+  color: #1f6b50;
+  border-color: rgba(42, 140, 107, .3);
+  background: rgba(42, 140, 107, .08);
+}
+
+.workspace-tabs button:focus-visible,
+.reader-toolbar button:focus-visible,
+.reader-metadata-editor input:focus-visible,
+.reader-metadata-editor button:focus-visible,
+.card-metadata-editor input:focus-visible,
+.card-metadata-editor button:focus-visible,
+.note-composer textarea:focus-visible,
+.translation-assistant textarea:focus-visible,
+.reading-note-methods button:focus-visible,
+.reader-review-form textarea:focus-visible,
+.reader-review-form > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .reading-note-builder > p {

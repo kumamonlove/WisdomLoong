@@ -551,7 +551,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.6`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.7`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -798,6 +798,7 @@ function PdfContinuousCanvas({
   onLoad,
   onError,
   onVisiblePage,
+  onDocumentReady,
   onTextSelect,
   onZoom,
   children,
@@ -808,6 +809,7 @@ function PdfContinuousCanvas({
   onLoad: () => void;
   onError: () => void;
   onVisiblePage: (page: number) => void;
+  onDocumentReady: (pageCount: number) => void;
   onTextSelect: (text: string, page: number) => void;
   onZoom: (delta: number) => void;
   children: (page: number) => ReactNode;
@@ -836,10 +838,13 @@ function PdfContinuousCanvas({
       try {
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.6`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.7`;
         loadingTask = pdfjs.getDocument(url);
         const document = await loadingTask.promise;
-        if (!cancelled) setPdfDocument(document);
+        if (!cancelled) {
+          setPdfDocument(document);
+          onDocumentReady(document.numPages);
+        }
       } catch {
         if (!cancelled) onError();
       }
@@ -848,7 +853,7 @@ function PdfContinuousCanvas({
       cancelled = true;
       void loadingTask?.destroy();
     };
-  }, [url, onError]);
+  }, [url, onError, onDocumentReady]);
 
   useEffect(() => {
     if (!pdfDocument) return;
@@ -947,8 +952,10 @@ export function ReviewComposer({
       ? ""
       : startingArticle?.publisher ?? "",
   );
+  const [metadataBusy, setMetadataBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(true);
+  const [pdfPageCount, setPdfPageCount] = useState(0);
   const [pdfRenderAttempt, setPdfRenderAttempt] = useState(0);
   const [message, setMessage] = useState("");
   const readerFileInput = useRef<HTMLInputElement>(null);
@@ -973,6 +980,7 @@ export function ReviewComposer({
   const selectedHasPublisher = Boolean(
     selectedArticle && selectedArticle.publisher !== "机构待补充" && selectedArticle.publisher.toLocaleLowerCase() !== "arxiv",
   );
+  const hasReadingNote = Boolean(notePdfFile || selectedArticle?.ownReview?.noteFileName);
   const searchableTags = useMemo(
     () => ["全部", ...new Set(availableArticles.flatMap((article) => article.tags))],
     [availableArticles],
@@ -1001,6 +1009,9 @@ export function ReviewComposer({
   const handlePdfZoom = useCallback((delta: number) => {
     setZoom((value) => Math.max(60, Math.min(200, value + delta)));
   }, []);
+  const handlePdfDocumentReady = useCallback((pageCount: number) => {
+    setPdfPageCount(pageCount);
+  }, []);
 
   function setAnnotationVisibility(enabled: boolean) {
     setAnnotationsEnabled(enabled);
@@ -1011,7 +1022,7 @@ export function ReviewComposer({
   }
 
   function navigateToPage(nextPage: number) {
-    const normalized = Math.max(1, Math.floor(nextPage) || 1);
+    const normalized = Math.min(pdfPageCount || Number.MAX_SAFE_INTEGER, Math.max(1, Math.floor(nextPage) || 1));
     setPage(normalized);
     window.requestAnimationFrame(() => {
       document.querySelector<HTMLElement>(`.continuous-page[data-page="${normalized}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1079,6 +1090,10 @@ export function ReviewComposer({
   }, [articleId, articlePdfReady, viewingPartnerNote]);
 
   useEffect(() => {
+    setPdfPageCount(0);
+  }, [activeReaderPdfUrl]);
+
+  useEffect(() => {
     if (focusMode && articleId) void cachePdfLocally(articleId);
   }, [focusMode, articleId]);
 
@@ -1110,6 +1125,7 @@ export function ReviewComposer({
     setActiveAnnotationId(null);
     setPartnerNoteReviewId(null);
     setPartnerNoteError(false);
+    setMessage("");
     if (notePdfPreviewRef.current) URL.revokeObjectURL(notePdfPreviewRef.current);
     notePdfPreviewRef.current = "";
     setNotePdfFile(null);
@@ -1294,26 +1310,11 @@ export function ReviewComposer({
     setPdfLoading(true);
   }, [partnerNoteReviewId]);
 
-  async function saveReadingBookmark() {
-    if (!selectedArticle) return;
-    try {
-      await responseJson(await fetch(`/api/articles/${selectedArticle.id}/progress`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ page }),
-      }));
-      setAvailableArticles((current) => current.map((article) =>
-        article.id === selectedArticle.id ? { ...article, lastReadPage: page } : article
-      ));
-      setMessage(`已标记读到第 ${page} 页，下次打开会从这里继续。`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "阅读书签保存失败");
-    }
-  }
-
   async function addTag() {
     if (!selectedArticle || !tagDraft.trim()) return;
     const nextTags = normalizeTags([...selectedArticle.tags, tagDraft]);
+    setMetadataBusy(true);
+    setMessage("");
     try {
       await responseJson(await fetch(`/api/articles/${selectedArticle.id}/tags`, {
         method: "PATCH",
@@ -1324,8 +1325,11 @@ export function ReviewComposer({
         article.id === selectedArticle.id ? { ...article, tags: nextTags } : article
       ));
       setTagDraft("");
+      setMessage("标签已添加。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "标签保存失败");
+    } finally {
+      setMetadataBusy(false);
     }
   }
 
@@ -1336,6 +1340,8 @@ export function ReviewComposer({
       setMessage("请填写真实发布机构，不能使用 arXiv 作为发布机构。");
       return;
     }
+    setMetadataBusy(true);
+    setMessage("");
     try {
       await responseJson(await fetch(`/api/articles/${selectedArticle.id}/tags`, {
         method: "PATCH",
@@ -1348,6 +1354,8 @@ export function ReviewComposer({
       setMessage(`发布机构已更新为 ${publisher}。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "发布机构保存失败");
+    } finally {
+      setMetadataBusy(false);
     }
   }
 
@@ -1745,7 +1753,7 @@ export function ReviewComposer({
                     placeholder="添加标签"
                     value={tagDraft}
                   />
-                  <button disabled={!tagDraft.trim()} onClick={() => void addTag()} type="button">添加</button>
+                  <button disabled={metadataBusy || !tagDraft.trim()} onClick={() => void addTag()} type="button">{metadataBusy ? "保存中" : "添加"}</button>
                 </div>
               </div>
               <label className="reader-publisher-editor">
@@ -1761,8 +1769,8 @@ export function ReviewComposer({
                   }}
                   value={publisherDraft}
                 />
-                <button disabled={!publisherDraft.trim()} onClick={() => void savePublisher()} type="button">
-                  {selectedHasPublisher ? "保存修改" : "添加并保存"}
+                <button disabled={metadataBusy || !publisherDraft.trim()} onClick={() => void savePublisher()} type="button">
+                  {metadataBusy ? "保存中" : selectedHasPublisher ? "保存修改" : "添加并保存"}
                 </button>
               </label>
             </div>
@@ -1795,8 +1803,8 @@ export function ReviewComposer({
                   </div>
                   <div className="reader-page-tools">
                     <button disabled={page === 1} onClick={() => navigateToPage(page - 1)} type="button">←</button>
-                    <label>第 <input min="1" onChange={(event) => navigateToPage(Number(event.target.value))} type="number" value={page} /> 页</label>
-                    <button onClick={() => navigateToPage(page + 1)} type="button">→</button>
+                    <label>第 <input max={pdfPageCount || undefined} min="1" onChange={(event) => navigateToPage(Number(event.target.value))} type="number" value={page} /> / {pdfPageCount || "…"} 页</label>
+                    <button disabled={pdfPageCount > 0 && page >= pdfPageCount} onClick={() => navigateToPage(page + 1)} type="button">→</button>
                   </div>
                   <div className="reader-zoom-tools">
                     <button onClick={() => setZoom((value) => Math.max(60, value - 10))} type="button">−</button>
@@ -1914,6 +1922,7 @@ export function ReviewComposer({
                       initialPage={page}
                       key={`${articleId}-${partnerNoteReviewId ?? "article"}-${pdfRenderAttempt}-continuous`}
                       onError={handlePdfPageError}
+                      onDocumentReady={handlePdfDocumentReady}
                       onLoad={handlePdfPageLoad}
                       onTextSelect={useSelectedPdfText}
                       onVisiblePage={setPage}
@@ -1925,19 +1934,6 @@ export function ReviewComposer({
                     </PdfContinuousCanvas>
                   )}
                 </div>
-                {!viewingPartnerNote && (
-                  <div className="reading-bookmark">
-                    <div>
-                      <span>阅读书签</span>
-                      <strong>
-                        {selectedArticle.lastReadPage
-                          ? `上次读到 P.${selectedArticle.lastReadPage}`
-                          : "还没有保存阅读位置"}
-                      </strong>
-                    </div>
-                    <button onClick={saveReadingBookmark} type="button">◉ 标记读到第 {page} 页</button>
-                  </div>
-                )}
               </>
             ) : (
               <div className="article-reading-preview">
@@ -1949,7 +1945,7 @@ export function ReviewComposer({
                   <header>
                     <div>
                       <span>伙伴评论</span>
-                      <strong>{communityReviews.length} 条评论 · {communityAnnotations.length} 条逐页批注</strong>
+                      <strong>{communityReviews.length} 条评论</strong>
                     </div>
                     <button onClick={beginReading} type="button">
                       {selectedArticle.lastReadPage ? `从 P.${selectedArticle.lastReadPage} 继续阅读` : "开始阅读"}
@@ -2207,7 +2203,12 @@ export function ReviewComposer({
             />
             <small>{content.length} 字</small>
           </label>
-          <button disabled={busy || articleId === 0 || rating === null || !content.trim() || (!notePdfFile && !selectedArticle?.ownReview?.noteFileName)} type="submit">
+          <div className="publish-readiness" aria-label="发布前检查">
+            <span className={rating !== null ? "ready" : ""}>{rating !== null ? "✓" : "1"} 推荐等级</span>
+            <span className={hasReadingNote ? "ready" : ""}>{hasReadingNote ? "✓" : "2"} 读书笔记 PDF</span>
+            <span className={content.trim() ? "ready" : ""}>{content.trim() ? "✓" : "3"} 评论</span>
+          </div>
+          <button disabled={busy || articleId === 0 || rating === null || !content.trim() || !hasReadingNote} type="submit">
             {busy
               ? "正在保存…"
               : selectedArticle?.ownReview

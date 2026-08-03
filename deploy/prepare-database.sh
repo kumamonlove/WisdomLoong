@@ -32,3 +32,21 @@ sudo -u postgres psql \
   --dbname="${database_name}" \
   --set=ON_ERROR_STOP=1 \
   --file=/tmp/schema.sql
+
+sudo -u postgres psql \
+  --dbname="${database_name}" \
+  --tuples-only \
+  --no-align \
+  --command="SELECT FORMAT(
+    'User data summary: users=%s reviews=%s annotations=%s note_pdfs=%s attachments=%s likes=%s sessions=%s reading_list=%s progress=%s reads=%s',
+    (SELECT COUNT(*) FROM users),
+    (SELECT COUNT(*) FROM reviews),
+    (SELECT COUNT(*) FROM review_annotations),
+    (SELECT COUNT(*) FROM reading_note_pdfs),
+    (SELECT COUNT(*) FROM review_attachments),
+    (SELECT COUNT(*) FROM review_likes),
+    (SELECT COUNT(*) FROM sessions),
+    (SELECT COUNT(*) FROM reading_list),
+    (SELECT COUNT(*) FROM reading_progress),
+    (SELECT COUNT(*) FROM article_reads)
+  )"

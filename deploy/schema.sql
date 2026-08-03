@@ -234,3 +234,32 @@ DELETE FROM review_likes
 WHERE NOT EXISTS (
   SELECT 1 FROM reading_note_pdfs WHERE reading_note_pdfs.review_id = review_likes.review_id
 );
+
+DO $$
+DECLARE
+  reset_applied BOOLEAN := FALSE;
+  users_before INTEGER := 0;
+  reviews_before INTEGER := 0;
+  notes_before INTEGER := 0;
+BEGIN
+  INSERT INTO app_migrations (migration_key)
+  VALUES ('2026-08-03-formal-launch-user-data-reset')
+  ON CONFLICT (migration_key) DO NOTHING
+  RETURNING TRUE INTO reset_applied;
+
+  IF reset_applied THEN
+    SELECT COUNT(*) INTO users_before FROM users;
+    SELECT COUNT(*) INTO reviews_before FROM reviews;
+    SELECT COUNT(*) INTO notes_before FROM reading_note_pdfs;
+
+    DELETE FROM users;
+
+    ALTER TABLE users ALTER COLUMN id RESTART WITH 1;
+    ALTER TABLE reviews ALTER COLUMN id RESTART WITH 1;
+    ALTER TABLE review_attachments ALTER COLUMN id RESTART WITH 1;
+    ALTER TABLE review_annotations ALTER COLUMN id RESTART WITH 1;
+
+    RAISE NOTICE 'Formal launch reset removed users=%, reviews=%, reading_note_pdfs=%',
+      users_before, reviews_before, notes_before;
+  END IF;
+END $$;
