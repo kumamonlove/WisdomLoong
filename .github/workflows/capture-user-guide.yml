@@ -37,7 +37,7 @@ jobs:
         run: |
           mkdir -p guide-screenshots
           node <<'NODE'
-          const { chromium } = require('playwright-core');
+          const { chromium } = await import('playwright-core');
 
           const baseUrl = 'https://wisdomloong.com';
           const browser = await chromium.launch({
