@@ -17,7 +17,11 @@ jobs:
           node-version: 22
 
       - name: Install browser driver
-        run: npm install --no-save --package-lock=false playwright-core@1.55.0
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+          fc-cache -f
+          npm install --no-save --package-lock=false playwright-core@1.55.0
 
       - name: Configure cleanup access
         env:
@@ -51,7 +55,21 @@ jobs:
             deviceScaleFactor: 1,
           });
           const page = await context.newPage();
+          const useReadableGuideName = async () => {
+            await page.evaluate((username) => {
+              const replacement = '手册演示账号';
+              const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+              let node;
+              while ((node = walker.nextNode())) {
+                if (node.nodeValue?.includes(username)) node.nodeValue = node.nodeValue.replaceAll(username, replacement);
+              }
+              document.querySelectorAll('input').forEach((input) => {
+                if (input.value.includes(username)) input.value = input.value.replaceAll(username, replacement);
+              });
+            }, process.env.GUIDE_USERNAME);
+          };
           const shot = async (name) => {
+            if (!name.startsWith('01-') && !name.startsWith('02-')) await useReadableGuideName();
             await page.waitForTimeout(700);
             await page.screenshot({ path: `guide-screenshots/${name}.png`, fullPage: false });
           };
@@ -85,7 +103,11 @@ jobs:
           if (!readerHref) throw new Error('No article was available for the reader screenshots');
           await page.goto(`${baseUrl}${readerHref}`, { waitUntil: 'domcontentloaded' });
           await page.waitForSelector('.reader-workspace.focus-mode');
-          await page.waitForTimeout(5000);
+          await page.waitForFunction(() => {
+            const canvas = document.querySelector('.pdf-page-canvas canvas');
+            return canvas instanceof HTMLCanvasElement && canvas.width > 0 && canvas.height > 0;
+          }, { timeout: 45000 });
+          await page.waitForTimeout(1000);
           await shot('06-reader-annotations');
 
           const translationTab = page.locator('.workspace-tabs button').filter({ hasText: '翻译' }).first();
