@@ -55,6 +55,10 @@ jobs:
             deviceScaleFactor: 1,
           });
           const page = await context.newPage();
+          page.on('response', (response) => {
+            if (response.status() >= 500) console.error(`HTTP_${response.status()} ${response.url()}`);
+          });
+          page.on('pageerror', (error) => console.error(`PAGE_ERROR ${error.message}`));
           const useReadableGuideName = async () => {
             await page.evaluate((username) => {
               const replacement = '手册演示账号';
@@ -103,6 +107,22 @@ jobs:
           await page.waitForSelector('.import-section');
           await shot('05-reading-list');
 
+          for (let attempt = 1; attempt <= 12; attempt += 1) {
+            await Promise.all([
+              page.waitForURL(`${baseUrl}/categories`, { timeout: 30000 }),
+              page.getByRole('link', { name: '知识分类' }).click(),
+            ]);
+            await page.waitForSelector('h1');
+            if ((await page.locator('body').innerText()).includes('This page couldn’t load')) {
+              throw new Error(`Navigation returned the global error page on attempt ${attempt}`);
+            }
+            await Promise.all([
+              page.waitForURL(`${baseUrl}/reading-list`, { timeout: 30000 }),
+              page.getByRole('link', { name: '待读列表' }).click(),
+            ]);
+            await page.waitForSelector('.import-section');
+          }
+
           if (!readerHref) throw new Error('No article was available for the reader screenshots');
           await page.goto(`${baseUrl}${readerHref}`, { waitUntil: 'domcontentloaded' });
           await page.waitForSelector('.reader-workspace.focus-mode');
@@ -137,6 +157,15 @@ jobs:
         run: |
           ssh "${ALIYUN_USER}@${ALIYUN_HOST}" \
             "sudo -u postgres psql --dbname=wisdomloong --set=ON_ERROR_STOP=1 --command=\"DELETE FROM users WHERE username_key = '${GUIDE_USERNAME}';\""
+
+      - name: Show recent production errors
+        if: always()
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
+        run: |
+          ssh "${ALIYUN_USER}@${ALIYUN_HOST}" \
+            "sudo journalctl -u wisdomloong --since '30 minutes ago' --priority=warning --no-pager -n 300 || true"
 
       - name: Upload screenshots
         if: always()
