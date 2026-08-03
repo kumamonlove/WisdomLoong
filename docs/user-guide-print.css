@@ -1,0 +1,86 @@
+@page {
+  size: A4;
+  margin: 15mm 14mm 17mm;
+}
+
+html {
+  color: #181816;
+  background: #fff;
+  font-family: "Noto Sans CJK SC", "Noto Sans CJK JP", "Microsoft YaHei", sans-serif;
+  font-size: 11pt;
+  line-height: 1.72;
+}
+
+body {
+  max-width: none;
+  margin: 0;
+}
+
+h1 {
+  margin: 0 0 8mm;
+  padding-bottom: 5mm;
+  border-bottom: 2px solid #181816;
+  font-size: 25pt;
+  line-height: 1.25;
+}
+
+h2 {
+  margin: 10mm 0 4mm;
+  padding-bottom: 2mm;
+  border-bottom: 1px solid #d7d3c8;
+  font-size: 17pt;
+  line-height: 1.35;
+  break-after: avoid;
+}
+
+h3 {
+  margin: 6mm 0 2mm;
+  font-size: 13pt;
+  break-after: avoid;
+}
+
+p,
+ul,
+ol,
+blockquote {
+  margin: 0 0 3.5mm;
+}
+
+li {
+  margin-bottom: 1.4mm;
+}
+
+blockquote {
+  padding: 3mm 4mm;
+  color: #4f4d47;
+  border-left: 3px solid #181816;
+  background: #f5f3ec;
+}
+
+code {
+  padding: 0.2em 0.35em;
+  border-radius: 3px;
+  background: #f0eee7;
+  font-family: ui-monospace, monospace;
+  font-size: 0.92em;
+}
+
+img {
+  width: 100%;
+  max-height: 172mm;
+  margin: 4mm auto 7mm;
+  display: block;
+  border: 1px solid #d7d3c8;
+  border-radius: 3mm;
+  object-fit: contain;
+  break-inside: avoid;
+}
+
+a {
+  color: #1f6b50;
+  text-decoration: none;
+}
+
+.page-break {
+  break-after: page;
+}
