@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -80,8 +80,23 @@ async function translate(text) {
 async function psql(command, variables = {}) {
   const args = ["-u", "postgres", "psql", "--dbname=wisdomloong", "--tuples-only", "--no-align", "--set=ON_ERROR_STOP=1"];
   for (const [key, value] of Object.entries(variables)) args.push(`--set=${key}=${value}`);
-  args.push("--command", command);
-  return (await execFileAsync("sudo", args, { maxBuffer: 4 * 1024 * 1024 })).stdout.trim();
+  args.push("--file=-");
+
+  return await new Promise((resolve, reject) => {
+    const child = spawn("sudo", args, { stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(stderr.trim() || `psql exited with code ${code}`));
+    });
+    child.stdin.end(command);
+  });
 }
 
 async function missingArticles() {
