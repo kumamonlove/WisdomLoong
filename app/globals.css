@@ -1017,12 +1017,47 @@ select {
   transition: transform 160ms ease, background 160ms ease;
 }
 
-.mark-read-button:hover,
-.mark-read-button.done {
+.mark-read-button:hover {
   color: var(--white);
   border-color: var(--ink);
   background: var(--ink);
   transform: translateY(-1px);
+}
+
+.mark-read-button.done {
+  color: #575a55;
+  border-color: #b8bbb5;
+  background: rgba(255, 255, 255, .68);
+  box-shadow: none;
+}
+
+.mark-read-button.done:hover {
+  color: var(--ink);
+  border-color: #8b8f88;
+  background: var(--white);
+}
+
+.article-card.is-read {
+  color: #686b66;
+  border-color: #d2d4cf;
+  background: #edeeeb;
+  box-shadow: none;
+  opacity: .78;
+}
+
+.article-card.is-read:hover {
+  opacity: .94;
+}
+
+.article-card.is-read .tag,
+.article-card.is-read .recommendation-hooks span,
+.article-card.is-read .card-metadata-editor > div {
+  border-color: #d0d2cd;
+  background: rgba(255, 255, 255, .48);
+}
+
+.article-card.is-read .article-link {
+  color: #5e625c;
 }
 
 .empty {

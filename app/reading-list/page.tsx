@@ -6,6 +6,8 @@ import { getReadingList } from "@/lib/knowledge";
 export default async function ReadingListPage() {
   const user = await requireUser();
   const articles = await getReadingList(user.id);
+  const unreadCount = articles.filter((article) => !article.isRead).length;
+  const readCount = articles.length - unreadCount;
 
   return (
     <KnowledgePage
@@ -26,7 +28,7 @@ export default async function ReadingListPage() {
       <section className="list">
         <div className="list-title">
           <h2>我的待读</h2>
-          <span>{articles.length} 篇</span>
+          <span>{unreadCount} 篇未读{readCount > 0 ? ` · ${readCount} 篇已读` : ""}</span>
         </div>
         <ArticleGrid
           articles={articles}

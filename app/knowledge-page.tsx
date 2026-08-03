@@ -33,7 +33,7 @@ export function ArticleGrid({
     <div className="article-grid">
       {articles.map((article) => (
         <article
-          className={`article-card${article.mustRead || article.recommendationSignals?.mustReadCount ? " must-read-card" : ""}`}
+          className={`article-card${article.mustRead || article.recommendationSignals?.mustReadCount ? " must-read-card" : ""}${showReadAction && article.isRead ? " is-read" : ""}`}
           key={article.id}
         >
           <div className="article-card-topline">
@@ -173,9 +173,9 @@ export function ArticleGrid({
               className="article-link"
               href={`/reviews/new?article=${article.id}`}
             >
-              开始阅读 <span aria-hidden="true">→</span>
+              {showReadAction && article.isRead ? "重新阅读" : "开始阅读"} <span aria-hidden="true">→</span>
             </a>
-            {showReadAction && <MarkReadButton articleId={article.id} />}
+            {showReadAction && <MarkReadButton articleId={article.id} initialRead={article.isRead} />}
           </div>
         </article>
       ))}

@@ -16,6 +16,7 @@ export {
 
 export type ArticleCardData = {
   id: number;
+  isRead?: boolean;
   title: string;
   category: ArticleCategory;
   tags: string[];
@@ -326,6 +327,11 @@ export async function getReadingList(userId: number) {
        latest_review.content AS "reviewContent",
        latest_review.rating,
        EXISTS (
+         SELECT 1 FROM article_reads
+         WHERE article_reads.user_id = $1
+           AND article_reads.article_id = articles.id
+       ) AS "isRead",
+       EXISTS (
          SELECT 1 FROM reviews
          WHERE reviews.article_id = articles.id
            AND reviews.must_read
@@ -339,17 +345,7 @@ export async function getReadingList(userId: number) {
        LIMIT 1
      ) latest_review ON TRUE
      LEFT JOIN users latest_reviewer ON latest_reviewer.id = latest_review.user_id
-     WHERE NOT EXISTS (
-       SELECT 1 FROM article_reads
-       WHERE article_reads.user_id = $1
-         AND article_reads.article_id = articles.id
-     )
-       AND NOT EXISTS (
-         SELECT 1 FROM reviews
-         WHERE reviews.user_id = $1
-           AND reviews.article_id = articles.id
-       )
-     ORDER BY articles.created_at DESC`,
+     ORDER BY "isRead" ASC, articles.created_at DESC`,
     [userId],
   );
 

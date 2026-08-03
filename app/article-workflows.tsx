@@ -566,7 +566,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.16`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.17`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -852,7 +852,7 @@ function PdfContinuousCanvas({
       try {
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.16`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.17`;
         loadingTask = pdfjs.getDocument(url);
         const document = await loadingTask.promise;
         if (!cancelled) {
@@ -1493,7 +1493,7 @@ export function ReviewComposer({
       ));
       setMessage(selectedArticle?.ownReview
         ? "评论修改已保存。"
-        : "评论已发布。文章已从你的待读列表中移除。");
+        : "评论已发布。文章已标记为已读，并移到待读列表底部。");
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "评论保存失败");
