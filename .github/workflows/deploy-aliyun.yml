@@ -32,6 +32,7 @@ jobs:
           if [ -d public ]; then
             cp -r public .next/standalone/public
           fi
+          cp scripts/backfill-article-abstracts.mjs .next/standalone/
           find .next/standalone/.next/static -type f \
             \( -name '*.js' -o -name '*.css' -o -name '*.svg' -o -name '*.json' \) \
             -exec gzip -9 -k {} \;
@@ -88,6 +89,7 @@ jobs:
           scp "/tmp/wisdomloong-${GITHUB_SHA}.tgz" \
             /tmp/wisdomloong.env \
             deploy/nginx.conf \
+            deploy/backfill-abstracts.sh \
             deploy/prepare-database.sh \
             deploy/prewarm-pdfs.sh \
             deploy/schema.sql \
@@ -112,6 +114,8 @@ jobs:
               /srv/wisdomloong/pdf-cache
             chmod +x /tmp/prewarm-pdfs.sh
             PDF_CACHE_DIR=/srv/wisdomloong/pdf-cache /tmp/prewarm-pdfs.sh
+            chmod +x /tmp/backfill-abstracts.sh
+            sudo /tmp/backfill-abstracts.sh \"\$release\"
             sudo ln -sfn \"\$release\" /srv/wisdomloong/current
             sudo install -m 644 /tmp/wisdomloong.service /etc/systemd/system/wisdomloong.service
             sudo install -m 644 /tmp/nginx.conf /etc/nginx/sites-available/wisdomloong
