@@ -1,0 +1,125 @@
+name: Capture user guide screenshots
+
+on:
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser driver
+        run: npm install --no-save --package-lock=false playwright-core@1.55.0
+
+      - name: Configure cleanup access
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_SSH_KEY: ${{ secrets.ALIYUN_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$ALIYUN_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$ALIYUN_HOST" >> ~/.ssh/known_hosts
+
+      - name: Capture current production pages
+        env:
+          GUIDE_INVITE_CODE: ${{ secrets.REGISTRATION_INVITE_CODE }}
+          GUIDE_PASSWORD: Guide-${{ github.run_id }}-${{ github.run_attempt }}!
+          GUIDE_USERNAME: guide_demo_${{ github.run_id }}_${{ github.run_attempt }}
+        run: |
+          mkdir -p guide-screenshots
+          node <<'NODE'
+          const { chromium } = require('playwright-core');
+
+          const baseUrl = 'https://wisdomloong.com';
+          const browser = await chromium.launch({
+            executablePath: '/usr/bin/google-chrome',
+            headless: true,
+            args: ['--no-sandbox', '--disable-dev-shm-usage'],
+          });
+          const context = await browser.newContext({
+            locale: 'zh-CN',
+            viewport: { width: 1440, height: 1000 },
+            deviceScaleFactor: 1,
+          });
+          const page = await context.newPage();
+          const shot = async (name) => {
+            await page.waitForTimeout(700);
+            await page.screenshot({ path: `guide-screenshots/${name}.png`, fullPage: false });
+          };
+
+          await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
+          await shot('01-login');
+          await page.goto(`${baseUrl}/register`, { waitUntil: 'domcontentloaded' });
+          await shot('02-register');
+
+          await page.locator('input[name="username"]').fill(process.env.GUIDE_USERNAME);
+          await page.locator('input[name="password"]').fill(process.env.GUIDE_PASSWORD);
+          await page.locator('input[name="invitationCode"]').fill(process.env.GUIDE_INVITE_CODE);
+          await Promise.all([
+            page.waitForURL(`${baseUrl}/`, { timeout: 30000 }),
+            page.getByRole('button', { name: '创建账号' }).click(),
+          ]);
+
+          await page.goto(`${baseUrl}/categories`, { waitUntil: 'domcontentloaded' });
+          await page.waitForSelector('.article-card');
+          await shot('03-article-library');
+          const metadata = page.locator('.card-metadata-editor').first();
+          await metadata.locator('summary').click();
+          await metadata.scrollIntoViewIfNeeded();
+          await shot('04-edit-metadata');
+
+          await page.goto(`${baseUrl}/reading-list`, { waitUntil: 'domcontentloaded' });
+          await page.waitForSelector('.import-section');
+          await shot('05-reading-list');
+
+          await page.goto(`${baseUrl}/reviews/new`, { waitUntil: 'domcontentloaded' });
+          await page.waitForSelector('.reader-workspace');
+          const startReading = page.locator('.article-reading-preview button').filter({ hasText: /开始阅读|继续阅读/ }).first();
+          if (await startReading.count()) {
+            await startReading.click();
+            await page.waitForSelector('.reader-workspace.focus-mode');
+            await page.waitForTimeout(5000);
+          }
+          await shot('06-reader-annotations');
+
+          const translationTab = page.locator('.workspace-tabs button').filter({ hasText: '翻译' }).first();
+          if (await translationTab.count()) await translationTab.click();
+          await shot('07-translation');
+
+          const publishTab = page.locator('.workspace-tabs button').filter({ hasText: '发布' }).first();
+          if (await publishTab.count()) await publishTab.click();
+          await shot('08-publish');
+
+          await page.goto(`${baseUrl}/profile`, { waitUntil: 'domcontentloaded' });
+          await page.waitForSelector('.profile-stats');
+          await shot('09-profile');
+          await browser.close();
+          NODE
+
+      - name: Remove temporary guide account
+        if: always()
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
+          GUIDE_USERNAME: guide_demo_${{ github.run_id }}_${{ github.run_attempt }}
+        run: |
+          ssh "${ALIYUN_USER}@${ALIYUN_HOST}" \
+            "sudo -u postgres psql --dbname=wisdomloong --set=ON_ERROR_STOP=1 --command=\"DELETE FROM users WHERE username_key = '${GUIDE_USERNAME}';\""
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: user-guide-screenshots
+          path: guide-screenshots
+          if-no-files-found: error
+          retention-days: 7
