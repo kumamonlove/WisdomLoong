@@ -1,6 +1,6 @@
 import packageInfo from "@/package.json";
 import { SiteHeader, type PageName } from "@/app/site-header";
-import { ReviewLikeButton } from "@/app/review-actions";
+import { ReadingNoteLikeButton } from "@/app/review-actions";
 import { MarkReadButton } from "@/app/reading-actions";
 import type { ArticleCardData } from "@/lib/knowledge";
 
@@ -70,7 +70,7 @@ export function ArticleGrid({
                 <span><i aria-hidden="true">¶</i>包含 {article.recommendationSignals.longReviewCount} 篇深度解读</span>
               )}
               {article.recommendationSignals.likeCount > 0 && (
-                <span><i aria-hidden="true">♥</i>长评获得 {article.recommendationSignals.likeCount} 个赞同</span>
+                <span><i aria-hidden="true">♥</i>读书笔记获得 {article.recommendationSignals.likeCount} 个赞</span>
               )}
               {article.rating !== null && (
                 <span><i aria-hidden="true">★</i>团队评分 {article.rating}</span>
@@ -117,7 +117,7 @@ export function ArticleGrid({
                     {review.mustRead
                       ? <em className="must-read-badge">✦ 必读</em>
                       : <span>★ {review.rating}</span>}
-                    <small>{review.reviewType === "short" ? "短评" : `${review.content.length} 字长评`}</small>
+                    <small>{review.content.length} 字长评论</small>
                   </summary>
                   <div>
                     <p>{review.content}</p>
@@ -148,12 +148,15 @@ export function ArticleGrid({
                         ))}
                       </div>
                     )}
-                    {review.reviewType === "long" && (
-                      <ReviewLikeButton
+                    {review.noteFileName && (
+                      <div className="reading-note-actions">
+                        <a href={`/api/reading-notes/${review.id}/pdf`} target="_blank">打开读书笔记 PDF ↗</a>
+                        <ReadingNoteLikeButton
                         initialCount={review.likeCount}
                         initiallyLiked={review.likedByViewer}
                         reviewId={review.id}
-                      />
+                        />
+                      </div>
                     )}
                   </div>
                 </details>

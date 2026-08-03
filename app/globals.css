@@ -800,6 +800,26 @@ select {
   animation: heart-pop 500ms cubic-bezier(.2,.9,.3,1.4);
 }
 
+.reading-note-actions {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.reading-note-actions > a,
+.profile-note-link {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.reading-note-actions .review-like {
+  margin-top: 0;
+}
+
 @keyframes like-rise {
   to { transform: translateY(-12px); opacity: 0; }
 }
@@ -1932,6 +1952,23 @@ select {
   background: var(--ink);
 }
 
+.reader-toolbar .generate-note-button {
+  color: var(--white);
+  border-color: #2a8c6b;
+  background: #2a8c6b;
+}
+
+.reader-toolbar .annotation-toggle.enabled {
+  color: #1f6b50;
+  border-color: rgba(42, 140, 107, .45);
+  background: rgba(42, 140, 107, .1);
+}
+
+.reader-toolbar button:disabled {
+  cursor: default;
+  opacity: .42;
+}
+
 .reader-toolbar .active-focus {
   color: var(--white);
   border-color: var(--accent);
@@ -2002,7 +2039,7 @@ select {
   position: absolute;
   z-index: 1;
   inset: 0;
-  overflow: hidden;
+  overflow: visible;
   pointer-events: none;
 }
 
@@ -2036,8 +2073,81 @@ select {
 }
 
 .pdf-annotation-box.is-community {
-  border-color: rgba(39, 105, 145, 0.82);
-  background: rgba(39, 105, 145, 0.1);
+  padding: 0;
+  border-color: var(--annotation-color, #277da1);
+  background: color-mix(in srgb, var(--annotation-color, #277da1) 13%, transparent);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: box-shadow 140ms ease, filter 140ms ease, opacity 140ms ease;
+}
+
+.pdf-annotation-box.is-community:hover,
+.pdf-annotation-box.is-community:focus-visible,
+.pdf-annotation-box.is-community.is-active {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--annotation-color, #277da1) 24%, transparent);
+  filter: saturate(1.25);
+}
+
+.pdf-annotation-box.is-community.is-overlapping {
+  border-style: double;
+  border-width: 3px;
+}
+
+.pdf-annotation-box > span {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  color: var(--white);
+  border: 2px solid var(--white);
+  border-radius: 999px;
+  background: var(--annotation-color, var(--accent));
+  box-shadow: 0 2px 7px rgba(24, 24, 22, 0.24);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.pdf-annotation-tooltip {
+  position: absolute;
+  z-index: 60;
+  left: 0;
+  bottom: calc(100% + 12px);
+  width: min(240px, 42vw);
+  padding: 9px 10px;
+  display: none;
+  color: var(--white);
+  border-radius: 7px;
+  background: rgba(24, 24, 22, .93);
+  box-shadow: 0 5px 18px rgba(24, 24, 22, .25);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: left;
+  pointer-events: none;
+}
+
+.pdf-annotation-tooltip b {
+  margin-bottom: 3px;
+  display: block;
+  color: color-mix(in srgb, var(--annotation-color, #277da1) 70%, white);
+  font-size: 8px;
+}
+
+.pdf-annotation-box.is-community:hover .pdf-annotation-tooltip,
+.pdf-annotation-box.is-community:focus-visible .pdf-annotation-tooltip,
+.pdf-annotation-box.is-community.is-active .pdf-annotation-tooltip {
+  display: block;
+}
+
+.pdf-annotation-box.is-own > span {
+  --annotation-color: var(--accent);
 }
 
 .pdf-annotation-box.is-pending {
@@ -2268,9 +2378,19 @@ select {
 .current-page-discussion > article {
   margin-bottom: 8px;
   padding: 10px;
-  border: 1px solid rgba(214, 95, 64, 0.22);
+  border: 1px solid color-mix(in srgb, var(--annotation-color, var(--accent)) 34%, transparent);
+  border-left: 4px solid var(--annotation-color, var(--accent));
   border-radius: 8px;
   background: rgba(214, 95, 64, 0.045);
+  transition: background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.current-page-discussion > article.is-active,
+.current-page-discussion > article:focus-within {
+  outline: none;
+  background: color-mix(in srgb, var(--annotation-color, var(--accent)) 10%, var(--white));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--annotation-color, var(--accent)) 18%, transparent);
+  transform: translateX(-2px);
 }
 
 .current-page-discussion article header {
@@ -2289,6 +2409,24 @@ select {
   border-radius: 50%;
   background: var(--ink);
   font-size: 8px;
+}
+
+.current-page-discussion article header span {
+  background: var(--annotation-color, var(--ink));
+  font-weight: 800;
+}
+
+.current-page-discussion article header i {
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--annotation-color, var(--ink));
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 7px;
+  font-style: normal;
 }
 
 .current-page-discussion article header strong {
@@ -2315,6 +2453,17 @@ select {
   border-radius: 5px;
   background: var(--white);
   color: #5d5542;
+}
+
+.annotations-disabled {
+  width: 100%;
+  padding: 16px;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 10px;
 }
 
 .context-empty {
@@ -2411,6 +2560,41 @@ select {
 
 .community-overall-reviews .review-like {
   margin: 0 0 10px 26px;
+}
+
+.partner-note-actions {
+  margin: 0 0 10px 26px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.partner-note-actions > button:first-child {
+  padding: 6px 8px;
+  color: var(--accent);
+  border: 1px solid rgba(214, 95, 64, .28);
+  border-radius: 6px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.partner-note-actions .review-like {
+  margin: 0;
+  padding: 5px 8px;
+  font-size: 8px;
+}
+
+.partner-note-pdf {
+  width: calc(100% - 26px);
+  height: 430px;
+  margin: 0 0 12px 26px;
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
 }
 
 .community-images {
@@ -2831,6 +3015,102 @@ select {
   font-size: 17px;
 }
 
+.reading-note-builder {
+  padding: 12px;
+  border: 1px solid rgba(214, 95, 64, .24);
+  border-radius: 9px;
+  background: rgba(214, 95, 64, .045);
+}
+
+.reading-note-builder > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.reading-note-builder > header div {
+  display: grid;
+  gap: 3px;
+}
+
+.reading-note-builder > header strong {
+  font-size: 11px;
+}
+
+.reading-note-builder > header small,
+.reading-note-builder > p span {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.reading-note-builder > header > span {
+  padding: 3px 6px;
+  color: #1f6b50;
+  border-radius: 999px;
+  background: rgba(42, 140, 107, .1);
+  font-size: 8px;
+}
+
+.reading-note-methods {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.reading-note-methods button {
+  padding: 9px;
+  display: grid;
+  gap: 3px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  cursor: pointer;
+  text-align: left;
+}
+
+.reading-note-methods button:disabled {
+  cursor: default;
+  opacity: .45;
+}
+
+.reading-note-methods strong {
+  font-size: 9px;
+}
+
+.reading-note-methods small {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.reading-note-builder > p {
+  margin: 9px 0 0;
+  display: grid;
+  gap: 2px;
+  font-size: 9px;
+}
+
+.reading-note-builder > iframe {
+  width: 100%;
+  height: 330px;
+  margin-top: 9px;
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.reading-note-builder > a {
+  margin-top: 9px;
+  display: inline-block;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .review-type-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3099,6 +3379,69 @@ select {
 
 .profile-reviews {
   margin-top: 42px;
+}
+
+.username-settings {
+  margin-bottom: 28px;
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) minmax(180px, 280px) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.username-settings > div {
+  display: grid;
+  gap: 3px;
+}
+
+.username-settings > div span,
+.username-settings > div small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.username-settings input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+}
+
+.username-settings button {
+  padding: 10px 14px;
+  color: var(--white);
+  border: 0;
+  border-radius: 7px;
+  background: var(--ink);
+  cursor: pointer;
+}
+
+.username-settings button:disabled {
+  cursor: default;
+  opacity: .45;
+}
+
+.username-settings > p {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: var(--accent);
+  font-size: 9px;
+}
+
+@media (max-width: 760px) {
+  .username-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .username-settings > p {
+    grid-column: auto;
+  }
 }
 
 .profile-reviews > article {

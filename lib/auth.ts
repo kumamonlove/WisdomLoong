@@ -42,6 +42,31 @@ function validateCredentials(username: string, password: string) {
   return null;
 }
 
+export async function updateUsername(userId: number, rawUsername: string): Promise<AuthResult> {
+  const username = rawUsername.trim();
+  const validationError = validateCredentials(username, "session-authenticated");
+
+  if (validationError) return { ok: false, error: validationError };
+
+  try {
+    const result = await database.query<AuthUser>(
+      `UPDATE users
+       SET username = $1, username_key = $2
+       WHERE id = $3
+       RETURNING id, username`,
+      [username, usernameKey(username), userId],
+    );
+    return result.rows[0]
+      ? { ok: true, user: result.rows[0] }
+      : { ok: false, error: "用户不存在" };
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      return { ok: false, error: "该用户名已被使用" };
+    }
+    throw error;
+  }
+}
+
 function safeEqual(value: string, expected: string) {
   const valueBuffer = Buffer.from(value);
   const expectedBuffer = Buffer.from(expected);

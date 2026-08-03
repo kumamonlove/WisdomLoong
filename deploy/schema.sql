@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS reviews (
   rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
   content TEXT NOT NULL CHECK (CHAR_LENGTH(TRIM(content)) > 0),
   review_type VARCHAR(8) NOT NULL DEFAULT 'long'
-    CHECK (review_type IN ('short', 'long')),
+    CHECK (review_type = 'long'),
   must_read BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -126,24 +126,6 @@ CREATE TABLE IF NOT EXISTS app_migrations (
   migration_key TEXT PRIMARY KEY,
   applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-WITH apply_once AS (
-  INSERT INTO app_migrations (migration_key)
-  VALUES ('2026-07-31-lcx-siyang-latest-reviews-short')
-  ON CONFLICT (migration_key) DO NOTHING
-  RETURNING migration_key
-),
-latest_reviews AS (
-  SELECT DISTINCT ON (LOWER(users.username)) reviews.id
-  FROM reviews
-  INNER JOIN users ON users.id = reviews.user_id
-  WHERE LOWER(users.username) IN ('lcx', 'siyang')
-  ORDER BY LOWER(users.username), reviews.updated_at DESC, reviews.id DESC
-)
-UPDATE reviews
-SET review_type = 'short'
-WHERE reviews.id IN (SELECT id FROM latest_reviews)
-  AND EXISTS (SELECT 1 FROM apply_once);
 
 WITH apply_once AS (
   INSERT INTO app_migrations (migration_key)
@@ -200,6 +182,24 @@ ALTER TABLE review_annotations ADD COLUMN IF NOT EXISTS rect_height REAL;
 CREATE INDEX IF NOT EXISTS review_annotations_review_idx
   ON review_annotations(review_id, page_number, id);
 
+DROP TABLE IF EXISTS review_annotation_likes;
+
+CREATE TABLE IF NOT EXISTS reading_note_pdfs (
+  review_id INTEGER PRIMARY KEY REFERENCES reviews(id) ON DELETE CASCADE,
+  file_name VARCHAR(180) NOT NULL,
+  source VARCHAR(12) NOT NULL CHECK (source IN ('generated', 'uploaded')),
+  pdf_data BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS reading_note_pdfs_updated_idx
+  ON reading_note_pdfs(updated_at DESC);
+
+UPDATE reviews SET review_type = 'long' WHERE review_type <> 'long';
+ALTER TABLE reviews DROP CONSTRAINT IF EXISTS reviews_review_type_check;
+ALTER TABLE reviews ADD CONSTRAINT reviews_review_type_check CHECK (review_type = 'long');
+
 CREATE TABLE IF NOT EXISTS review_likes (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
@@ -209,3 +209,8 @@ CREATE TABLE IF NOT EXISTS review_likes (
 
 CREATE INDEX IF NOT EXISTS review_likes_review_idx
   ON review_likes(review_id, created_at DESC);
+
+DELETE FROM review_likes
+WHERE NOT EXISTS (
+  SELECT 1 FROM reading_note_pdfs WHERE reading_note_pdfs.review_id = review_likes.review_id
+);

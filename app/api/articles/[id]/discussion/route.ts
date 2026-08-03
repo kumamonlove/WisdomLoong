@@ -7,10 +7,12 @@ type DiscussionReview = {
   author: string;
   content: string;
   rating: number;
-  reviewType: "short" | "long";
+  reviewType: "long";
   mustRead: boolean;
   likeCount: number;
   likedByViewer: boolean;
+  noteFileName: string | null;
+  noteSource: "generated" | "uploaded" | null;
   updatedAt: string;
 };
 
@@ -47,12 +49,15 @@ export async function GET(
          reviews.must_read AS "mustRead",
          COUNT(review_likes.user_id)::int AS "likeCount",
          BOOL_OR(review_likes.user_id = $2) AS "likedByViewer",
+         reading_note_pdfs.file_name AS "noteFileName",
+         reading_note_pdfs.source AS "noteSource",
          reviews.updated_at::text AS "updatedAt"
        FROM reviews
        INNER JOIN users ON users.id = reviews.user_id
        LEFT JOIN review_likes ON review_likes.review_id = reviews.id
+       LEFT JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
        WHERE reviews.article_id = $1 AND reviews.user_id <> $2
-       GROUP BY reviews.id, users.username
+       GROUP BY reviews.id, users.username, reading_note_pdfs.file_name, reading_note_pdfs.source
        ORDER BY reviews.must_read DESC, reviews.review_type DESC,
                 COUNT(review_likes.user_id) DESC, reviews.updated_at DESC`,
       [articleId, user.id],

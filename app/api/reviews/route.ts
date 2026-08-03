@@ -6,9 +6,8 @@ type ReviewBody = {
   articleId?: number;
   rating?: number;
   content?: string;
-  reviewType?: "short" | "long";
   mustRead?: boolean;
-  attachments?: { dataUrl?: string; note?: string }[];
+  notePdf?: { dataUrl?: string; fileName?: string; source?: "generated" | "uploaded" };
   annotations?: {
     page?: number;
     quote?: string;
@@ -28,7 +27,6 @@ export async function POST(request: Request) {
   const articleId = Number(body.articleId);
   const rating = Number(body.rating);
   const content = body.content?.trim();
-  const reviewType = body.reviewType === "short" ? "short" : "long";
   const mustRead = body.mustRead === true;
 
   if (!Number.isInteger(articleId) || !Number.isInteger(rating) || rating < 1 || rating > 5 || !content) {
@@ -37,27 +35,23 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if ((reviewType === "short" && content.length > 80) || (reviewType === "long" && content.length < 80)) {
-    return NextResponse.json(
-      { error: reviewType === "short" ? "短评不能超过 80 字" : "长评至少需要 80 字" },
-      { status: 400 },
-    );
+  if (content.length < 80) {
+    return NextResponse.json({ error: "长评论至少需要 80 字" }, { status: 400 });
   }
 
-  const attachments = Array.isArray(body.attachments) ? body.attachments.slice(0, 4) : [];
-  const parsedAttachments: { contentType: string; data: Buffer; note: string }[] = [];
-  for (const attachment of attachments) {
-    const match = attachment.dataUrl?.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
-    if (!match) continue;
-    const data = Buffer.from(match[2], "base64");
-    if (data.byteLength > 2_500_000) {
-      return NextResponse.json({ error: "单张截图不能超过 2.5 MB" }, { status: 400 });
+  let parsedNotePdf: { data: Buffer; fileName: string; source: "generated" | "uploaded" } | null = null;
+  if (body.notePdf?.dataUrl) {
+    const match = body.notePdf.dataUrl.match(/^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) return NextResponse.json({ error: "读书笔记必须是 PDF 文件" }, { status: 400 });
+    const data = Buffer.from(match[1], "base64");
+    if (data.byteLength > 30_000_000) {
+      return NextResponse.json({ error: "读书笔记 PDF 不能超过 30 MB" }, { status: 400 });
     }
-    parsedAttachments.push({
-      contentType: match[1],
+    parsedNotePdf = {
       data,
-      note: attachment.note?.trim().slice(0, 200) ?? "",
-    });
+      fileName: (body.notePdf.fileName?.trim() || "读书笔记.pdf").replace(/[\r\n\\/]/g, "_").slice(0, 180),
+      source: body.notePdf.source === "uploaded" ? "uploaded" : "generated",
+    };
   }
   const annotations = (Array.isArray(body.annotations) ? body.annotations : [])
     .slice(0, 50)
@@ -99,23 +93,33 @@ export async function POST(request: Request) {
          must_read = EXCLUDED.must_read,
          updated_at = NOW()
        RETURNING id`,
-      [user.id, articleId, rating, content, reviewType, mustRead],
+      [user.id, articleId, rating, content, "long", mustRead],
     );
     if (result.rowCount === 0) {
       await client.query("ROLLBACK");
       return NextResponse.json({ error: "没有找到这篇文章" }, { status: 404 });
     }
     const reviewId = result.rows[0].id;
-    const attachmentCount = await client.query<{ count: number }>(
-      "SELECT COUNT(*)::int AS count FROM review_attachments WHERE review_id = $1",
-      [reviewId],
-    );
-    const availableAttachmentSlots = Math.max(0, 4 - (attachmentCount.rows[0]?.count ?? 0));
-    for (const attachment of parsedAttachments.slice(0, availableAttachmentSlots)) {
+    if (!parsedNotePdf) {
+      const existingNote = await client.query("SELECT 1 FROM reading_note_pdfs WHERE review_id = $1", [reviewId]);
+      if (existingNote.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: "请生成读书笔记 PDF，或上传自己的 PDF" },
+          { status: 400 },
+        );
+      }
+    }
+    if (parsedNotePdf) {
       await client.query(
-        `INSERT INTO review_attachments (review_id, content_type, image_data, note)
-         VALUES ($1, $2, $3, $4)`,
-        [reviewId, attachment.contentType, attachment.data, attachment.note],
+        `INSERT INTO reading_note_pdfs (review_id, file_name, source, pdf_data)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (review_id) DO UPDATE SET
+           file_name = EXCLUDED.file_name,
+           source = EXCLUDED.source,
+           pdf_data = EXCLUDED.pdf_data,
+           updated_at = NOW()`,
+        [reviewId, parsedNotePdf.fileName, parsedNotePdf.source, parsedNotePdf.data],
       );
     }
     await client.query("DELETE FROM review_annotations WHERE review_id = $1", [reviewId]);
@@ -150,7 +154,7 @@ export async function POST(request: Request) {
       [user.id, articleId],
     );
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, reviewId, hasNotePdf: true });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Review save failed", error);

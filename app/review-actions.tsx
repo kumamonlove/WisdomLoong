@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export function ReviewLikeButton({
+export function ReadingNoteLikeButton({
   reviewId,
   initialCount,
   initiallyLiked,
@@ -44,7 +44,7 @@ export function ReviewLikeButton({
 
   return (
     <button
-      aria-label={liked ? "取消赞同" : "赞同这篇长评"}
+      aria-label={liked ? "取消点赞读书笔记" : "点赞这份读书笔记"}
       aria-pressed={liked}
       className={`review-like${liked ? " liked" : ""}${celebrate ? " celebrate" : ""}`}
       disabled={busy}
@@ -52,7 +52,7 @@ export function ReviewLikeButton({
       type="button"
     >
       <span aria-hidden="true">♥</span>
-      <strong>{liked ? "已赞同" : "赞同长评"}</strong>
+      <strong>{liked ? "已点赞" : "点赞笔记"}</strong>
       <small>{count}</small>
       {celebrate && <i aria-hidden="true">＋1</i>}
     </button>

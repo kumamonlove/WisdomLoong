@@ -21,11 +21,12 @@ export default async function NewReviewPage({
       eyebrow="SHARE WHAT YOU LEARNED"
       page="review"
       title="阅读文章"
-      description="在专注阅读中摘取证据、整理思路，并留下值得分享的长评论"
+      description="在专注阅读中截取证据、整理批注，发布读书笔记 PDF 与长评论"
       username={user.username}
     >
       <ReviewComposer
         articles={articles}
+        username={user.username}
         initialArticleId={initialArticleId}
         startFocused={hasRequestedArticle}
         translationEnabled={Boolean(process.env.DASHSCOPE_API_KEY)}

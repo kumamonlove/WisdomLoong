@@ -10,10 +10,11 @@ import {
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type CSSProperties,
 } from "react";
 import { normalizeTags } from "@/lib/knowledge-types";
 import type { ReaderArticle } from "@/lib/knowledge";
-import { ReviewLikeButton } from "@/app/review-actions";
+import { ReadingNoteLikeButton } from "@/app/review-actions";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 type ArxivResult = {
@@ -498,12 +499,163 @@ type CommunityReview = {
   author: string;
   content: string;
   rating: number;
-  reviewType: "short" | "long";
+  reviewType: "long";
   mustRead: boolean;
   likeCount: number;
   likedByViewer: boolean;
+  noteFileName: string | null;
+  noteSource: "generated" | "uploaded" | null;
   attachments: { id: number; reviewId: number; note: string }[];
 };
+
+function fileDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("无法读取 PDF 文件"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function canvasLines(context: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  const lines: string[] = [];
+  for (const paragraph of text.split(/\n/)) {
+    let line = "";
+    for (const character of paragraph || " ") {
+      const next = line + character;
+      if (line && context.measureText(next).width > maxWidth) {
+        lines.push(line);
+        line = character;
+      } else {
+        line = next;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+async function generateReadingNotePdf({
+  pdfUrl,
+  title,
+  author,
+  notes,
+}: {
+  pdfUrl: string;
+  title: string;
+  author: string;
+  notes: ReadingNote[];
+}) {
+  const framedNotes = notes.filter((note) => note.rect);
+  if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
+  const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
+  const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.0`;
+  const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
+  const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
+  let outputPage = 0;
+
+  function addCanvas(canvas: HTMLCanvasElement) {
+    if (outputPage > 0) output.addPage([1240, 1754], "portrait");
+    output.addImage(canvas, "JPEG", 0, 0, 1240, 1754, undefined, "FAST");
+    outputPage += 1;
+  }
+
+  try {
+    for (const [index, note] of framedNotes.entries()) {
+      const pdfPage = await pdfDocument.getPage(note.page);
+      const viewport = pdfPage.getViewport({ scale: 2 });
+      const source = window.document.createElement("canvas");
+      source.width = Math.ceil(viewport.width);
+      source.height = Math.ceil(viewport.height);
+      const sourceContext = source.getContext("2d");
+      if (!sourceContext) throw new Error("无法创建截图画布");
+      await pdfPage.render({ canvas: source, canvasContext: sourceContext, viewport }).promise;
+      const rect = note.rect!;
+      const cropX = Math.max(0, Math.floor(source.width * rect.x / 100));
+      const cropY = Math.max(0, Math.floor(source.height * rect.y / 100));
+      const cropWidth = Math.max(1, Math.min(source.width - cropX, Math.ceil(source.width * rect.width / 100)));
+      const cropHeight = Math.max(1, Math.min(source.height - cropY, Math.ceil(source.height * rect.height / 100)));
+
+      const pageCanvas = window.document.createElement("canvas");
+      pageCanvas.width = 1240;
+      pageCanvas.height = 1754;
+      const context = pageCanvas.getContext("2d");
+      if (!context) throw new Error("无法排版读书笔记");
+      context.fillStyle = "#f8f6ef";
+      context.fillRect(0, 0, 1240, 1754);
+      context.fillStyle = "#d65f40";
+      context.fillRect(0, 0, 24, 1754);
+      context.fillStyle = "#181816";
+      context.font = "700 40px sans-serif";
+      const titleLines = canvasLines(context, title, 1080).slice(0, 3);
+      titleLines.forEach((line, lineIndex) => context.fillText(line, 80, 105 + lineIndex * 52));
+      let y = 105 + titleLines.length * 52 + 28;
+      context.fillStyle = "#766f62";
+      context.font = "24px sans-serif";
+      context.fillText(`${author} · 批注 ${index + 1} · 原文 P.${note.page}`, 80, y);
+      y += 45;
+
+      const imageMaxWidth = 1080;
+      const imageMaxHeight = 720;
+      const scale = Math.min(imageMaxWidth / cropWidth, imageMaxHeight / cropHeight, 1.8);
+      const imageWidth = cropWidth * scale;
+      const imageHeight = cropHeight * scale;
+      context.fillStyle = "#ffffff";
+      context.fillRect(70, y - 10, imageWidth + 20, imageHeight + 20);
+      context.drawImage(source, cropX, cropY, cropWidth, cropHeight, 80, y, imageWidth, imageHeight);
+      y += imageHeight + 58;
+      context.fillStyle = "#d65f40";
+      context.font = "700 22px sans-serif";
+      context.fillText("批注", 80, y);
+      y += 42;
+      context.fillStyle = "#181816";
+      context.font = "28px sans-serif";
+      const lines = canvasLines(context, note.content, 1080);
+      const firstPageCapacity = Math.max(1, Math.floor((1660 - y) / 43));
+      lines.slice(0, firstPageCapacity).forEach((line, lineIndex) => context.fillText(line, 80, y + lineIndex * 43));
+      addCanvas(pageCanvas);
+
+      let remaining = lines.slice(firstPageCapacity);
+      while (remaining.length > 0) {
+        const continuation = window.document.createElement("canvas");
+        continuation.width = 1240;
+        continuation.height = 1754;
+        const continuationContext = continuation.getContext("2d")!;
+        continuationContext.fillStyle = "#f8f6ef";
+        continuationContext.fillRect(0, 0, 1240, 1754);
+        continuationContext.fillStyle = "#d65f40";
+        continuationContext.fillRect(0, 0, 24, 1754);
+        continuationContext.fillStyle = "#181816";
+        continuationContext.font = "700 30px sans-serif";
+        continuationContext.fillText(`批注 ${index + 1}（续）`, 80, 100);
+        continuationContext.font = "28px sans-serif";
+        const chunk = remaining.slice(0, 35);
+        chunk.forEach((line, lineIndex) => continuationContext.fillText(line, 80, 165 + lineIndex * 43));
+        addCanvas(continuation);
+        remaining = remaining.slice(chunk.length);
+      }
+    }
+  } finally {
+    await pdfDocument.destroy();
+  }
+
+  const safeTitle = title.replace(/[\\/:*?"<>|]/g, "_").slice(0, 80);
+  return new File([output.output("blob")], `${safeTitle}-读书笔记.pdf`, { type: "application/pdf" });
+}
+
+const annotationColors = ["#277da1", "#7b5ea7", "#2a8c6b", "#c06a32", "#b14366", "#56733f"];
+
+function annotationColor(author: string) {
+  let hash = 0;
+  for (const character of author) hash = ((hash << 5) - hash + character.charCodeAt(0)) | 0;
+  return annotationColors[Math.abs(hash) % annotationColors.length];
+}
+
+function rectanglesOverlap(first: AnnotationRect, second: AnnotationRect) {
+  return first.x < second.x + second.width && first.x + first.width > second.x &&
+    first.y < second.y + second.height && first.y + first.height > second.y;
+}
 
 function arxivPageUrl(sourceUrl: string) {
   try {
@@ -546,7 +698,7 @@ function PdfPageCanvas({
           "pdfjs-dist/build/pdf.worker.min.mjs",
           import.meta.url,
         ).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.12.3`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.13.0`;
         const nextLoadingTask = pdfjs.getDocument(url);
         loadingTask = nextLoadingTask;
         const document = await nextLoadingTask.promise;
@@ -610,11 +762,13 @@ function PdfPageCanvas({
 
 export function ReviewComposer({
   articles,
+  username,
   initialArticleId,
   startFocused = false,
   translationEnabled = false,
 }: {
   articles: ReaderArticle[];
+  username: string;
   initialArticleId?: number;
   startFocused?: boolean;
   translationEnabled?: boolean;
@@ -629,7 +783,6 @@ export function ReviewComposer({
   const [articleTag, setArticleTag] = useState("全部");
   const [rating, setRating] = useState(startingReview?.rating ?? 4);
   const [mustRead, setMustRead] = useState(startingReview?.mustRead ?? false);
-  const [reviewType, setReviewType] = useState<"short" | "long">(startingReview?.reviewType ?? "long");
   const [content, setContent] = useState(startingReview?.content ?? "");
   const [page, setPage] = useState(
     articles.find((article) => article.id === initialArticleId)?.lastReadPage ??
@@ -642,6 +795,13 @@ export function ReviewComposer({
   const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
   const [communityAnnotations, setCommunityAnnotations] = useState<CommunityAnnotation[]>([]);
   const [discussionLoading, setDiscussionLoading] = useState(false);
+  const [annotationsEnabled, setAnnotationsEnabled] = useState(true);
+  const [activeAnnotationId, setActiveAnnotationId] = useState<number | null>(null);
+  const [notePdfFile, setNotePdfFile] = useState<File | null>(null);
+  const [notePdfSource, setNotePdfSource] = useState<"generated" | "uploaded">("generated");
+  const [notePdfPreviewUrl, setNotePdfPreviewUrl] = useState("");
+  const [generatingNotePdf, setGeneratingNotePdf] = useState(false);
+  const [partnerNoteReviewId, setPartnerNoteReviewId] = useState<number | null>(null);
   const [localCache, setLocalCache] = useState<{
     status: "idle" | "loading" | "ready" | "unsupported" | "error" | "timeout";
     progress: number;
@@ -664,6 +824,8 @@ export function ReviewComposer({
   const [pdfRenderAttempt, setPdfRenderAttempt] = useState(0);
   const [message, setMessage] = useState("");
   const readerFileInput = useRef<HTMLInputElement>(null);
+  const notePdfInput = useRef<HTMLInputElement>(null);
+  const notePdfPreviewRef = useRef("");
   const activeCacheArticle = useRef(0);
   const localPdfUrlRef = useRef("");
   const sessionPdfUrls = useRef(new Map<number, string>());
@@ -686,6 +848,27 @@ export function ReviewComposer({
       return terms.every((term) => haystack.includes(term));
     });
   }, [articleSearch, articleTag, availableArticles]);
+  const currentPageAnnotations = useMemo(
+    () => communityAnnotations.filter((item) => item.page === page),
+    [communityAnnotations, page],
+  );
+  const currentAnnotationLayout = useMemo(() => currentPageAnnotations.map((annotation, index, items) => ({
+    annotation,
+    number: index + 1,
+    overlapIndex: annotation.rect
+      ? items.slice(0, index).filter((item) => item.rect && rectanglesOverlap(annotation.rect!, item.rect)).length
+      : 0,
+  })), [currentPageAnnotations]);
+
+  function setAnnotationVisibility(enabled: boolean) {
+    setAnnotationsEnabled(enabled);
+    window.localStorage.setItem("wisdomloong-annotations-enabled", String(enabled));
+    if (!enabled) {
+      setDrawingAnnotation(false);
+      setAnnotationStart(null);
+      setActiveAnnotationId(null);
+    }
+  }
 
   useEffect(() => {
     if (!focusMode) return;
@@ -695,6 +878,14 @@ export function ReviewComposer({
     window.addEventListener("keydown", exitOnEscape);
     return () => window.removeEventListener("keydown", exitOnEscape);
   }, [focusMode]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("wisdomloong-annotations-enabled");
+    if (saved === "false") {
+      setAnnotationsEnabled(false);
+      setDrawingAnnotation(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (navigator.storage?.persist) void navigator.storage.persist();
@@ -743,6 +934,7 @@ export function ReviewComposer({
   useEffect(() => () => {
     sessionPdfUrls.current.forEach((url) => URL.revokeObjectURL(url));
     sessionPdfUrls.current.clear();
+    if (notePdfPreviewRef.current) URL.revokeObjectURL(notePdfPreviewRef.current);
   }, []);
 
   function selectArticle(id: number) {
@@ -752,12 +944,17 @@ export function ReviewComposer({
     setPage(article?.lastReadPage ?? 1);
     setRating(article?.ownReview?.rating ?? 4);
     setMustRead(article?.ownReview?.mustRead ?? false);
-    setReviewType(article?.ownReview?.reviewType ?? "long");
     setContent(article?.ownReview?.content ?? "");
     setNotes(article?.ownReview?.annotations ?? []);
     setDrawingAnnotation(false);
     setAnnotationStart(null);
     setAnnotationRect(null);
+    setActiveAnnotationId(null);
+    setPartnerNoteReviewId(null);
+    if (notePdfPreviewRef.current) URL.revokeObjectURL(notePdfPreviewRef.current);
+    notePdfPreviewRef.current = "";
+    setNotePdfFile(null);
+    setNotePdfPreviewUrl("");
     setContextTab("discussion");
     const sessionUrl = sessionPdfUrls.current.get(id) ?? "";
     localPdfUrlRef.current = sessionUrl;
@@ -983,11 +1180,57 @@ export function ReviewComposer({
     }
   }
 
+  function useNotePdf(file: File, source: "generated" | "uploaded") {
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setMessage("读书笔记必须是 PDF 文件。");
+      return;
+    }
+    if (file.size > 30_000_000) {
+      setMessage("读书笔记 PDF 不能超过 30 MB。");
+      return;
+    }
+    if (notePdfPreviewRef.current) URL.revokeObjectURL(notePdfPreviewRef.current);
+    const previewUrl = URL.createObjectURL(file);
+    notePdfPreviewRef.current = previewUrl;
+    setNotePdfFile(file);
+    setNotePdfSource(source);
+    setNotePdfPreviewUrl(previewUrl);
+    setMessage(source === "generated" ? "读书笔记 PDF 已生成，可预览后随长评论发布。" : "已选择个人读书笔记 PDF。");
+  }
+
+  async function buildNotePdf() {
+    if (!selectedArticle) return;
+    setGeneratingNotePdf(true);
+    setMessage("");
+    try {
+      const file = await generateReadingNotePdf({
+        pdfUrl: localPdfUrl,
+        title: selectedArticle.title,
+        author: username,
+        notes,
+      });
+      useNotePdf(file, "generated");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "读书笔记生成失败");
+    } finally {
+      setGeneratingNotePdf(false);
+    }
+  }
+
   async function submitReview(event: FormEvent) {
     event.preventDefault();
+    if (!notePdfFile && !selectedArticle?.ownReview?.noteFileName) {
+      setMessage("请先从画框批注生成读书笔记 PDF，或上传自己的 PDF。");
+      return;
+    }
     setBusy(true);
     setMessage("");
     try {
+      const notePdf = notePdfFile ? {
+        dataUrl: await fileDataUrl(notePdfFile),
+        fileName: notePdfFile.name,
+        source: notePdfSource,
+      } : undefined;
       const response = await fetch("/api/reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -995,13 +1238,22 @@ export function ReviewComposer({
           articleId,
           rating,
           mustRead,
-          reviewType,
           content: content.trim(),
           annotations: notes,
+          notePdf,
         }),
       });
-      await responseJson(response);
-      const updatedReview = { rating, mustRead, reviewType, content: content.trim(), annotations: notes };
+      const saved = await responseJson(response);
+      const updatedReview = {
+        id: Number(saved.reviewId) || selectedArticle?.ownReview?.id || 0,
+        rating,
+        mustRead,
+        reviewType: "long" as const,
+        content: content.trim(),
+        annotations: notes,
+        noteFileName: notePdfFile?.name ?? selectedArticle?.ownReview?.noteFileName ?? null,
+        noteSource: notePdfFile ? notePdfSource : selectedArticle?.ownReview?.noteSource ?? null,
+      };
       setAvailableArticles((current) => current.map((article) =>
         article.id === articleId ? { ...article, ownReview: updatedReview } : article
       ));
@@ -1135,8 +1387,27 @@ export function ReviewComposer({
                   <button onClick={() => readerFileInput.current?.click()} type="button">
                     ⇧ {localPdfName ? "更换本地 PDF" : "打开本地 PDF"}
                   </button>
-                  <button className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={startDrawingAnnotation} type="button">
+                  <button
+                    aria-pressed={annotationsEnabled}
+                    className={`annotation-toggle${annotationsEnabled ? " enabled" : ""}`}
+                    onClick={() => setAnnotationVisibility(!annotationsEnabled)}
+                    type="button"
+                  >
+                    批注 {annotationsEnabled ? "开" : "关"}
+                  </button>
+                  <button className="capture-button" disabled={!annotationsEnabled || !localPdfUrl || pdfLoading} onClick={startDrawingAnnotation} type="button">
                     ▣ 画框批注
+                  </button>
+                  <button
+                    className="generate-note-button"
+                    disabled={generatingNotePdf || notes.every((note) => !note.rect)}
+                    onClick={() => {
+                      setContextTab("review");
+                      void buildNotePdf();
+                    }}
+                    type="button"
+                  >
+                    {generatingNotePdf ? "生成中…" : "生成读书笔记"}
                   </button>
                 </div>
                 <input
@@ -1247,23 +1518,39 @@ export function ReviewComposer({
                         setMessage(`已框选第 ${page} 页，请在右侧填写批注并加入。`);
                       }}
                       >
-                      {communityAnnotations.filter((item) => item.page === page && item.rect).map((item) => (
-                        <span
-                          className="pdf-annotation-box is-community"
-                          key={`community-${item.id}`}
-                          style={{ left: `${item.rect!.x}%`, top: `${item.rect!.y}%`, width: `${item.rect!.width}%`, height: `${item.rect!.height}%` }}
-                          title={`${item.author}：${item.content}`}
-                        />
+                      {annotationsEnabled && currentAnnotationLayout.filter(({ annotation }) => annotation.rect).map(({ annotation, number, overlapIndex }) => (
+                        <button
+                          aria-label={`批注 ${number}，${annotation.author}：${annotation.content}`}
+                          className={`pdf-annotation-box is-community${activeAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
+                          key={`community-${annotation.id}`}
+                          onBlur={() => setActiveAnnotationId(null)}
+                          onFocus={() => setActiveAnnotationId(annotation.id)}
+                          onMouseEnter={() => setActiveAnnotationId(annotation.id)}
+                          onMouseLeave={() => setActiveAnnotationId(null)}
+                          style={{
+                            left: `${annotation.rect!.x}%`,
+                            top: `${annotation.rect!.y}%`,
+                            width: `${annotation.rect!.width}%`,
+                            height: `${annotation.rect!.height}%`,
+                            transform: `translate(${overlapIndex * 4}px, ${overlapIndex * 4}px)`,
+                            zIndex: activeAnnotationId === annotation.id ? 50 : 10 + overlapIndex,
+                            "--annotation-color": annotationColor(annotation.author),
+                          } as CSSProperties}
+                          type="button"
+                        >
+                          <span>{number}</span>
+                          <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}</strong>
+                        </button>
                       ))}
-                      {notes.filter((item) => item.page === page && item.rect).map((item, index) => (
+                      {annotationsEnabled && notes.filter((item) => item.page === page && item.rect).map((item, index) => (
                         <span
                           className="pdf-annotation-box is-own"
                           key={`own-${index}`}
                           style={{ left: `${item.rect!.x}%`, top: `${item.rect!.y}%`, width: `${item.rect!.width}%`, height: `${item.rect!.height}%` }}
                           title={`我的批注：${item.content}`}
-                        />
+                        ><span>我{index + 1}</span></span>
                       ))}
-                      {annotationRect && annotationPage === page && (
+                      {annotationsEnabled && annotationRect && annotationPage === page && (
                         <span
                           className="pdf-annotation-box is-pending"
                           style={{ left: `${annotationRect.x}%`, top: `${annotationRect.y}%`, width: `${annotationRect.width}%`, height: `${annotationRect.height}%` }}
@@ -1330,7 +1617,7 @@ export function ReviewComposer({
         </div>
         <div className="context-tabs">
           <button className={contextTab === "discussion" ? "selected" : ""} onClick={() => setContextTab("discussion")} type="button">
-            伙伴批注 <span>{communityAnnotations.length}</span>
+            伙伴批注 <span>{currentPageAnnotations.length}</span>
           </button>
           <button className={contextTab === "notes" ? "selected" : ""} onClick={() => setContextTab("notes")} type="button">
             我的笔记 <span>{notes.length}</span>
@@ -1344,30 +1631,34 @@ export function ReviewComposer({
             <p className="context-empty">正在加载伙伴观点…</p>
           ) : (
             <>
-              <div className="current-page-discussion">
-                <h3>第 {page} 页的批注</h3>
-                {communityAnnotations.filter((item) => item.page === page).map((annotation) => (
-                  <article key={annotation.id}>
-                    <header><span>{annotation.author.slice(0, 1).toUpperCase()}</span><strong>{annotation.author}</strong></header>
-                    {annotation.quote && <blockquote>{annotation.quote}</blockquote>}
-                    {annotation.translation && <p className="community-translation">{annotation.translation}</p>}
-                    <p>{annotation.rect ? "▣ " : ""}{annotation.content}</p>
-                  </article>
-                ))}
-                {communityAnnotations.every((item) => item.page !== page) && (
-                  <p className="context-empty">这一页还没有伙伴批注，你可以留下第一条。</p>
-                )}
-              </div>
-              {communityAnnotations.some((item) => item.page !== page) && (
-                <div className="other-page-discussion">
-                  <h3>其他页的批注</h3>
-                  {communityAnnotations.filter((item) => item.page !== page).map((annotation) => (
-                    <button key={annotation.id} onClick={() => setPage(annotation.page)} type="button">
-                      <strong>P.{annotation.page}</strong>
-                      <span><b>{annotation.author}</b>{annotation.rect ? "▣ " : ""}{annotation.content}</span>
-                    </button>
+              {annotationsEnabled ? (
+                <div className="current-page-discussion">
+                  <h3>第 {page} 页的批注</h3>
+                  {currentAnnotationLayout.map(({ annotation, number }) => (
+                    <article
+                      className={activeAnnotationId === annotation.id ? "is-active" : ""}
+                      key={annotation.id}
+                      onBlur={() => setActiveAnnotationId(null)}
+                      onFocus={() => setActiveAnnotationId(annotation.id)}
+                      onMouseEnter={() => setActiveAnnotationId(annotation.id)}
+                      onMouseLeave={() => setActiveAnnotationId(null)}
+                      style={{ "--annotation-color": annotationColor(annotation.author) } as CSSProperties}
+                      tabIndex={0}
+                    >
+                      <header><span>{number}</span><strong>{annotation.author}</strong><i>{annotation.author.slice(0, 1).toUpperCase()}</i></header>
+                      {annotation.quote && <blockquote>{annotation.quote}</blockquote>}
+                      {annotation.translation && <p className="community-translation">{annotation.translation}</p>}
+                      <p>{annotation.rect ? "▣ " : ""}{annotation.content}</p>
+                    </article>
                   ))}
+                  {currentPageAnnotations.length === 0 && (
+                    <p className="context-empty">这一页还没有伙伴批注，你可以留下第一条。</p>
+                  )}
                 </div>
+              ) : (
+                <button className="annotations-disabled" onClick={() => setAnnotationVisibility(true)} type="button">
+                  批注已关闭 · 点击开启
+                </button>
               )}
               <div className="community-overall-reviews">
                 <h3>成员整体评论</h3>
@@ -1379,7 +1670,7 @@ export function ReviewComposer({
                       <small>
                         {review.mustRead ? "✦ 必读" : `★ ${review.rating}`}
                         {" · "}
-                        {review.reviewType === "long" ? "长评" : "短评"}
+                        长评论
                       </small>
                     </summary>
                     <p>{review.content}</p>
@@ -1393,12 +1684,16 @@ export function ReviewComposer({
                         ))}
                       </div>
                     )}
-                    {review.reviewType === "long" && (
-                      <ReviewLikeButton
-                        initialCount={review.likeCount}
-                        initiallyLiked={review.likedByViewer}
-                        reviewId={review.id}
-                      />
+                    {review.noteFileName && (
+                      <div className="partner-note-actions">
+                        <button onClick={() => setPartnerNoteReviewId((value) => value === review.id ? null : review.id)} type="button">
+                          {partnerNoteReviewId === review.id ? "收起读书笔记 PDF" : "打开读书笔记 PDF"}
+                        </button>
+                        <ReadingNoteLikeButton initialCount={review.likeCount} initiallyLiked={review.likedByViewer} reviewId={review.id} />
+                      </div>
+                    )}
+                    {partnerNoteReviewId === review.id && review.noteFileName && (
+                      <iframe className="partner-note-pdf" src={`/api/reading-notes/${review.id}/pdf#toolbar=1`} title={`${review.author} 的读书笔记 PDF`} />
                     )}
                   </details>
                 ))}
@@ -1454,7 +1749,7 @@ export function ReviewComposer({
             value={noteDraft}
           />
           <footer>
-            <span>发布长评时可作为逐页批注分享</span>
+            <span>画框批注可生成带截图的读书笔记 PDF</span>
             <button
               disabled={!noteDraft.trim()}
               onClick={() => {
@@ -1491,15 +1786,7 @@ export function ReviewComposer({
         </div>
 
         <form className="review-form reader-review-form" hidden={contextTab !== "review"} onSubmit={submitReview}>
-          <h2>{selectedArticle?.ownReview ? "修改我的评论" : "留下评论"}</h2>
-          <div className="review-type-switch">
-            <button className={reviewType === "short" ? "selected" : ""} onClick={() => setReviewType("short")} type="button">
-              <strong>短评</strong><span>一句话判断</span>
-            </button>
-            <button className={reviewType === "long" ? "selected" : ""} onClick={() => setReviewType("long")} type="button">
-              <strong>长评</strong><span>完整解读</span>
-            </button>
-          </div>
+          <h2>{selectedArticle?.ownReview ? "修改读书笔记与长评论" : "发布读书笔记与长评论"}</h2>
           <div className={`star-rating rating-${rating}${mustRead ? " is-must-read" : ""}`}>
             <span>我的推荐等级</span>
             <div>
@@ -1531,26 +1818,60 @@ export function ReviewComposer({
             <div><strong>必读</strong><small>高于五星 · 向团队重点推荐</small></div>
             <em>五星之上</em>
           </label>
+          <section className="reading-note-builder">
+            <header>
+              <div><strong>读书笔记 PDF</strong><small>把画框截图与对应批注排版成 PDF，或上传自己的成稿</small></div>
+              {selectedArticle?.ownReview?.noteFileName && !notePdfFile && <span>已有笔记</span>}
+            </header>
+            <div className="reading-note-methods">
+              <button
+                disabled={generatingNotePdf || !localPdfUrl || notes.every((note) => !note.rect)}
+                onClick={() => void buildNotePdf()}
+                type="button"
+              >
+                <strong>{generatingNotePdf ? "正在生成…" : "从我的截图框生成"}</strong>
+                <small>{notes.filter((note) => note.rect).length} 个截图框可用</small>
+              </button>
+              <button onClick={() => notePdfInput.current?.click()} type="button">
+                <strong>上传我的 PDF</strong>
+                <small>最大 30 MB</small>
+              </button>
+            </div>
+            <input
+              accept="application/pdf,.pdf"
+              className="visually-hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) useNotePdf(file, "uploaded");
+              }}
+              ref={notePdfInput}
+              type="file"
+            />
+            {notePdfFile && <p><strong>{notePdfFile.name}</strong><span>{notePdfSource === "generated" ? "由截图框生成" : "个人上传"} · {(notePdfFile.size / 1024 / 1024).toFixed(1)} MB</span></p>}
+            {notePdfPreviewUrl && <iframe src={`${notePdfPreviewUrl}#toolbar=1`} title="待读书笔记 PDF 预览" />}
+            {!notePdfFile && selectedArticle?.ownReview?.noteFileName && (
+              <a href={`/api/reading-notes/${selectedArticle.ownReview.id}/pdf`} target="_blank">打开已发布的读书笔记 PDF ↗</a>
+            )}
+          </section>
           <label>
-            {reviewType === "short" ? "一句话短评" : "长评 / 解读"}
+            长评论 / 解读
             <textarea
-              maxLength={reviewType === "short" ? 80 : undefined}
-              minLength={reviewType === "long" ? 80 : 2}
+              minLength={80}
               onChange={(event) => setContent(event.target.value)}
-              placeholder={reviewType === "short" ? "例如：VLA 开山之作" : "梳理论文问题、方法、证据、局限，以及它为什么值得团队关注…"}
+              placeholder="梳理论文问题、方法、证据、局限，以及它为什么值得团队关注…"
               required
-              rows={reviewType === "short" ? 3 : 12}
+              rows={12}
               value={content}
             />
-            <small>{content.length}{reviewType === "short" ? " / 80 字" : " 字 · 长评至少 80 字"}</small>
+            <small>{content.length} 字 · 长评论至少 80 字</small>
           </label>
           {message && <p className="workflow-message" role="status">{message}</p>}
-          <button disabled={busy || articleId === 0} type="submit">
+          <button disabled={busy || articleId === 0 || content.trim().length < 80 || (!notePdfFile && !selectedArticle?.ownReview?.noteFileName)} type="submit">
             {busy
               ? "正在保存…"
               : selectedArticle?.ownReview
                 ? "保存修改"
-                : `发布${reviewType === "short" ? "短评" : "长评"}`}
+                : "发布读书笔记与长评论"}
           </button>
         </form>
       </aside>

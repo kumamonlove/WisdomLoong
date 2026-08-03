@@ -18,20 +18,22 @@ export async function POST(
     `INSERT INTO review_likes (user_id, review_id)
      SELECT $1, reviews.id
      FROM reviews
+     INNER JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
      WHERE reviews.id = $2
        AND reviews.user_id <> $1
-       AND reviews.review_type = 'long'
      ON CONFLICT (user_id, review_id) DO NOTHING
      RETURNING review_id`,
     [user.id, id],
   );
   if (result.rowCount === 0) {
     const review = await database.query(
-      "SELECT 1 FROM reviews WHERE id = $1 AND user_id <> $2 AND review_type = 'long'",
+      `SELECT 1 FROM reviews
+       INNER JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
+       WHERE reviews.id = $1 AND reviews.user_id <> $2`,
       [id, user.id],
     );
     if (review.rowCount === 0) {
-      return NextResponse.json({ error: "只能赞同他人的长评" }, { status: 400 });
+      return NextResponse.json({ error: "只能点赞他人的读书笔记 PDF" }, { status: 400 });
     }
   }
   const count = await database.query<{ count: number }>(

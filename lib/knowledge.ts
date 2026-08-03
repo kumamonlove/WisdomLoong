@@ -32,10 +32,11 @@ export type ArticleCardData = {
     author: string;
     content: string;
     rating: number;
-    reviewType: "short" | "long";
+    reviewType: "long";
     mustRead: boolean;
     likeCount: number;
     likedByViewer: boolean;
+    noteFileName: string | null;
     updatedAt: string;
     attachments: { id: number; note: string }[];
     annotations: {
@@ -67,10 +68,13 @@ export type ReaderArticle = {
   sourceUrl: string;
   lastReadPage: number | null;
   ownReview: {
+    id: number;
     rating: number;
     content: string;
-    reviewType: "short" | "long";
+    reviewType: "long";
     mustRead: boolean;
+    noteFileName: string | null;
+    noteSource: "generated" | "uploaded" | null;
     annotations: {
       page: number;
       quote: string;
@@ -145,6 +149,7 @@ export async function getRecommendedArticles(userId: number) {
              'mustRead', reviews.must_read,
              'likeCount', COALESCE(likes.like_count, 0),
              'likedByViewer', COALESCE(likes.liked_by_viewer, FALSE),
+             'noteFileName', reading_note_pdfs.file_name,
              'updatedAt', reviews.updated_at,
              'attachments', COALESCE(attachments.items, '[]'::json)
              ,'annotations', COALESCE(annotations.items, '[]'::json)
@@ -154,6 +159,7 @@ export async function getRecommendedArticles(userId: number) {
          ) AS reviews
        FROM reviews
        INNER JOIN users ON users.id = reviews.user_id
+       LEFT JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
        LEFT JOIN LATERAL (
          SELECT
            COUNT(*)::int AS like_count,
@@ -205,9 +211,10 @@ export async function getRecommendedArticles(userId: number) {
          ) AS read_count,
          COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.review_type = 'long')::int AS long_review_count,
          COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.must_read)::int AS must_read_count,
-         COUNT(DISTINCT review_likes.user_id)::int AS like_count
+         COUNT(DISTINCT review_likes.user_id) FILTER (WHERE reading_note_pdfs.review_id IS NOT NULL)::int AS like_count
        FROM reviews
        LEFT JOIN review_likes ON review_likes.review_id = reviews.id
+       LEFT JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
        WHERE reviews.article_id = articles.id
      ) article_signals ON TRUE
      ORDER BY review_group.rating DESC, articles.published_at DESC NULLS LAST
@@ -357,10 +364,13 @@ export async function getArticlesForReview(userId: number) {
             articles.source_url AS "sourceUrl",
             reading_progress.page_number AS "lastReadPage",
             CASE WHEN own_review.id IS NULL THEN NULL ELSE JSON_BUILD_OBJECT(
+              'id', own_review.id,
               'rating', own_review.rating,
               'content', own_review.content,
               'reviewType', own_review.review_type,
               'mustRead', own_review.must_read,
+              'noteFileName', own_note_pdf.file_name,
+              'noteSource', own_note_pdf.source,
               'annotations', COALESCE(own_annotations.items, '[]'::json)
             ) END AS "ownReview"
      FROM articles
@@ -370,6 +380,7 @@ export async function getArticlesForReview(userId: number) {
      LEFT JOIN reviews own_review
        ON own_review.article_id = articles.id
       AND own_review.user_id = $1
+     LEFT JOIN reading_note_pdfs own_note_pdf ON own_note_pdf.review_id = own_review.id
      LEFT JOIN LATERAL (
        SELECT JSON_AGG(
          JSON_BUILD_OBJECT(
@@ -400,14 +411,15 @@ export async function getUserReviewProfile(userId: number) {
     database.query<{
       totalLikes: number;
       longReviews: number;
-      shortReviews: number;
+      notePdfs: number;
     }>(
       `SELECT
-         COUNT(review_likes.user_id)::int AS "totalLikes",
-         COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.review_type = 'long')::int AS "longReviews",
-         COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.review_type = 'short')::int AS "shortReviews"
+         COUNT(review_likes.user_id) FILTER (WHERE reading_note_pdfs.review_id IS NOT NULL)::int AS "totalLikes",
+         COUNT(DISTINCT reviews.id)::int AS "longReviews",
+         COUNT(DISTINCT reading_note_pdfs.review_id)::int AS "notePdfs"
        FROM reviews
        LEFT JOIN review_likes ON review_likes.review_id = reviews.id
+       LEFT JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
        WHERE reviews.user_id = $1`,
       [userId],
     ),
@@ -416,10 +428,11 @@ export async function getUserReviewProfile(userId: number) {
       title: string;
       content: string;
       rating: number;
-      reviewType: "short" | "long";
+      reviewType: "long";
       mustRead: boolean;
       likeCount: number;
       updatedAt: string;
+      noteFileName: string | null;
     }>(
       `SELECT
          reviews.id,
@@ -430,18 +443,20 @@ export async function getUserReviewProfile(userId: number) {
          reviews.must_read AS "mustRead",
          COUNT(review_likes.user_id)::int AS "likeCount",
          reviews.updated_at::text AS "updatedAt"
+         ,reading_note_pdfs.file_name AS "noteFileName"
        FROM reviews
        INNER JOIN articles ON articles.id = reviews.article_id
        LEFT JOIN review_likes ON review_likes.review_id = reviews.id
+       LEFT JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
        WHERE reviews.user_id = $1
-       GROUP BY reviews.id, articles.title
+       GROUP BY reviews.id, articles.title, reading_note_pdfs.file_name
        ORDER BY COUNT(review_likes.user_id) DESC, reviews.updated_at DESC`,
       [userId],
     ),
   ]);
 
   return {
-    stats: stats.rows[0] ?? { totalLikes: 0, longReviews: 0, shortReviews: 0 },
+    stats: stats.rows[0] ?? { totalLikes: 0, longReviews: 0, notePdfs: 0 },
     reviews: reviews.rows,
   };
 }
