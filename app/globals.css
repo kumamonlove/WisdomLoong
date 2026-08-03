@@ -1724,15 +1724,38 @@ select {
   font-size: 11px;
 }
 
-.reader-tags {
+.reader-metadata-editor {
   padding: 10px 14px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, .7fr);
+  gap: 14px;
   border-bottom: 1px solid var(--line);
+  background: rgba(248, 246, 239, .5);
 }
 
-.reader-tags span {
+.reader-tag-editor,
+.reader-publisher-editor {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.reader-tag-editor > strong,
+.reader-publisher-editor > strong {
+  color: var(--muted);
+  font-size: 8px;
+  letter-spacing: .06em;
+}
+
+.reader-tag-editor > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.reader-tag-editor span {
   padding: 4px 7px;
   color: var(--accent);
   border-radius: 999px;
@@ -1740,21 +1763,53 @@ select {
   font-size: 9px;
 }
 
-.reader-tags input {
+.reader-tag-editor input {
   width: 90px;
-  border: 0;
-  outline: 0;
-  background: transparent;
+  height: 27px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+  background: var(--white);
   font-size: 10px;
 }
 
-.reader-tags button {
-  padding: 0;
-  color: var(--muted);
-  border: 0;
-  background: transparent;
+.reader-tag-editor button,
+.reader-publisher-editor button {
+  height: 27px;
+  padding: 0 8px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
   cursor: pointer;
   font-size: 9px;
+  font-weight: 700;
+}
+
+.reader-tag-editor button:disabled,
+.reader-publisher-editor button:disabled {
+  cursor: default;
+  opacity: .4;
+}
+
+.reader-publisher-editor {
+  grid-template-columns: 1fr auto;
+}
+
+.reader-publisher-editor > strong {
+  grid-column: 1 / -1;
+}
+
+.reader-publisher-editor input {
+  min-width: 0;
+  height: 27px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+  background: var(--white);
+  font-size: 10px;
 }
 
 .article-reading-preview {
@@ -1916,14 +1971,17 @@ select {
 }
 
 .reader-toolbar .reader-document-switch {
+  max-width: min(48%, 520px);
   padding: 3px;
   gap: 2px;
+  overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: rgba(24, 24, 22, .04);
 }
 
 .reader-toolbar .reader-document-switch button {
+  flex: 0 0 auto;
   min-height: 28px;
   border: 0;
   background: transparent;
@@ -1958,7 +2016,7 @@ select {
 }
 
 .title-inline-math .katex {
-  font-size: 1em;
+  font-size: 1.24em;
 }
 
 .reader-toolbar button:disabled {
@@ -2408,36 +2466,134 @@ select {
   padding: 16px;
 }
 
-.context-tabs {
-  margin: 0 -6px 14px;
-  padding: 3px;
+.notebook-heading > div {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2px;
+}
+
+.notebook-heading > div small {
+  color: var(--muted);
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.notebook-heading > em {
+  max-width: 130px;
+  overflow: hidden;
+  color: var(--accent);
+  font-size: 8px;
+  font-style: normal;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tabs {
+  margin: 0 -6px 16px;
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 3px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface);
 }
 
-.context-tabs button {
-  padding: 7px 3px;
+.workspace-tabs button {
+  position: relative;
+  min-width: 0;
+  padding: 7px 2px 6px;
+  display: grid;
+  place-items: center;
+  gap: 2px;
   color: var(--muted);
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   cursor: pointer;
-  font-size: 8px;
-  font-weight: 700;
 }
 
-.context-tabs button.selected {
+.workspace-tabs button i {
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.workspace-tabs button strong {
+  font-size: 8px;
+}
+
+.workspace-tabs button > span {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  color: var(--white);
+  border-radius: 999px;
+  background: var(--accent);
+  font-size: 7px;
+}
+
+.workspace-tabs button.selected {
   color: var(--ink);
   background: var(--white);
   box-shadow: 0 2px 7px rgba(24, 24, 22, 0.08);
 }
 
-.context-tabs span {
-  margin-left: 2px;
+.reader-workbench-message {
+  margin: 0 0 12px;
+  padding: 8px 9px;
+  color: #5e4b23;
+  border: 1px solid rgba(188, 137, 18, .24);
+  border-radius: 7px;
+  background: rgba(255, 248, 216, .52);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.workbench-section-heading {
+  margin-bottom: 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workbench-section-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.workbench-section-heading strong {
+  font-size: 11px;
+}
+
+.workbench-section-heading small {
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.workbench-section-heading > span {
+  min-width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
   color: var(--accent);
+  border-radius: 999px;
+  background: rgba(214, 95, 64, .09);
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.own-annotation-workspace {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 .context-panel[hidden],
@@ -2448,6 +2604,12 @@ select {
 .community-panel h3 {
   margin: 0 0 8px;
   font-size: 11px;
+}
+
+.community-panel > .community-overall-reviews {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .current-page-discussion > article {
@@ -3113,10 +3275,10 @@ select {
 }
 
 .reader-review-form {
-  margin-top: 18px;
-  padding-top: 16px;
+  margin-top: 0;
+  padding-top: 0;
   gap: 14px;
-  border-top: 1px solid var(--line);
+  border-top: 0;
 }
 
 .reader-review-form h2 {
@@ -3595,6 +3757,19 @@ select {
 
 .reader-workspace.focus-mode .article-library {
   visibility: hidden;
+}
+
+.reader-workspace.focus-mode .reader-titlebar {
+  display: none;
+}
+
+.reader-workspace.focus-mode .pdf-frame {
+  min-height: calc(100vh - 190px);
+}
+
+.reader-workspace.focus-mode .pdf-page-scroll {
+  height: calc(100vh - 190px);
+  min-height: 520px;
 }
 
 .reader-workspace.focus-mode .paper-reader iframe {
@@ -4119,6 +4294,10 @@ select {
     min-height: 290px;
   }
 
+  .reader-metadata-editor {
+    grid-template-columns: 1fr;
+  }
+
   .lookup-form {
     grid-template-columns: 1fr;
   }
@@ -4185,6 +4364,7 @@ select {
   .reader-toolbar .reader-document-switch,
   .reader-toolbar .reader-annotation-tools {
     width: 100%;
+    max-width: none;
   }
 
   .reader-toolbar .reader-document-switch button,

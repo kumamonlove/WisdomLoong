@@ -11,18 +11,36 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
 
   const articleId = Number((await params).id);
-  const body = (await request.json()) as { tags?: string[] };
-  const tags = normalizeTags(body.tags);
-  if (!Number.isInteger(articleId) || tags.length === 0) {
-    return NextResponse.json({ error: "请至少保留一个有效标签" }, { status: 400 });
+  const body = (await request.json()) as { tags?: string[]; publisher?: string };
+  if (!Number.isInteger(articleId)) {
+    return NextResponse.json({ error: "文章不存在" }, { status: 404 });
   }
 
-  const result = await database.query(
-    "UPDATE articles SET tags = $1 WHERE id = $2 RETURNING id",
-    [tags, articleId],
-  );
+  let result;
+  let response: { ok: true; tags?: string[]; publisher?: string };
+  if (Array.isArray(body.tags)) {
+    const tags = normalizeTags(body.tags);
+    if (tags.length === 0) {
+      return NextResponse.json({ error: "请至少保留一个有效标签" }, { status: 400 });
+    }
+    result = await database.query(
+      "UPDATE articles SET tags = $1 WHERE id = $2 RETURNING id",
+      [tags, articleId],
+    );
+    response = { ok: true, tags };
+  } else {
+    const publisher = body.publisher?.trim();
+    if (!publisher || publisher.length > 180 || publisher.toLocaleLowerCase() === "arxiv") {
+      return NextResponse.json({ error: "请填写有效的真实发布机构" }, { status: 400 });
+    }
+    result = await database.query(
+      "UPDATE articles SET publisher = $1 WHERE id = $2 RETURNING id",
+      [publisher, articleId],
+    );
+    response = { ok: true, publisher };
+  }
   if (result.rowCount === 0) {
     return NextResponse.json({ error: "没有找到这篇文章" }, { status: 404 });
   }
-  return NextResponse.json({ ok: true, tags });
+  return NextResponse.json(response);
 }

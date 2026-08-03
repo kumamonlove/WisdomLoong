@@ -551,7 +551,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.4`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.5`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -799,6 +799,7 @@ function PdfContinuousCanvas({
   onError,
   onVisiblePage,
   onTextSelect,
+  onZoom,
   children,
 }: {
   url: string;
@@ -808,10 +809,24 @@ function PdfContinuousCanvas({
   onError: () => void;
   onVisiblePage: (page: number) => void;
   onTextSelect: (text: string, page: number) => void;
+  onZoom: (delta: number) => void;
   children: (page: number) => ReactNode;
 }) {
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const initialPageRef = useRef(initialPage);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const zoomPdf = (event: WheelEvent) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      onZoom(event.deltaY < 0 ? 10 : -10);
+    };
+    element.addEventListener("wheel", zoomPdf, { passive: false });
+    return () => element.removeEventListener("wheel", zoomPdf);
+  }, [onZoom]);
 
   useEffect(() => {
     let cancelled = false;
@@ -821,7 +836,7 @@ function PdfContinuousCanvas({
       try {
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.4`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.5`;
         loadingTask = pdfjs.getDocument(url);
         const document = await loadingTask.promise;
         if (!cancelled) setPdfDocument(document);
@@ -844,7 +859,7 @@ function PdfContinuousCanvas({
   }, [pdfDocument]);
 
   return (
-    <div className="pdf-page-scroll is-continuous">
+    <div className="pdf-page-scroll is-continuous" ref={scrollRef}>
       {pdfDocument && Array.from({ length: pdfDocument.numPages }, (_, index) => index + 1).map((page) => (
         <ContinuousPdfPage
           key={page}
@@ -896,7 +911,7 @@ export function ReviewComposer({
   );
   const [zoom, setZoom] = useState(100);
   const [focusMode, setFocusMode] = useState(startFocused);
-  const [contextTab, setContextTab] = useState<"discussion" | "notes" | "review">("discussion");
+  const [contextTab, setContextTab] = useState<"annotations" | "translate" | "community" | "publish">("annotations");
   const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
   const [communityAnnotations, setCommunityAnnotations] = useState<CommunityAnnotation[]>([]);
   const [discussionLoading, setDiscussionLoading] = useState(false);
@@ -927,6 +942,11 @@ export function ReviewComposer({
   const [annotationRect, setAnnotationRect] = useState<AnnotationRect | null>(null);
   const [annotationPage, setAnnotationPage] = useState(page);
   const [tagDraft, setTagDraft] = useState("");
+  const [publisherDraft, setPublisherDraft] = useState(
+    startingArticle?.publisher === "机构待补充" || startingArticle?.publisher.toLocaleLowerCase() === "arxiv"
+      ? ""
+      : startingArticle?.publisher ?? "",
+  );
   const [busy, setBusy] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(true);
   const [pdfRenderAttempt, setPdfRenderAttempt] = useState(0);
@@ -975,13 +995,14 @@ export function ReviewComposer({
       ? items.slice(0, index).filter((item) => item.rect && rectanglesOverlap(annotation.rect!, item.rect)).length
       : 0,
   })), [currentPageAnnotations]);
+  const handlePdfZoom = useCallback((delta: number) => {
+    setZoom((value) => Math.max(60, Math.min(200, value + delta)));
+  }, []);
 
   function setAnnotationVisibility(enabled: boolean) {
     setAnnotationsEnabled(enabled);
     window.localStorage.setItem("wisdomloong-annotations-enabled", String(enabled));
     if (!enabled) {
-      setDrawingAnnotation(false);
-      setAnnotationStart(null);
       setActiveAnnotationId(null);
     }
   }
@@ -1090,7 +1111,12 @@ export function ReviewComposer({
     notePdfPreviewRef.current = "";
     setNotePdfFile(null);
     setNotePdfPreviewUrl("");
-    setContextTab("discussion");
+    setContextTab("annotations");
+    setPublisherDraft(
+      !article || article.publisher === "机构待补充" || article.publisher.toLocaleLowerCase() === "arxiv"
+        ? ""
+        : article.publisher,
+    );
     const sessionUrl = sessionPdfUrls.current.get(id) ?? "";
     localPdfUrlRef.current = sessionUrl;
     setLocalPdfUrl(sessionUrl);
@@ -1300,6 +1326,28 @@ export function ReviewComposer({
     }
   }
 
+  async function savePublisher() {
+    if (!selectedArticle) return;
+    const publisher = publisherDraft.trim();
+    if (!publisher || publisher.toLocaleLowerCase() === "arxiv") {
+      setMessage("请填写真实发布机构，不能使用 arXiv 作为发布机构。");
+      return;
+    }
+    try {
+      await responseJson(await fetch(`/api/articles/${selectedArticle.id}/tags`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ publisher }),
+      }));
+      setAvailableArticles((current) => current.map((article) =>
+        article.id === selectedArticle.id ? { ...article, publisher } : article
+      ));
+      setMessage(`发布机构已更新为 ${publisher}。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "发布机构保存失败");
+    }
+  }
+
   function annotationPoint(event: ReactPointerEvent<HTMLDivElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
     return {
@@ -1323,7 +1371,7 @@ export function ReviewComposer({
     setDrawingAnnotation(true);
     setAnnotationRect(null);
     setAnnotationPage(page);
-    setContextTab("notes");
+    setContextTab("annotations");
     setMessage("请在当前 PDF 页面上拖动画框；位置会随页码一起保存并分享给伙伴。");
   }
 
@@ -1333,7 +1381,7 @@ export function ReviewComposer({
     setAnnotationStart(null);
     setAnnotationRect({ ...annotation.rect });
     setAnnotationPage(annotation.page);
-    setContextTab("notes");
+    setContextTab("annotations");
     setMessage(`已复用 ${annotation.author} 在第 ${annotation.page} 页的批注位置，请填写你的批注。`);
   }
 
@@ -1372,7 +1420,7 @@ export function ReviewComposer({
     setPage(pageNumber);
     setQuoteDraft(normalized);
     setTranslation("");
-    setContextTab("notes");
+    setContextTab("translate");
     setMessage(translationEnabled
       ? `已选中第 ${pageNumber} 页原文，点击右侧“翻译成中文”。`
       : "已选中论文原文；翻译服务尚未配置 API Key。");
@@ -1544,7 +1592,7 @@ export function ReviewComposer({
             <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}<small>点击在相同位置添加我的批注</small></strong>
           </button>
         ))}
-        {annotationsEnabled && pageNotes.map((item, index) => {
+        {pageNotes.map((item, index) => {
           const overlapIndex = pageAnnotations.filter((annotation) =>
             annotation.rect && rectanglesOverlap(item.rect!, annotation.rect)
           ).length + pageNotes.slice(0, index).filter((note) =>
@@ -1566,7 +1614,7 @@ export function ReviewComposer({
             ><span>我{index + 1}</span></span>
           );
         })}
-        {annotationsEnabled && annotationRect && annotationPage === pageNumber && (
+        {annotationRect && annotationPage === pageNumber && (
           <span
             className="pdf-annotation-box is-pending"
             style={{
@@ -1672,20 +1720,41 @@ export function ReviewComposer({
                 <a href={selectedArticle.sourceUrl} rel="noreferrer" target="_blank">来源页面 ↗</a>
               )}
             </header>
-            <div className="reader-tags">
-              {selectedArticle.tags.map((tag) => <span key={tag}>{tag}</span>)}
-              <input
-                onChange={(event) => setTagDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void addTag();
-                  }
-                }}
-                placeholder="+ 添加标签"
-                value={tagDraft}
-              />
-              <button onClick={() => void addTag()} type="button">添加</button>
+            <div className="reader-metadata-editor">
+              <div className="reader-tag-editor">
+                <strong>标签</strong>
+                <div>
+                  {selectedArticle.tags.map((tag) => <span key={tag}>{tag}</span>)}
+                  <input
+                    aria-label="添加文章标签"
+                    onChange={(event) => setTagDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void addTag();
+                      }
+                    }}
+                    placeholder="添加标签"
+                    value={tagDraft}
+                  />
+                  <button disabled={!tagDraft.trim()} onClick={() => void addTag()} type="button">添加</button>
+                </div>
+              </div>
+              <label className="reader-publisher-editor">
+                <strong>发布机构</strong>
+                <input
+                  aria-label="文章发布机构"
+                  onChange={(event) => setPublisherDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void savePublisher();
+                    }
+                  }}
+                  value={publisherDraft}
+                />
+                <button disabled={!publisherDraft.trim()} onClick={() => void savePublisher()} type="button">保存</button>
+              </label>
             </div>
             {focusMode ? (
               <>
@@ -1699,10 +1768,19 @@ export function ReviewComposer({
                       }}
                       type="button"
                     >论文</button>
-                    {viewingPartnerNote && (
-                      <button aria-pressed="true" className="selected" type="button">
-                        {activeNoteAuthor}的笔记
-                      </button>
+                    {communityReviews.filter((review) => review.noteFileName).map((review) => (
+                      <button
+                        aria-pressed={partnerNoteReviewId === review.id}
+                        className={partnerNoteReviewId === review.id ? "selected" : ""}
+                        key={review.id}
+                        onClick={() => {
+                          if (partnerNoteReviewId !== review.id) openPartnerNote(review);
+                        }}
+                        type="button"
+                      >{review.author}的笔记</button>
+                    ))}
+                    {viewingPartnerNote && !activePartnerNote && (
+                      <button aria-pressed="true" className="selected" type="button">{activeNoteAuthor}的笔记</button>
                     )}
                   </div>
                   <div className="reader-page-tools">
@@ -1723,16 +1801,16 @@ export function ReviewComposer({
                         onClick={() => setAnnotationVisibility(!annotationsEnabled)}
                         type="button"
                       >
-                        批注 {annotationsEnabled ? "开" : "关"}
+                        伙伴批注 {annotationsEnabled ? "开" : "关"}
                       </button>
-                      <button className="capture-button" disabled={!annotationsEnabled || !localPdfUrl || pdfLoading} onClick={startDrawingAnnotation} type="button">
+                      <button className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={startDrawingAnnotation} type="button">
                         ▣ 画框批注
                       </button>
                       <button
                         className="generate-note-button"
                         disabled={generatingNotePdf || notes.every((note) => !note.rect)}
                         onClick={() => {
-                          setContextTab("review");
+                          setContextTab("publish");
                           void buildNotePdf();
                         }}
                         type="button"
@@ -1829,6 +1907,7 @@ export function ReviewComposer({
                       onLoad={handlePdfPageLoad}
                       onTextSelect={useSelectedPdfText}
                       onVisiblePage={setPage}
+                      onZoom={handlePdfZoom}
                       url={activeReaderPdfUrl}
                       zoom={zoom}
                     >
@@ -1889,198 +1968,157 @@ export function ReviewComposer({
 
       <aside className="reader-notebook">
         <div className="notebook-heading">
-          <span>阅读上下文</span>
-          <small>当前第 {page} 页</small>
+          <div><span>阅读工作台</span><small>阅读、理解、整理、发布</small></div>
+          <em>{viewingPartnerNote ? `${activeNoteAuthor}的笔记` : `P.${page}`}</em>
         </div>
-        <div className="context-tabs">
-          <button className={contextTab === "discussion" ? "selected" : ""} onClick={() => setContextTab("discussion")} type="button">
-            伙伴批注 <span>{currentPageAnnotations.length}</span>
+        <nav className="workspace-tabs" aria-label="阅读工作台功能">
+          <button className={contextTab === "annotations" ? "selected" : ""} onClick={() => setContextTab("annotations")} type="button">
+            <i aria-hidden="true">▣</i><strong>批注</strong><span>{notes.length}</span>
           </button>
-          <button className={contextTab === "notes" ? "selected" : ""} onClick={() => setContextTab("notes")} type="button">
-            我的笔记 <span>{notes.length}</span>
+          <button className={contextTab === "translate" ? "selected" : ""} onClick={() => setContextTab("translate")} type="button">
+            <i aria-hidden="true">译</i><strong>翻译</strong>{quoteDraft && <span>1</span>}
           </button>
-          <button className={contextTab === "review" ? "selected" : ""} onClick={() => setContextTab("review")} type="button">
-            整体评论
+          <button className={contextTab === "community" ? "selected" : ""} onClick={() => setContextTab("community")} type="button">
+            <i aria-hidden="true">◎</i><strong>伙伴</strong><span>{communityReviews.length}</span>
           </button>
-        </div>
-        <div className="context-panel community-panel" hidden={contextTab !== "discussion"}>
-          {discussionLoading ? (
-            <p className="context-empty">正在加载伙伴观点…</p>
+          <button className={contextTab === "publish" ? "selected" : ""} onClick={() => setContextTab("publish")} type="button">
+            <i aria-hidden="true">↑</i><strong>发布</strong>
+          </button>
+        </nav>
+        {message && <p className="reader-workbench-message" role="status">{message}</p>}
+
+        <div className="context-panel annotation-workspace" hidden={contextTab !== "annotations"}>
+          <header className="workbench-section-heading"><div><strong>当前页伙伴批注</strong><small>悬浮查看，点击复用同一画框</small></div><span>{currentPageAnnotations.length}</span></header>
+          {viewingPartnerNote ? (
+            <div className="current-page-discussion note-reading-notice">
+              <h3>{activeNoteAuthor}的读书笔记</h3>
+              <p className="context-empty">当前正在查看笔记 PDF，返回论文后继续处理画框批注。</p>
+              <button onClick={returnToArticle} type="button">返回论文</button>
+            </div>
+          ) : !articlePdfReady ? (
+            <p className="context-empty">论文页面加载完成后显示批注。</p>
+          ) : annotationsLoading ? (
+            <p className="context-empty">正在加载当前论文的批注…</p>
+          ) : annotationsEnabled ? (
+            <div className="current-page-discussion">
+              {currentAnnotationLayout.map(({ annotation, number }) => (
+                <article
+                  className={activeAnnotationId === annotation.id ? "is-active" : ""}
+                  key={annotation.id}
+                  onBlur={() => setActiveAnnotationId(null)}
+                  onFocus={() => setActiveAnnotationId(annotation.id)}
+                  onMouseEnter={() => setActiveAnnotationId(annotation.id)}
+                  onMouseLeave={() => setActiveAnnotationId(null)}
+                  style={{ "--annotation-color": annotationColor(annotation.author) } as CSSProperties}
+                  tabIndex={0}
+                >
+                  <header><span>{number}</span><strong>{annotation.author}</strong><i>{annotation.author.slice(0, 1).toUpperCase()}</i></header>
+                  {annotation.quote && <blockquote>{annotation.quote}</blockquote>}
+                  {annotation.translation && <p className="community-translation">{annotation.translation}</p>}
+                  <p>{annotation.content}</p>
+                </article>
+              ))}
+              {currentPageAnnotations.length === 0 && <p className="context-empty">当前页还没有伙伴批注。</p>}
+            </div>
           ) : (
-            <>
-              {viewingPartnerNote ? (
-                <div className="current-page-discussion note-reading-notice">
-                  <h3>{activeNoteAuthor}的读书笔记</h3>
-                  <p className="context-empty">当前正在主阅读器中查看笔记 PDF。返回论文后可继续查看逐页批注。</p>
-                  <button onClick={returnToArticle} type="button">返回论文</button>
-                </div>
-              ) : !articlePdfReady ? (
-                <p className="context-empty">论文页面加载完成后显示批注。</p>
-              ) : annotationsLoading ? (
-                <p className="context-empty">正在加载当前论文的批注…</p>
-              ) : annotationsEnabled ? (
-                <div className="current-page-discussion">
-                  <h3>第 {page} 页的批注</h3>
-                  {currentAnnotationLayout.map(({ annotation, number }) => (
-                    <article
-                      className={activeAnnotationId === annotation.id ? "is-active" : ""}
-                      key={annotation.id}
-                      onBlur={() => setActiveAnnotationId(null)}
-                      onFocus={() => setActiveAnnotationId(annotation.id)}
-                      onMouseEnter={() => setActiveAnnotationId(annotation.id)}
-                      onMouseLeave={() => setActiveAnnotationId(null)}
-                      style={{ "--annotation-color": annotationColor(annotation.author) } as CSSProperties}
-                      tabIndex={0}
-                    >
-                      <header><span>{number}</span><strong>{annotation.author}</strong><i>{annotation.author.slice(0, 1).toUpperCase()}</i></header>
-                      {annotation.quote && <blockquote>{annotation.quote}</blockquote>}
-                      {annotation.translation && <p className="community-translation">{annotation.translation}</p>}
-                      <p>{annotation.rect ? "▣ " : ""}{annotation.content}</p>
-                    </article>
-                  ))}
-                  {currentPageAnnotations.length === 0 && (
-                    <p className="context-empty">这一页还没有伙伴批注，你可以留下第一条。</p>
-                  )}
-                </div>
-              ) : (
-                <button className="annotations-disabled" onClick={() => setAnnotationVisibility(true)} type="button">
-                  批注已关闭 · 点击开启
-                </button>
-              )}
-              <div className="community-overall-reviews">
-                <h3>成员整体评论</h3>
-                {communityReviews.map((review) => (
-                  <details key={review.id}>
-                    <summary>
-                      <span>{review.author.slice(0, 1).toUpperCase()}</span>
-                      <strong>{review.author}</strong>
-                      <small>
-                        {review.mustRead ? "✦ 必读" : `★ ${review.rating}`}
-                        {" · "}
-                        评论
-                      </small>
-                    </summary>
-                    <p>{review.content}</p>
-                    {review.attachments.length > 0 && (
-                      <div className="community-images">
-                        {review.attachments.map((attachment) => (
-                          <figure key={attachment.id}>
-                            <img alt={attachment.note || "论文图表评论"} src={`/api/review-attachments/${attachment.id}`} />
-                            {attachment.note && <figcaption>{attachment.note}</figcaption>}
-                          </figure>
-                        ))}
-                      </div>
-                    )}
-                    {review.noteFileName && (
-                      <div className="partner-note-actions">
-                        <button onClick={() => partnerNoteReviewId === review.id ? returnToArticle() : openPartnerNote(review)} type="button">
-                          {partnerNoteReviewId === review.id ? "返回论文" : "在阅读器打开笔记"}
-                        </button>
-                        <ReadingNoteLikeButton initialCount={review.likeCount} initiallyLiked={review.likedByViewer} reviewId={review.id} />
-                      </div>
-                    )}
-                  </details>
-                ))}
-                {communityReviews.length === 0 && <p className="context-empty">还没有其他成员留下整体评论。</p>}
-              </div>
-            </>
+            <button className="annotations-disabled" onClick={() => setAnnotationVisibility(true)} type="button">伙伴批注已关闭 · 点击开启</button>
           )}
-        </div>
-        <div className="context-panel" hidden={contextTab !== "notes"}>
-        {translationEnabled ? (
-          <section className="translation-assistant">
-            <div>
-              <strong>论文中译 · DeepSeek</strong>
-              <button onClick={readClipboard} type="button">从剪贴板粘贴</button>
-            </div>
-            <textarea
-              onChange={(event) => {
-                setQuoteDraft(event.target.value);
-                setTranslation("");
-              }}
-              placeholder="直接在左侧 PDF 中选中文字，或从剪贴板粘贴…"
-              rows={4}
-              value={quoteDraft}
-            />
-            <button disabled={!quoteDraft.trim() || translating} onClick={translateQuote} type="button">
-              {translating ? "正在翻译…" : "翻译成中文"}
-            </button>
-            {translation && (
-              <div className="translation-result">
-                <span>中文译文</span>
-                <p>{translation}</p>
-              </div>
+
+          <section className="own-annotation-workspace">
+            <header className="workbench-section-heading"><div><strong>我的画框批注</strong><small>批注将用于生成读书笔记 PDF</small></div><span>{notes.length}</span></header>
+            {annotationRect ? (
+              <section className="note-composer">
+                <header><span>P.{annotationPage}</span><div><strong>填写这个画框的批注</strong><small>截图、页码和文字会一起保存</small></div></header>
+                <textarea onChange={(event) => setNoteDraft(event.target.value)} placeholder="写下你对这个画框区域的理解…" rows={5} value={noteDraft} />
+                <footer>
+                  <span>伙伴框也可以直接复用</span>
+                  <button
+                    disabled={!noteDraft.trim()}
+                    onClick={() => {
+                      setNotes((current) => [...current, {
+                        page: annotationPage,
+                        quote: quoteDraft.trim(),
+                        translation: translation.trim(),
+                        content: noteDraft.trim(),
+                        rect: annotationRect,
+                      }]);
+                      setNoteDraft("");
+                      setQuoteDraft("");
+                      setTranslation("");
+                      setAnnotationRect(null);
+                    }}
+                    type="button"
+                  >加入批注</button>
+                </footer>
+              </section>
+            ) : (
+              <section className="annotation-start-card">
+                <span>▣</span><strong>选择一个画框</strong>
+                <p>在论文中拖动画框，或点击伙伴已有的框，然后填写批注。</p>
+                {!viewingPartnerNote && <button disabled={pdfLoading} onClick={startDrawingAnnotation} type="button">开始画框</button>}
+              </section>
             )}
-          </section>
-        ) : (
-          <section className="translation-assistant coming-soon">
-            <div><strong>中译助手</strong><span>即将上线</span></div>
-            <p>选中论文原文，一键获得适合学术阅读的中文翻译。</p>
-          </section>
-        )}
-        {annotationRect ? (
-          <section className="note-composer">
-            <header>
-              <span>P.{annotationPage}</span>
-              <div>
-                <strong>为画框区域添加批注</strong>
-                <small>画框位置、截图与页码会一起进入读书笔记</small>
-              </div>
-            </header>
-            <textarea
-              onChange={(event) => setNoteDraft(event.target.value)}
-              placeholder="写下你对这个画框区域的理解…"
-              rows={5}
-              value={noteDraft}
-            />
-            <footer>
-              <span>也可以直接点击伙伴的批注框复用相同位置</span>
-              <button
-                disabled={!noteDraft.trim()}
-                onClick={() => {
-                  setNotes((current) => [...current, {
-                    page: annotationPage,
-                    quote: quoteDraft.trim(),
-                    translation: translation.trim(),
-                    content: noteDraft.trim(),
-                    rect: annotationRect,
-                  }]);
-                  setNoteDraft("");
-                  setQuoteDraft("");
-                  setTranslation("");
-                  setAnnotationRect(null);
-                }}
-                type="button"
-              >
-                ＋ 加入我的批注
-              </button>
-            </footer>
-          </section>
-        ) : (
-          <section className="annotation-start-card">
-            <span>▣</span>
-            <strong>先选择一个批注框</strong>
-            <p>在论文中点击“画框批注”后拖动框选，或直接点击伙伴已有的批注框。</p>
-            {!viewingPartnerNote && (
-              <button disabled={!annotationsEnabled || pdfLoading} onClick={startDrawingAnnotation} type="button">开始画框</button>
-            )}
-          </section>
-        )}
-        <div className="saved-notes">
-          {notes.length > 0 && <h3>已记录 {notes.length} 条</h3>}
-          {notes.map((note, index) => (
-            <div key={`${note.page}-${index}`}>
-              <button onClick={() => setPage(note.page)} type="button">
-                <strong>P.{note.page}</strong>
-                <span>{note.rect ? "▣ " : ""}{note.content}</span>
-              </button>
-              <button aria-label="删除这条批注" onClick={() => setNotes((current) => current.filter((_, itemIndex) => itemIndex !== index))} type="button">×</button>
+            <div className="saved-notes">
+              {notes.map((note, index) => (
+                <div key={`${note.page}-${index}`}>
+                  <button
+                    onClick={() => {
+                      articlePageBeforeNote.current = note.page;
+                      if (viewingPartnerNote) returnToArticle();
+                      else navigateToPage(note.page);
+                    }}
+                    type="button"
+                  ><strong>P.{note.page}</strong><span>▣ {note.content}</span></button>
+                  <button aria-label="删除这条批注" onClick={() => setNotes((current) => current.filter((_, itemIndex) => itemIndex !== index))} type="button">×</button>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </section>
         </div>
 
-        <form className="review-form reader-review-form" hidden={contextTab !== "review"} onSubmit={submitReview}>
+        <div className="context-panel" hidden={contextTab !== "translate"}>
+          <header className="workbench-section-heading"><div><strong>学术翻译</strong><small>适合论文术语、公式与引用</small></div></header>
+          {translationEnabled ? (
+            <section className="translation-assistant">
+              <div><strong>原文 → 简体中文</strong><button onClick={readClipboard} type="button">粘贴</button></div>
+              <textarea
+                onChange={(event) => { setQuoteDraft(event.target.value); setTranslation(""); }}
+                placeholder="在左侧 PDF 中选中文字，或粘贴论文原文…"
+                rows={7}
+                value={quoteDraft}
+              />
+              <button disabled={!quoteDraft.trim() || translating} onClick={translateQuote} type="button">{translating ? "正在翻译…" : "翻译成中文"}</button>
+              {translation && <div className="translation-result"><span>中文译文</span><p>{translation}</p></div>}
+            </section>
+          ) : (
+            <section className="translation-assistant coming-soon"><div><strong>学术翻译</strong><span>暂不可用</span></div><p>翻译服务配置完成后，可直接选中 PDF 原文翻译。</p></section>
+          )}
+        </div>
+
+        <div className="context-panel community-panel" hidden={contextTab !== "community"}>
+          <header className="workbench-section-heading"><div><strong>伙伴观点与读书笔记</strong><small>评论、笔记 PDF 与点赞集中在这里</small></div><span>{communityReviews.length}</span></header>
+          {discussionLoading ? <p className="context-empty">正在加载伙伴观点…</p> : (
+            <div className="community-overall-reviews">
+              {communityReviews.map((review) => (
+                <details key={review.id}>
+                  <summary><span>{review.author.slice(0, 1).toUpperCase()}</span><strong>{review.author}</strong><small>{review.mustRead ? "✦ 必读" : `★ ${review.rating}`}</small></summary>
+                  <p>{review.content}</p>
+                  {review.attachments.length > 0 && <div className="community-images">{review.attachments.map((attachment) => (
+                    <figure key={attachment.id}><img alt={attachment.note || "论文图表评论"} src={`/api/review-attachments/${attachment.id}`} />{attachment.note && <figcaption>{attachment.note}</figcaption>}</figure>
+                  ))}</div>}
+                  {review.noteFileName && <div className="partner-note-actions">
+                    <button onClick={() => partnerNoteReviewId === review.id ? returnToArticle() : openPartnerNote(review)} type="button">{partnerNoteReviewId === review.id ? "返回论文" : "在阅读器打开笔记"}</button>
+                    <ReadingNoteLikeButton initialCount={review.likeCount} initiallyLiked={review.likedByViewer} reviewId={review.id} />
+                  </div>}
+                </details>
+              ))}
+              {communityReviews.length === 0 && <p className="context-empty">还没有伙伴发布评论或读书笔记。</p>}
+            </div>
+          )}
+        </div>
+
+        <form className="review-form reader-review-form" hidden={contextTab !== "publish"} onSubmit={submitReview}>
+          <header className="workbench-section-heading"><div><strong>完成阅读并发布</strong><small>选择推荐等级，附上读书笔记与评论</small></div></header>
           <h2>{selectedArticle?.ownReview ? "修改读书笔记与评论" : "发布读书笔记与评论"}</h2>
           <div className={`star-rating rating-${rating}${mustRead ? " is-must-read" : ""}`}>
             <span>我的推荐等级</span>
@@ -2159,7 +2197,6 @@ export function ReviewComposer({
             />
             <small>{content.length} 字</small>
           </label>
-          {message && <p className="workflow-message" role="status">{message}</p>}
           <button disabled={busy || articleId === 0 || !content.trim() || (!notePdfFile && !selectedArticle?.ownReview?.noteFileName)} type="submit">
             {busy
               ? "正在保存…"
