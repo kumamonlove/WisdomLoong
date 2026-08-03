@@ -551,7 +551,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.7`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.8`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -838,7 +838,7 @@ function PdfContinuousCanvas({
       try {
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.7`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.8`;
         loadingTask = pdfjs.getDocument(url);
         const document = await loadingTask.promise;
         if (!cancelled) {
@@ -946,13 +946,6 @@ export function ReviewComposer({
   const [annotationStart, setAnnotationStart] = useState<{ x: number; y: number } | null>(null);
   const [annotationRect, setAnnotationRect] = useState<AnnotationRect | null>(null);
   const [annotationPage, setAnnotationPage] = useState(page);
-  const [tagDraft, setTagDraft] = useState("");
-  const [publisherDraft, setPublisherDraft] = useState(
-    startingArticle?.publisher === "机构待补充" || startingArticle?.publisher.toLocaleLowerCase() === "arxiv"
-      ? ""
-      : startingArticle?.publisher ?? "",
-  );
-  const [metadataBusy, setMetadataBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(true);
   const [pdfPageCount, setPdfPageCount] = useState(0);
@@ -977,9 +970,6 @@ export function ReviewComposer({
   const selectedArxivPage = selectedArticle
     ? arxivPageUrl(selectedArticle.sourceUrl)
     : null;
-  const selectedHasPublisher = Boolean(
-    selectedArticle && selectedArticle.publisher !== "机构待补充" && selectedArticle.publisher.toLocaleLowerCase() !== "arxiv",
-  );
   const hasReadingNote = Boolean(notePdfFile || selectedArticle?.ownReview?.noteFileName);
   const searchableTags = useMemo(
     () => ["全部", ...new Set(availableArticles.flatMap((article) => article.tags))],
@@ -1131,11 +1121,6 @@ export function ReviewComposer({
     setNotePdfFile(null);
     setNotePdfPreviewUrl("");
     setContextTab("annotations");
-    setPublisherDraft(
-      !article || article.publisher === "机构待补充" || article.publisher.toLocaleLowerCase() === "arxiv"
-        ? ""
-        : article.publisher,
-    );
     const sessionUrl = sessionPdfUrls.current.get(id) ?? "";
     localPdfUrlRef.current = sessionUrl;
     setLocalPdfUrl(sessionUrl);
@@ -1310,55 +1295,6 @@ export function ReviewComposer({
     setPdfLoading(true);
   }, [partnerNoteReviewId]);
 
-  async function addTag() {
-    if (!selectedArticle || !tagDraft.trim()) return;
-    const nextTags = normalizeTags([...selectedArticle.tags, tagDraft]);
-    setMetadataBusy(true);
-    setMessage("");
-    try {
-      await responseJson(await fetch(`/api/articles/${selectedArticle.id}/tags`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags: nextTags }),
-      }));
-      setAvailableArticles((current) => current.map((article) =>
-        article.id === selectedArticle.id ? { ...article, tags: nextTags } : article
-      ));
-      setTagDraft("");
-      setMessage("标签已添加。");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "标签保存失败");
-    } finally {
-      setMetadataBusy(false);
-    }
-  }
-
-  async function savePublisher() {
-    if (!selectedArticle) return;
-    const publisher = publisherDraft.trim();
-    if (!publisher || publisher.toLocaleLowerCase() === "arxiv") {
-      setMessage("请填写真实发布机构，不能使用 arXiv 作为发布机构。");
-      return;
-    }
-    setMetadataBusy(true);
-    setMessage("");
-    try {
-      await responseJson(await fetch(`/api/articles/${selectedArticle.id}/tags`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ publisher }),
-      }));
-      setAvailableArticles((current) => current.map((article) =>
-        article.id === selectedArticle.id ? { ...article, publisher } : article
-      ));
-      setMessage(`发布机构已更新为 ${publisher}。`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "发布机构保存失败");
-    } finally {
-      setMetadataBusy(false);
-    }
-  }
-
   function annotationPoint(event: ReactPointerEvent<HTMLDivElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
     return {
@@ -1411,13 +1347,35 @@ export function ReviewComposer({
     if (!quoteDraft.trim()) return;
     setTranslating(true);
     setMessage("");
+    setTranslation("");
     try {
-      const data = await responseJson(await fetch("/api/translate", {
+      const response = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: quoteDraft }),
-      }));
-      setTranslation(String(data.translation ?? ""));
+      });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? "翻译失败");
+      }
+      if (!response.body) throw new Error("翻译服务没有返回内容");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let result = "";
+      let lastPaint = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        result += decoder.decode(value, { stream: true });
+        const now = performance.now();
+        if (now - lastPaint >= 50) {
+          setTranslation(result);
+          lastPaint = now;
+        }
+      }
+      result += decoder.decode();
+      if (!result.trim()) throw new Error("翻译服务没有返回内容");
+      setTranslation(result.trim());
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "翻译失败");
     } finally {
@@ -1736,43 +1694,9 @@ export function ReviewComposer({
                 <a href={selectedArticle.sourceUrl} rel="noreferrer" target="_blank">来源页面 ↗</a>
               )}
             </header>
-            <div className="reader-metadata-editor">
-              <div className="reader-tag-editor">
-                <strong>标签</strong>
-                <div>
-                  {selectedArticle.tags.map((tag) => <span key={tag}>{tag}</span>)}
-                  <input
-                    aria-label="添加文章标签"
-                    onChange={(event) => setTagDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void addTag();
-                      }
-                    }}
-                    placeholder="添加标签"
-                    value={tagDraft}
-                  />
-                  <button disabled={metadataBusy || !tagDraft.trim()} onClick={() => void addTag()} type="button">{metadataBusy ? "保存中" : "添加"}</button>
-                </div>
-              </div>
-              <label className="reader-publisher-editor">
-                <strong>发布机构</strong>
-                <input
-                  aria-label="文章发布机构"
-                  onChange={(event) => setPublisherDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void savePublisher();
-                    }
-                  }}
-                  value={publisherDraft}
-                />
-                <button disabled={metadataBusy || !publisherDraft.trim()} onClick={() => void savePublisher()} type="button">
-                  {metadataBusy ? "保存中" : selectedHasPublisher ? "保存修改" : "添加并保存"}
-                </button>
-              </label>
+            <div className="reader-metadata-summary" aria-label="文章信息">
+              <div><strong>标签</strong><span>{selectedArticle.tags.join(" · ")}</span></div>
+              <div><strong>发布机构</strong><span>{selectedArticle.publisher === "机构待补充" || selectedArticle.publisher.toLocaleLowerCase() === "arxiv" ? "暂无" : selectedArticle.publisher}</span></div>
             </div>
             {focusMode ? (
               <>

@@ -105,6 +105,7 @@ export function ArticleGrid({
           </dl>
           <ArticleMetadataEditor
             articleId={article.id}
+            initialPublishedAt={article.publishedAt}
             initialPublisher={article.publisher ?? "机构待补充"}
             initialTags={article.tags?.length ? article.tags : [article.category]}
           />

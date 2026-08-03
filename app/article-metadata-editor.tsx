@@ -16,14 +16,17 @@ function knownPublisher(publisher: string) {
 
 export function ArticleMetadataEditor({
   articleId,
+  initialPublishedAt,
   initialPublisher,
   initialTags,
 }: {
   articleId: number;
+  initialPublishedAt: string | null;
   initialPublisher: string;
   initialTags: string[];
 }) {
   const router = useRouter();
+  const [publishedAt, setPublishedAt] = useState(initialPublishedAt ?? "");
   const [publisher, setPublisher] = useState(knownPublisher(initialPublisher) ? initialPublisher : "");
   const [publisherSaved, setPublisherSaved] = useState(knownPublisher(initialPublisher));
   const [tags, setTags] = useState(initialTags);
@@ -81,9 +84,27 @@ export function ArticleMetadataEditor({
     }
   }
 
+  async function savePublishedAt() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await responseJson(await fetch(`/api/articles/${articleId}/tags`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ publishedAt: publishedAt || null }),
+      }));
+      setMessage(publishedAt ? "发布日期已保存。" : "发布日期已清除。");
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "发布日期保存失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <details className="card-metadata-editor">
-      <summary>编辑标签与发布机构</summary>
+      <summary>编辑标签、发布机构与发布日期</summary>
       <div>
         <section>
           <strong>文章标签</strong>
@@ -106,6 +127,13 @@ export function ArticleMetadataEditor({
             <button disabled={busy || !publisher.trim()} onClick={() => void savePublisher()} type="button">
               {publisherSaved ? "保存修改" : "添加并保存"}
             </button>
+          </label>
+        </section>
+        <section>
+          <strong>发布日期</strong>
+          <label>
+            <input aria-label="发布日期" onChange={(event) => setPublishedAt(event.target.value)} type="date" value={publishedAt} />
+            <button disabled={busy} onClick={() => void savePublishedAt()} type="button">保存日期</button>
           </label>
         </section>
         {message && <p role="status">{message}</p>}
