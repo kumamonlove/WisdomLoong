@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  academicTranslationSystemPrompt,
+  getAcademicTranslationConfig,
+} from "@/lib/academic-translation";
 
 export const runtime = "nodejs";
 
@@ -37,7 +41,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const apiKey = process.env.TRANSLATION_API_KEY ?? process.env.DASHSCOPE_API_KEY;
+  const { apiKey, baseUrl, model } = getAcademicTranslationConfig();
   if (!apiKey) {
     return NextResponse.json(
       { error: "论文翻译尚未配置 API Key，请联系管理员" },
@@ -45,12 +49,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const baseUrl = (
-    process.env.TRANSLATION_BASE_URL ??
-    process.env.DASHSCOPE_BASE_URL ??
-    "https://api.silra.cn/v1"
-  ).replace(/\/$/, "");
-  const model = process.env.TRANSLATION_MODEL ?? "deepseek-chat";
   const cacheKey = `${model}\n${text}`;
   const cached = translationCache.get(cacheKey);
   if (cached) {
@@ -79,7 +77,7 @@ export async function POST(request: Request) {
         messages: [
           {
             role: "system",
-            content: "Translate academic papers into precise, fluent Simplified Chinese. Preserve equations, symbols, variables, citations, model and dataset names, and standard English abbreviations. Keep technical terminology consistent. Return only the translation.",
+            content: academicTranslationSystemPrompt,
           },
           { role: "user", content: text },
         ],

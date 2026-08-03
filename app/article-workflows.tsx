@@ -15,6 +15,7 @@ import {
 import { normalizeTags } from "@/lib/knowledge-types";
 import type { ReaderArticle } from "@/lib/knowledge";
 import { ReadingNoteLikeButton } from "@/app/review-actions";
+import { ArticleMetadataEditor } from "@/app/article-metadata-editor";
 import { MathTitle } from "@/app/math-title";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 
@@ -112,11 +113,17 @@ function ArxivLookup({
       });
       const data = await responseJson(response);
       const articleId = Number(data.articleId);
-      setMessage(addToReadingList ? "已推荐给团队，并加入所有未读成员的待读。" : "文章已推荐，可以开始阅读。");
+      const abstractMessage = data.abstractTranslated
+        ? "英文摘要和中文摘要已自动保存。"
+        : article.abstract
+          ? "英文摘要已保存；中文摘要翻译暂未完成。"
+          : "这篇文章没有可用摘要。";
+      setMessage(`${addToReadingList ? "已推荐给团队，并加入所有未读成员的待读。" : "文章已推荐，可以开始阅读。"}${abstractMessage}`);
       onImported?.({
         id: articleId,
         title: article.title,
         abstract: article.abstract,
+        abstractZh: String(data.abstractZh ?? ""),
         authors: article.authors,
         publisher: publisher.trim() || article.publisher,
         category: "Ego第一人称",
@@ -345,8 +352,16 @@ function PdfDropImporter() {
         method: "POST",
         body: form,
       });
-      await responseJson(response);
-      setMessage("PDF 已保存到团队文章库并加入待读列表；上传不会把它标记为已读。");
+      const data = await responseJson(response);
+      const abstractMessage = data.abstractTranslated
+        ? "已自动识别英文摘要并生成中文摘要。"
+        : data.abstractExtracted
+          ? "已识别英文摘要；中文摘要翻译暂未完成。"
+          : "未在 PDF 前 3 页识别到明确摘要，文章仍已正常保存。";
+      const dateMessage = data.publishedAtExtracted
+        ? ` 同时从 PDF 识别到日期 ${String(data.publishedAt)}。`
+        : "";
+      setMessage(`PDF 已保存到团队文章库并加入待读列表；${abstractMessage}${dateMessage}`);
       setFile(null);
       setTitle("");
       setPublishedAt("");
@@ -551,7 +566,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.15`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.16`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -594,7 +609,7 @@ async function generateReadingNotePdf({
       let y = 105 + titleLines.length * 52 + 28;
       context.fillStyle = "#766f62";
       context.font = "24px sans-serif";
-      context.fillText(`${author} · 批注 ${index + 1} · 原文 P.${note.page}`, 80, y);
+      context.fillText(`${author} · 批注 ${index + 1} · 原文第 ${note.page} 页`, 80, y);
       y += 45;
 
       const imageMaxWidth = 1080;
@@ -786,7 +801,6 @@ function ContinuousPdfPage({
         ref={textLayerRef}
       />
       {children}
-      <span className="continuous-page-number">P.{page}</span>
     </div>
   );
 }
@@ -838,7 +852,7 @@ function PdfContinuousCanvas({
       try {
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.15`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.16`;
         loadingTask = pdfjs.getDocument(url);
         const document = await loadingTask.promise;
         if (!cancelled) {
@@ -1664,7 +1678,6 @@ export function ReviewComposer({
                 )}
               <strong><MathTitle title={article.title} /></strong>
               <small>{article.tags.join(" · ")}</small>
-              {article.lastReadPage && <em>上次读到 P.{article.lastReadPage}</em>}
             </button>
           ))}
           {filteredArticles.length === 0 && <p>没有匹配文章</p>}
@@ -1697,7 +1710,14 @@ export function ReviewComposer({
             <div className="reader-metadata-summary" aria-label="文章信息">
               <div><strong>标签</strong><span>{selectedArticle.tags.join(" · ")}</span></div>
               <div><strong>发布机构</strong><span>{selectedArticle.publisher === "机构待补充" || selectedArticle.publisher.toLocaleLowerCase() === "arxiv" ? "暂无" : selectedArticle.publisher}</span></div>
+              <div><strong>发布日期</strong><span>{selectedArticle.publishedAt ?? "暂无"}</span></div>
             </div>
+            <ArticleMetadataEditor
+              articleId={selectedArticle.id}
+              initialPublishedAt={selectedArticle.publishedAt}
+              initialPublisher={selectedArticle.publisher}
+              initialTags={selectedArticle.tags}
+            />
             {focusMode ? (
               <>
                 <div className="reader-toolbar">
@@ -1724,11 +1744,6 @@ export function ReviewComposer({
                     {viewingPartnerNote && !activePartnerNote && (
                       <button aria-pressed="true" className="selected" type="button">{activeNoteAuthor}的笔记</button>
                     )}
-                  </div>
-                  <div className="reader-page-tools">
-                    <button disabled={page === 1} onClick={() => navigateToPage(page - 1)} type="button">←</button>
-                    <label>第 <input max={pdfPageCount || undefined} min="1" onChange={(event) => navigateToPage(Number(event.target.value))} type="number" value={page} /> / {pdfPageCount || "…"} 页</label>
-                    <button disabled={pdfPageCount > 0 && page >= pdfPageCount} onClick={() => navigateToPage(page + 1)} type="button">→</button>
                   </div>
                   <div className="reader-zoom-tools">
                     <button onClick={() => setZoom((value) => Math.max(60, value - 10))} type="button">−</button>
@@ -1864,6 +1879,12 @@ export function ReviewComposer({
                 <section>
                   <span>摘要</span>
                   <p>{selectedArticle.abstract || "这篇文章暂时没有摘要。"}</p>
+                  {selectedArticle.abstractZh && (
+                    <div className="translated-abstract">
+                      <strong>中文摘要</strong>
+                      <p>{selectedArticle.abstractZh}</p>
+                    </div>
+                  )}
                 </section>
                 <section>
                   <header>
@@ -1872,7 +1893,7 @@ export function ReviewComposer({
                       <strong>{communityReviews.length} 条评论</strong>
                     </div>
                     <button onClick={beginReading} type="button">
-                      {selectedArticle.lastReadPage ? `从 P.${selectedArticle.lastReadPage} 继续阅读` : "开始阅读"}
+                      {selectedArticle.lastReadPage ? "继续阅读" : "开始阅读"}
                     </button>
                   </header>
                   <div className="preview-comments">
@@ -1899,17 +1920,17 @@ export function ReviewComposer({
       <aside className="reader-notebook">
         <div className="notebook-heading">
           <div><span>阅读工作台</span><small>阅读、理解、整理、发布</small></div>
-          <em>{viewingPartnerNote ? `${activeNoteAuthor}的笔记` : `P.${page}`}</em>
+          {viewingPartnerNote && <em>{activeNoteAuthor}的笔记</em>}
         </div>
         <nav className="workspace-tabs" aria-label="阅读工作台功能">
           <button className={contextTab === "annotations" ? "selected" : ""} onClick={() => { setContextTab("annotations"); setMessage(""); }} type="button">
-            <i aria-hidden="true">▣</i><strong>批注</strong><span>{notes.length}</span>
+            <i aria-hidden="true">▣</i><strong>批注</strong>
           </button>
           <button className={contextTab === "translate" ? "selected" : ""} onClick={() => { setContextTab("translate"); setMessage(""); }} type="button">
-            <i aria-hidden="true">译</i><strong>翻译</strong>{quoteDraft && <span>1</span>}
+            <i aria-hidden="true">译</i><strong>翻译</strong>
           </button>
           <button className={contextTab === "community" ? "selected" : ""} onClick={() => { setContextTab("community"); setMessage(""); }} type="button">
-            <i aria-hidden="true">◎</i><strong>伙伴</strong><span>{communityReviews.length}</span>
+            <i aria-hidden="true">◎</i><strong>伙伴</strong>
           </button>
           <button className={contextTab === "publish" ? "selected" : ""} onClick={() => { setContextTab("publish"); setMessage(""); }} type="button">
             <i aria-hidden="true">↑</i><strong>发布</strong>
@@ -1956,7 +1977,7 @@ export function ReviewComposer({
             <header className="workbench-section-heading"><div><strong>我的画框批注</strong><small>批注将用于生成读书笔记 PDF</small></div><span>{notes.length}</span></header>
             {annotationRect ? (
               <section className="note-composer">
-                <header><span>P.{annotationPage}</span><div><strong>填写这个画框的批注</strong><small>截图、页码和文字会一起保存</small></div></header>
+                <header><span>新批注</span><div><strong>填写这个画框的批注</strong><small>截图、位置和文字会一起保存</small></div></header>
                 <textarea onChange={(event) => setNoteDraft(event.target.value)} placeholder="写下你对这个画框区域的理解…" rows={5} value={noteDraft} />
                 <footer>
                   <span>伙伴框也可以直接复用</span>
@@ -1996,7 +2017,7 @@ export function ReviewComposer({
                       else navigateToPage(note.page);
                     }}
                     type="button"
-                  ><strong>P.{note.page}</strong><span>▣ {note.content}</span></button>
+                  ><strong>批注 {index + 1}</strong><span>▣ {note.content}</span></button>
                   <button aria-label="删除这条批注" onClick={() => setNotes((current) => current.filter((_, itemIndex) => itemIndex !== index))} type="button">×</button>
                 </div>
               ))}

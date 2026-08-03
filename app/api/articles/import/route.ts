@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { translateAcademicText } from "@/lib/academic-translation";
 import { database } from "@/lib/db";
 import { articleCategories, normalizeTags } from "@/lib/knowledge-types";
 import { warmPdfCache } from "@/lib/pdf-cache";
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
     body.publisher?.trim() && body.publisher.trim().toLocaleLowerCase() !== "arxiv"
       ? body.publisher.trim()
       : "机构待补充";
+  const abstract = body.abstract?.trim().slice(0, 12_000) ?? "";
 
   if (!title || !sourceUrl || tags.length === 0) {
     return NextResponse.json(
@@ -54,6 +56,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "原文链接格式不正确" }, { status: 400 });
   }
 
+  let abstractZh = "";
+  if (abstract) {
+    try {
+      abstractZh = await translateAcademicText(abstract);
+    } catch (error) {
+      console.warn("Imported article abstract translation failed", error);
+    }
+  }
+
   const client = await database.connect();
   try {
     await client.query("BEGIN");
@@ -70,15 +81,16 @@ export async function POST(request: Request) {
     if (!articleId) {
       const inserted = await client.query<{ id: number }>(
         `INSERT INTO articles (
-           title, title_key, abstract, authors, publisher, category, tags,
+           title, title_key, abstract, abstract_zh, authors, publisher, category, tags,
            published_at, source_url, external_id, imported_by
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING id`,
         [
           title,
           normalizeTitle(title),
-          body.abstract?.trim() ?? "",
+          abstract,
+          abstractZh,
           Array.isArray(body.authors)
             ? body.authors.filter((author) => typeof author === "string").slice(0, 100)
             : [],
@@ -100,6 +112,8 @@ export async function POST(request: Request) {
                WHEN LOWER(publisher) = 'arxiv' THEN '机构待补充'
                ELSE publisher
              END,
+             abstract = CASE WHEN $4 <> '' THEN $4 ELSE abstract END,
+             abstract_zh = CASE WHEN $5 <> '' THEN $5 ELSE abstract_zh END,
              tags = (
                SELECT ARRAY(
                  SELECT DISTINCT tag
@@ -108,7 +122,7 @@ export async function POST(request: Request) {
                )
              )
          WHERE id = $1`,
-        [articleId, publisher, tags],
+        [articleId, publisher, tags, abstract, abstractZh],
       );
     }
 
@@ -125,7 +139,13 @@ export async function POST(request: Request) {
     void warmPdfCache(articleId, parsedUrl.toString()).catch((error) =>
       console.error("Imported PDF prewarm failed", error),
     );
-    return NextResponse.json({ ok: true, articleId });
+    return NextResponse.json({
+      ok: true,
+      articleId,
+      abstractExtracted: Boolean(abstract),
+      abstractTranslated: Boolean(abstractZh),
+      abstractZh,
+    });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Article import failed", error);

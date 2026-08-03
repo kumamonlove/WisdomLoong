@@ -60,6 +60,7 @@ export type ReaderArticle = {
   id: number;
   title: string;
   abstract: string;
+  abstractZh: string;
   authors: string[];
   publisher: string;
   category: ArticleCategory;
@@ -358,7 +359,8 @@ export async function getReadingList(userId: number) {
 export async function getArticlesForReview(userId: number) {
   const result = await database.query<ReaderArticle>(
     `SELECT
-            articles.id, articles.title, articles.abstract, articles.authors,
+            articles.id, articles.title, articles.abstract,
+            articles.abstract_zh AS "abstractZh", articles.authors,
             articles.publisher, articles.category, articles.tags,
             articles.published_at::text AS "publishedAt",
             articles.source_url AS "sourceUrl",

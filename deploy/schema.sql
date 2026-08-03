@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS articles (
   title TEXT NOT NULL,
   title_key TEXT NOT NULL UNIQUE,
   abstract TEXT NOT NULL DEFAULT '',
+  abstract_zh TEXT NOT NULL DEFAULT '',
   authors TEXT[] NOT NULL DEFAULT '{}',
   publisher TEXT NOT NULL DEFAULT '机构待补充',
   category VARCHAR(32) NOT NULL,
@@ -53,6 +54,7 @@ CREATE INDEX IF NOT EXISTS articles_category_idx ON articles(category);
 CREATE INDEX IF NOT EXISTS articles_published_at_idx ON articles(published_at DESC);
 
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS abstract_zh TEXT NOT NULL DEFAULT '';
 ALTER TABLE articles ALTER COLUMN publisher SET DEFAULT '机构待补充';
 ALTER TABLE articles ALTER COLUMN imported_by DROP NOT NULL;
 ALTER TABLE articles DROP CONSTRAINT IF EXISTS articles_imported_by_fkey;

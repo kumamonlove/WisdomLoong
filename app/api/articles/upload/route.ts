@@ -2,7 +2,9 @@ import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { database } from "@/lib/db";
+import { translateAcademicText } from "@/lib/academic-translation";
 import { articleCategories, normalizeTags } from "@/lib/knowledge-types";
+import { extractPdfFrontMatter } from "@/lib/pdf-abstract";
 import { pdfCacheDirectory, pdfCachePath } from "@/lib/pdf-cache";
 
 export const runtime = "nodejs";
@@ -30,7 +32,8 @@ export async function POST(request: Request) {
   const file = form.get("file");
   const title = String(form.get("title") ?? "").trim();
   const publisher = String(form.get("publisher") ?? "").trim() || "机构待补充";
-  const publishedAt = String(form.get("publishedAt") ?? "").trim() || null;
+  let publishedAt = String(form.get("publishedAt") ?? "").trim() || null;
+  const submittedPublishedAt = Boolean(publishedAt);
   let submittedTags: unknown = [];
   try {
     submittedTags = JSON.parse(String(form.get("tags") ?? "[]"));
@@ -58,6 +61,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "文件内容不是有效的 PDF" }, { status: 400 });
   }
 
+  let abstract = "";
+  let abstractZh = "";
+  try {
+    const frontMatter = await extractPdfFrontMatter(buffer);
+    abstract = frontMatter.abstract;
+    publishedAt ||= frontMatter.publishedAt || null;
+  } catch (error) {
+    console.warn("PDF abstract extraction failed", error);
+  }
+  if (abstract) {
+    try {
+      abstractZh = await translateAcademicText(abstract);
+    } catch (error) {
+      console.warn("Imported PDF abstract translation failed", error);
+    }
+  }
+
   const client = await database.connect();
   let temporaryPath: string | null = null;
   try {
@@ -71,14 +91,16 @@ export async function POST(request: Request) {
     if (!articleId) {
       const inserted = await client.query<{ id: number }>(
         `INSERT INTO articles (
-           title, title_key, abstract, authors, publisher, category, tags,
+           title, title_key, abstract, abstract_zh, authors, publisher, category, tags,
            published_at, source_url, external_id, imported_by
          )
-         VALUES ($1, $2, '', '{}', $3, $4, $5, $6, $7, NULL, $8)
+         VALUES ($1, $2, $3, $4, '{}', $5, $6, $7, $8, $9, NULL, $10)
          RETURNING id`,
         [
           title,
           normalizeTitle(title),
+          abstract,
+          abstractZh,
           publisher,
           category,
           tags,
@@ -93,6 +115,8 @@ export async function POST(request: Request) {
         `UPDATE articles
          SET title = $2,
              category = $3,
+             abstract = CASE WHEN $7 <> '' THEN $7 ELSE abstract END,
+             abstract_zh = CASE WHEN $8 <> '' THEN $8 ELSE abstract_zh END,
              tags = (
                SELECT ARRAY(
                  SELECT DISTINCT tag
@@ -103,7 +127,7 @@ export async function POST(request: Request) {
              published_at = COALESCE($5::date, published_at),
              publisher = CASE WHEN $6 <> '机构待补充' THEN $6 ELSE publisher END
          WHERE id = $1`,
-        [articleId, title, category, tags, publishedAt, publisher],
+        [articleId, title, category, tags, publishedAt, publisher, abstract, abstractZh],
       );
     }
 
@@ -121,7 +145,14 @@ export async function POST(request: Request) {
     temporaryPath = null;
 
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true, articleId });
+    return NextResponse.json({
+      ok: true,
+      articleId,
+      abstractExtracted: Boolean(abstract),
+      abstractTranslated: Boolean(abstractZh),
+      publishedAt,
+      publishedAtExtracted: !submittedPublishedAt && Boolean(publishedAt),
+    });
   } catch (error) {
     await client.query("ROLLBACK");
     if (temporaryPath) {

@@ -663,7 +663,7 @@ select {
   width: fit-content;
   color: var(--muted);
   cursor: pointer;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   list-style: none;
 }
@@ -684,7 +684,7 @@ select {
 
 .card-metadata-editor > div {
   margin-top: 10px;
-  padding: 11px;
+  padding: 16px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
@@ -702,7 +702,7 @@ select {
 
 .card-metadata-editor section > strong {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .card-metadata-editor label {
@@ -712,25 +712,25 @@ select {
 
 .card-metadata-editor input {
   min-width: 0;
-  height: 30px;
-  padding: 0 8px;
+  height: 38px;
+  padding: 0 11px;
   flex: 1;
   border: 1px solid var(--line);
   border-radius: 6px;
   outline: none;
   background: var(--white);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .card-metadata-editor button {
-  min-height: 28px;
-  padding: 4px 8px;
+  min-height: 36px;
+  padding: 6px 11px;
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--white);
   cursor: pointer;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -746,8 +746,8 @@ select {
 }
 
 .card-metadata-tags button {
-  min-height: 23px;
-  padding: 3px 6px;
+  min-height: 30px;
+  padding: 5px 9px;
   color: var(--accent);
   border-color: rgba(214, 95, 64, .22);
   border-radius: 999px;
@@ -757,7 +757,7 @@ select {
   grid-column: 1 / -1;
   margin: 0;
   color: var(--accent);
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .review-preview {
@@ -1865,6 +1865,18 @@ select {
   white-space: nowrap;
 }
 
+.paper-reader > .card-metadata-editor {
+  margin: 0;
+  padding: 7px 14px;
+  border-top: 0;
+  border-bottom: 1px solid var(--line);
+  background: rgba(248, 246, 239, .32);
+}
+
+.paper-reader > .card-metadata-editor > div {
+  margin: 8px 0 3px;
+}
+
 .article-reading-preview {
   padding: 26px;
   display: grid;
@@ -1894,6 +1906,27 @@ select {
   color: #45433e;
   font-size: 13px;
   line-height: 1.8;
+}
+
+.translated-abstract {
+  margin-top: 18px;
+  padding: 15px 17px;
+  border: 1px solid rgba(59, 111, 93, .2);
+  border-radius: 10px;
+  background: rgba(59, 111, 93, .06);
+}
+
+.translated-abstract > strong {
+  color: #315f50;
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+
+.translated-abstract > p {
+  margin: 8px 0 0;
+  color: #353c38;
+  font-size: 13px;
+  line-height: 1.85;
 }
 
 .article-reading-preview section > header {
@@ -2045,15 +2078,9 @@ select {
   background: var(--ink);
 }
 
-.reader-toolbar .reader-page-tools,
 .reader-toolbar .reader-zoom-tools {
   padding-left: 10px;
   border-left: 1px solid var(--line);
-}
-
-.reader-toolbar .reader-page-tools label {
-  min-width: 76px;
-  text-align: center;
 }
 
 .reader-toolbar .reader-annotation-tools {
@@ -2137,21 +2164,6 @@ select {
 
 .pdf-page-scroll.is-continuous .pdf-page-canvas {
   margin-bottom: 28px;
-}
-
-.continuous-page-number {
-  position: absolute;
-  z-index: 70;
-  top: 8px;
-  left: -42px;
-  min-width: 34px;
-  padding: 4px 5px;
-  color: var(--white);
-  border-radius: 5px;
-  background: rgba(24, 24, 22, .72);
-  font-size: 9px;
-  text-align: center;
-  pointer-events: none;
 }
 
 .pdf-page-canvas {
@@ -4502,7 +4514,6 @@ select {
     flex: 1;
   }
 
-  .reader-toolbar .reader-page-tools,
   .reader-toolbar .reader-zoom-tools {
     padding-left: 0;
     border-left: 0;

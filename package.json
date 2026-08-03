@@ -1,6 +1,6 @@
 {
   "name": "wisdomloong-knowledge-hub",
-  "version": "1.14.15",
+  "version": "1.14.16",
   "private": true,
   "scripts": {
     "dev": "next dev",
