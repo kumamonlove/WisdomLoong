@@ -165,7 +165,7 @@ jobs:
           ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
         run: |
           ssh "${ALIYUN_USER}@${ALIYUN_HOST}" \
-            "sudo journalctl -u wisdomloong --since '30 minutes ago' --priority=warning --no-pager -n 300 || true"
+            "sudo journalctl -u wisdomloong --since '30 minutes ago' --no-pager -n 300 || true"
 
       - name: Upload screenshots
         if: always()
