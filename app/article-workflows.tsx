@@ -566,7 +566,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.24`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.25`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -777,19 +777,25 @@ function ContinuousPdfPage({
           transform: pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
         });
         await renderTask.promise;
+        if (!cancelled) onLoad();
         const textContainer = textLayerRef.current;
         if (textContainer && !cancelled) {
-          textContainer.replaceChildren();
-          textContainer.style.setProperty("--total-scale-factor", String(viewport.scale));
-          const pdfjs = await import("pdfjs-dist");
-          textLayer = new pdfjs.TextLayer({
-            textContentSource: await pdfPage.getTextContent(),
-            container: textContainer,
-            viewport,
-          });
-          await (textLayer as InstanceType<typeof pdfjs.TextLayer>).render();
+          try {
+            textContainer.replaceChildren();
+            textContainer.style.setProperty("--total-scale-factor", String(viewport.scale));
+            const pdfjs = await import("pdfjs-dist");
+            textLayer = new pdfjs.TextLayer({
+              textContentSource: await pdfPage.getTextContent(),
+              container: textContainer,
+              viewport,
+            });
+            await (textLayer as InstanceType<typeof pdfjs.TextLayer>).render();
+          } catch (error) {
+            if (!cancelled && (error as Error).name !== "AbortException") {
+              console.warn("PDF text layer unavailable", error);
+            }
+          }
         }
-        if (!cancelled) onLoad();
       } catch (error) {
         if (!cancelled && (error as Error).name !== "RenderingCancelledException") onError();
       }
@@ -867,9 +873,11 @@ function PdfContinuousCanvas({
       try {
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.24`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.25`;
         loadingTask = pdfjs.getDocument({
           url,
+          disableAutoFetch: true,
+          disableStream: true,
           rangeChunkSize: 256 * 1024,
         });
         loadingTask.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
