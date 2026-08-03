@@ -2521,6 +2521,23 @@ select {
   font-size: 13px;
 }
 
+.pdf-load-progress {
+  width: min(260px, 62vw);
+  height: 4px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(24, 24, 22, 0.12);
+}
+
+.pdf-load-progress > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 180ms ease-out;
+}
+
 .pdf-loading small {
   margin-top: 6px;
   color: var(--muted);

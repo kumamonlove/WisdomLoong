@@ -566,7 +566,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.23`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.24`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -687,6 +687,7 @@ function arxivPageUrl(sourceUrl: string) {
 function ContinuousPdfPage({
   pdfDocument,
   page,
+  eager,
   zoom,
   onLoad,
   onError,
@@ -696,6 +697,7 @@ function ContinuousPdfPage({
 }: {
   pdfDocument: PDFDocumentProxy;
   page: number;
+  eager: boolean;
   zoom: number;
   onLoad: () => void;
   onError: () => void;
@@ -707,21 +709,32 @@ function ContinuousPdfPage({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const [pdfPage, setPdfPage] = useState<PDFPageProxy | null>(null);
-  const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
-  const [nearViewport, setNearViewport] = useState(page <= 2);
+  const [pageSize, setPageSize] = useState(() => ({
+    width: 816 * zoom / 100,
+    height: 1056 * zoom / 100,
+  }));
+  const [nearViewport, setNearViewport] = useState(eager);
 
   useEffect(() => {
+    if (!nearViewport) return;
     let cancelled = false;
     void pdfDocument.getPage(page).then((nextPage) => {
       if (cancelled) return;
-      const viewport = nextPage.getViewport({ scale: (zoom / 100) * (96 / 72) });
       setPdfPage(nextPage);
-      setPageSize({ width: viewport.width, height: viewport.height });
     }).catch(() => {
       if (!cancelled) onError();
     });
     return () => { cancelled = true; };
-  }, [pdfDocument, page, zoom, onError]);
+  }, [pdfDocument, page, nearViewport, onError]);
+
+  useEffect(() => {
+    if (!pdfPage) {
+      setPageSize({ width: 816 * zoom / 100, height: 1056 * zoom / 100 });
+      return;
+    }
+    const viewport = pdfPage.getViewport({ scale: (zoom / 100) * (96 / 72) });
+    setPageSize({ width: viewport.width, height: viewport.height });
+  }, [pdfPage, zoom]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -813,6 +826,7 @@ function PdfContinuousCanvas({
   onError,
   onVisiblePage,
   onDocumentReady,
+  onProgress,
   onTextSelect,
   onZoom,
   children,
@@ -824,6 +838,7 @@ function PdfContinuousCanvas({
   onError: () => void;
   onVisiblePage: (page: number) => void;
   onDocumentReady: (pageCount: number) => void;
+  onProgress: (loaded: number, total: number) => void;
   onTextSelect: (text: string, page: number) => void;
   onZoom: (delta: number) => void;
   children: (page: number) => ReactNode;
@@ -852,8 +867,14 @@ function PdfContinuousCanvas({
       try {
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.23`;
-        loadingTask = pdfjs.getDocument(url);
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.24`;
+        loadingTask = pdfjs.getDocument({
+          url,
+          rangeChunkSize: 256 * 1024,
+        });
+        loadingTask.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
+          if (!cancelled) onProgress(loaded, total);
+        };
         const document = await loadingTask.promise;
         if (!cancelled) {
           setPdfDocument(document);
@@ -867,7 +888,7 @@ function PdfContinuousCanvas({
       cancelled = true;
       void loadingTask?.destroy();
     };
-  }, [url, onError, onDocumentReady]);
+  }, [url, onError, onDocumentReady, onProgress]);
 
   useEffect(() => {
     if (!pdfDocument) return;
@@ -881,6 +902,7 @@ function PdfContinuousCanvas({
     <div className="pdf-page-scroll is-continuous" ref={scrollRef}>
       {pdfDocument && Array.from({ length: pdfDocument.numPages }, (_, index) => index + 1).map((page) => (
         <ContinuousPdfPage
+          eager={page <= 2 || Math.abs(page - initialPageRef.current) <= 1}
           key={page}
           onError={onError}
           onLoad={onLoad}
@@ -947,8 +969,13 @@ export function ReviewComposer({
   const [localCache, setLocalCache] = useState<{
     status: "idle" | "loading" | "ready" | "unsupported" | "error" | "timeout";
     progress: number;
-  }>({ status: "idle", progress: 0 });
-  const [localPdfUrl, setLocalPdfUrl] = useState("");
+  }>(startingArticleId
+    ? { status: "loading", progress: 1 }
+    : { status: "idle", progress: 0 });
+  const [displayedPdfProgress, setDisplayedPdfProgress] = useState(startingArticleId ? 1 : 0);
+  const [localPdfUrl, setLocalPdfUrl] = useState(
+    startingArticleId ? `/api/articles/${startingArticleId}/pdf` : "",
+  );
   const [localPdfName, setLocalPdfName] = useState("");
   const [readerDragging, setReaderDragging] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
@@ -968,8 +995,6 @@ export function ReviewComposer({
   const readerFileInput = useRef<HTMLInputElement>(null);
   const notePdfInput = useRef<HTMLInputElement>(null);
   const notePdfPreviewRef = useRef("");
-  const activeCacheArticle = useRef(0);
-  const localPdfUrlRef = useRef("");
   const sessionPdfUrls = useRef(new Map<number, string>());
   const articlePageBeforeNote = useRef(page);
 
@@ -1016,6 +1041,15 @@ export function ReviewComposer({
   const handlePdfDocumentReady = useCallback((pageCount: number) => {
     setPdfPageCount(pageCount);
   }, []);
+  const handlePdfProgress = useCallback((loaded: number, total: number) => {
+    if (partnerNoteReviewId !== null) return;
+    const progress = total > 0
+      ? Math.max(1, Math.min(99, Math.round(loaded / total * 100)))
+      : 1;
+    setLocalCache((current) => current.status === "ready"
+      ? current
+      : { status: "loading", progress: Math.max(current.progress, progress) });
+  }, [partnerNoteReviewId]);
 
   function setAnnotationVisibility(enabled: boolean) {
     setAnnotationsEnabled(enabled);
@@ -1042,7 +1076,6 @@ export function ReviewComposer({
   }, []);
 
   useEffect(() => {
-    if (navigator.storage?.persist) void navigator.storage.persist();
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.getRegistrations().then((registrations) =>
         Promise.all(registrations
@@ -1098,14 +1131,23 @@ export function ReviewComposer({
   }, [activeReaderPdfUrl]);
 
   useEffect(() => {
-    if (focusMode && articleId) void cachePdfLocally(articleId);
-  }, [focusMode, articleId]);
-
-  useEffect(() => {
-    if (focusMode || !articleId || sessionPdfUrls.current.has(articleId)) return;
-    const preload = window.setTimeout(() => void cachePdfLocally(articleId), 600);
-    return () => window.clearTimeout(preload);
-  }, [focusMode, articleId]);
+    if (localCache.status === "ready") {
+      setDisplayedPdfProgress(100);
+      return;
+    }
+    if (localCache.status !== "loading") {
+      setDisplayedPdfProgress(0);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setDisplayedPdfProgress((current) => {
+        if (current >= localCache.progress) return current;
+        const step = Math.max(1, Math.ceil((localCache.progress - current) / 7));
+        return Math.min(localCache.progress, current + step);
+      });
+    }, 45);
+    return () => window.clearInterval(timer);
+  }, [localCache]);
 
   useEffect(() => () => {
     sessionPdfUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -1135,19 +1177,23 @@ export function ReviewComposer({
     setNotePdfFile(null);
     setNotePdfPreviewUrl("");
     setContextTab("annotations");
-    const sessionUrl = sessionPdfUrls.current.get(id) ?? "";
-    localPdfUrlRef.current = sessionUrl;
-    setLocalPdfUrl(sessionUrl);
-    setLocalPdfName("");
+    const sessionUrl = sessionPdfUrls.current.get(id);
+    setLocalPdfUrl(sessionUrl ?? `/api/articles/${id}/pdf`);
+    setLocalPdfName(sessionUrl ? "本地 PDF" : "");
+    setDisplayedPdfProgress(sessionUrl ? 100 : 1);
     setLocalCache(sessionUrl
       ? { status: "ready", progress: 100 }
-      : { status: "idle", progress: 0 });
+      : { status: "loading", progress: 1 });
     setFocusMode(false);
-    if (!sessionUrl) window.setTimeout(() => void cachePdfLocally(id), 0);
   }
 
   function beginReading() {
     if (!selectedArticle) return;
+    if (!localPdfUrl) {
+      setLocalPdfUrl(`/api/articles/${selectedArticle.id}/pdf`);
+      setDisplayedPdfProgress(1);
+      setLocalCache({ status: "loading", progress: 1 });
+    }
     setArticlePdfReady(false);
     setCommunityAnnotations([]);
     setPdfLoading(true);
@@ -1184,12 +1230,10 @@ export function ReviewComposer({
       setMessage("请选择 PDF 文件。");
       return;
     }
-    activeCacheArticle.current = 0;
     const previousUrl = sessionPdfUrls.current.get(articleId);
     if (previousUrl) URL.revokeObjectURL(previousUrl);
     const objectUrl = URL.createObjectURL(nextFile);
     sessionPdfUrls.current.set(articleId, objectUrl);
-    localPdfUrlRef.current = objectUrl;
     setLocalPdfUrl(objectUrl);
     setLocalPdfName(nextFile.name);
     setLocalCache({ status: "ready", progress: 100 });
@@ -1199,103 +1243,25 @@ export function ReviewComposer({
     setMessage(`已在阅读器中打开本地文件 ${nextFile.name}，文件不会上传。`);
   }
 
-  async function cachePdfLocally(id: number) {
-    const sessionUrl = sessionPdfUrls.current.get(id);
-    if (sessionUrl) {
-      localPdfUrlRef.current = sessionUrl;
-      setLocalPdfUrl(sessionUrl);
-      setLocalCache({ status: "ready", progress: 100 });
-      return;
-    }
-    if (activeCacheArticle.current === id) return;
-    activeCacheArticle.current = id;
-    const cacheKey = `/api/articles/${id}/pdf`;
-    const cacheRequest = new Request(new URL(cacheKey, window.location.origin), {
-      credentials: "same-origin",
-    });
-    const controller = new AbortController();
-    let downloadTimedOut = false;
-    let timeoutId: number | undefined;
-    try {
-      const cache = "caches" in window
-        ? await caches.open("wisdomloong-papers-v1")
-        : null;
-      const cached = await cache?.match(cacheRequest);
-      if (cached) {
-        const blob = await cached.blob();
-        if (blob.size < 1024) {
-          await cache?.delete(cacheRequest);
-        } else {
-          const objectUrl = URL.createObjectURL(blob);
-          sessionPdfUrls.current.set(id, objectUrl);
-          localPdfUrlRef.current = objectUrl;
-          setLocalPdfUrl(objectUrl);
-          setLocalCache({ status: "ready", progress: 100 });
-          return;
-        }
-      }
-      setLocalCache({ status: "loading", progress: 1 });
-      timeoutId = window.setTimeout(() => {
-        downloadTimedOut = true;
-        controller.abort();
-      }, 150_000);
-      const response = await fetch(cacheRequest, {
-        cache: "default",
-        signal: controller.signal,
-      });
-      if (!response.ok || !response.body) throw new Error("download failed");
-      const total = Number(response.headers.get("content-length")) || 0;
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        received += value.byteLength;
-        if (activeCacheArticle.current === id && total > 0) {
-          setLocalCache({ status: "loading", progress: Math.min(99, Math.round(received / total * 100)) });
-        }
-      }
-      const blob = new Blob(chunks as BlobPart[], { type: "application/pdf" });
-      if (activeCacheArticle.current === id) {
-        const objectUrl = URL.createObjectURL(blob);
-        sessionPdfUrls.current.set(id, objectUrl);
-        localPdfUrlRef.current = objectUrl;
-        setLocalPdfUrl(objectUrl);
-        setLocalCache({ status: "ready", progress: 100 });
-      }
-      try {
-        await cache?.put(cacheRequest, new Response(blob, {
-          headers: { "Content-Type": "application/pdf", "Content-Length": String(blob.size) },
-        }));
-      } catch {
-        setMessage("论文已经打开，但浏览器未授予持久存储空间；下次可能需要重新读取。");
-      }
-    } catch {
-      if (activeCacheArticle.current === id) {
-        setLocalCache({ status: downloadTimedOut ? "timeout" : "error", progress: 0 });
-      }
-    } finally {
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-      if (activeCacheArticle.current === id) activeCacheArticle.current = 0;
-    }
-  }
-
   function retryPdfDownload() {
-    activeCacheArticle.current = 0;
-    setLocalCache({ status: "idle", progress: 0 });
+    setDisplayedPdfProgress(1);
+    setLocalCache({ status: "loading", progress: 1 });
     setArticlePdfReady(false);
     setCommunityAnnotations([]);
     setPdfLoading(true);
     setPdfRenderAttempt((value) => value + 1);
-    void cachePdfLocally(articleId);
+    if (!localPdfName) {
+      setLocalPdfUrl(`/api/articles/${articleId}/pdf?retry=${Date.now()}`);
+    }
   }
 
   const handlePdfPageLoad = useCallback(() => {
     setPdfLoading(false);
     setPartnerNoteError(false);
-    if (partnerNoteReviewId === null) setArticlePdfReady(true);
+    if (partnerNoteReviewId === null) {
+      setArticlePdfReady(true);
+      setLocalCache({ status: "ready", progress: 100 });
+    }
   }, [partnerNoteReviewId]);
   const handlePdfPageError = useCallback(() => {
     if (partnerNoteReviewId !== null) {
@@ -1628,9 +1594,9 @@ export function ReviewComposer({
             {viewingPartnerNote
               ? `正在阅读 ${activeNoteAuthor} 的读书笔记`
               : localCache.status === "loading"
-              ? `正在保存到本地 ${localCache.progress}%`
+              ? `正在快速加载论文 ${displayedPdfProgress}%`
               : localCache.status === "ready"
-                ? "已存入本地阅读器"
+                ? "论文已打开 · 后续页面按需加载"
                 : "点击右侧结束阅读"}
           </small>
           <button onClick={() => setFocusMode(false)} type="button">结束阅读</button>
@@ -1820,13 +1786,25 @@ export function ReviewComposer({
                             ? "读书笔记暂时无法加载"
                             : `正在打开 ${activeNoteAuthor} 的读书笔记`
                           : localCache.status === "loading"
-                          ? `正在下载到本地阅读器 ${localCache.progress}%`
+                          ? `正在快速打开论文 ${displayedPdfProgress}%`
                           : localCache.status === "timeout"
                             ? "下载超时"
                           : localCache.status === "error"
                             ? "论文暂时无法加载"
                           : "正在打开本地论文"}
                       </strong>
+                      {!viewingPartnerNote && localCache.status === "loading" && (
+                        <div
+                          aria-label={`论文加载进度 ${displayedPdfProgress}%`}
+                          aria-valuemax={100}
+                          aria-valuemin={0}
+                          aria-valuenow={displayedPdfProgress}
+                          className="pdf-load-progress"
+                          role="progressbar"
+                        >
+                          <i style={{ width: `${displayedPdfProgress}%` }} />
+                        </div>
+                      )}
                       {viewingPartnerNote ? (
                         partnerNoteError ? (
                           <div className="pdf-fallback-actions">
@@ -1856,7 +1834,7 @@ export function ReviewComposer({
                           </div>
                         </>
                       ) : (
-                        <small>首次下载可能需要一些时间，请保持页面打开；完成后连续阅读不再访问网络。</small>
+                        <small>会优先显示当前页，其余页面在阅读时继续加载；再次打开会直接使用浏览器缓存。</small>
                       )}
                     </div>
                   )}
@@ -1867,6 +1845,7 @@ export function ReviewComposer({
                       onError={handlePdfPageError}
                       onDocumentReady={handlePdfDocumentReady}
                       onLoad={handlePdfPageLoad}
+                      onProgress={handlePdfProgress}
                       onTextSelect={useSelectedPdfText}
                       onVisiblePage={setPage}
                       onZoom={handlePdfZoom}

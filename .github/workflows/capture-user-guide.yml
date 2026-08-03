@@ -57,6 +57,10 @@ jobs:
           const page = await context.newPage();
           page.on('response', (response) => {
             if (response.status() >= 500) console.error(`HTTP_${response.status()} ${response.url()}`);
+            if (/\/api\/articles\/\d+\/pdf(?:\?|$)/.test(response.url())) {
+              const headers = response.headers();
+              console.log(`PDF_RESPONSE status=${response.status()} bytes=${headers['content-length'] ?? 'stream'} range=${headers['content-range'] ?? 'full'} cache=${headers['x-wisdomloong-cache'] ?? 'unknown'} delivery=${headers['x-wisdomloong-delivery'] ?? 'unknown'}`);
+            }
           });
           page.on('pageerror', (error) => console.error(`PAGE_ERROR ${error.message}`));
           const useReadableGuideName = async () => {
@@ -124,6 +128,7 @@ jobs:
           }
 
           if (!readerHref) throw new Error('No article was available for the reader screenshots');
+          const readerStartedAt = Date.now();
           await page.goto(`${baseUrl}${readerHref}`, { waitUntil: 'domcontentloaded' });
           await page.waitForSelector('.reader-workspace.focus-mode');
           await page.waitForFunction(() => {
@@ -131,6 +136,7 @@ jobs:
             return !document.querySelector('.pdf-loading') &&
               canvas instanceof HTMLCanvasElement && canvas.width > 0 && canvas.height > 0;
           }, { timeout: 45000 });
+          console.log(`PDF_FIRST_PAGE_MS ${Date.now() - readerStartedAt}`);
           await page.waitForTimeout(1000);
           await shot('06-reader-annotations');
 
