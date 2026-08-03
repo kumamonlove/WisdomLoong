@@ -35,10 +35,6 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (content.length < 80) {
-    return NextResponse.json({ error: "长评论至少需要 80 字" }, { status: 400 });
-  }
-
   let parsedNotePdf: { data: Buffer; fileName: string; source: "generated" | "uploaded" } | null = null;
   if (body.notePdf?.dataUrl) {
     const match = body.notePdf.dataUrl.match(/^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/);
@@ -75,7 +71,7 @@ export async function POST(request: Request) {
           : null,
       };
     })
-    .filter((annotation) => annotation.content);
+    .filter((annotation) => annotation.content && annotation.rect);
 
   const client = await database.connect();
   try {

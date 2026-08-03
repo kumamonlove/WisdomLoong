@@ -105,7 +105,7 @@ export function AuthPage({
       </main>
 
       <footer className="auth-footer">
-        <span>WisdomLoong · 目前仅供算法组内部交流学习使用</span>
+        <span>WisdomLoong · 仅供算法组内部交流学习使用</span>
         <span>{appVersion}</span>
       </footer>
     </div>

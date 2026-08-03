@@ -399,6 +399,10 @@ export async function getArticlesForReview(userId: number) {
        ) AS items
        FROM review_annotations
        WHERE review_annotations.review_id = own_review.id
+         AND review_annotations.rect_x IS NOT NULL
+         AND review_annotations.rect_y IS NOT NULL
+         AND review_annotations.rect_width IS NOT NULL
+         AND review_annotations.rect_height IS NOT NULL
      ) own_annotations ON TRUE
      ORDER BY articles.created_at DESC`,
     [userId],
@@ -425,6 +429,7 @@ export async function getUserReviewProfile(userId: number) {
     ),
     database.query<{
       id: number;
+      articleId: number;
       title: string;
       content: string;
       rating: number;
@@ -436,6 +441,7 @@ export async function getUserReviewProfile(userId: number) {
     }>(
       `SELECT
          reviews.id,
+         articles.id AS "articleId",
          articles.title,
          reviews.content,
          reviews.rating,
@@ -449,7 +455,7 @@ export async function getUserReviewProfile(userId: number) {
        LEFT JOIN review_likes ON review_likes.review_id = reviews.id
        LEFT JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
        WHERE reviews.user_id = $1
-       GROUP BY reviews.id, articles.title, reading_note_pdfs.file_name
+       GROUP BY reviews.id, articles.id, articles.title, reading_note_pdfs.file_name
        ORDER BY COUNT(review_likes.user_id) DESC, reviews.updated_at DESC`,
       [userId],
     ),

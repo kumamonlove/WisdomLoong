@@ -28,7 +28,7 @@ type DiscussionAnnotation = {
 };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const user = await getCurrentUser();
@@ -37,6 +37,36 @@ export async function GET(
   if (!Number.isInteger(articleId)) {
     return NextResponse.json({ error: "文章不存在" }, { status: 404 });
   }
+  const includeAnnotations = new URL(request.url).searchParams.get("includeAnnotations") === "1";
+
+  const annotationsQuery = includeAnnotations
+    ? database.query<DiscussionAnnotation>(
+        `SELECT
+           review_annotations.id,
+           reviews.id AS "reviewId",
+           users.username AS author,
+           review_annotations.page_number AS page,
+           review_annotations.quote,
+           review_annotations.translation,
+           review_annotations.content,
+           JSON_BUILD_OBJECT(
+             'x', review_annotations.rect_x,
+             'y', review_annotations.rect_y,
+             'width', review_annotations.rect_width,
+             'height', review_annotations.rect_height
+           ) AS rect
+         FROM review_annotations
+         INNER JOIN reviews ON reviews.id = review_annotations.review_id
+         INNER JOIN users ON users.id = reviews.user_id
+         WHERE reviews.article_id = $1 AND reviews.user_id <> $2
+           AND review_annotations.rect_x IS NOT NULL
+           AND review_annotations.rect_y IS NOT NULL
+           AND review_annotations.rect_width IS NOT NULL
+           AND review_annotations.rect_height IS NOT NULL
+         ORDER BY review_annotations.page_number, review_annotations.id`,
+        [articleId, user.id],
+      )
+    : Promise.resolve({ rows: [] as DiscussionAnnotation[] });
 
   const [reviews, annotations, attachments] = await Promise.all([
     database.query<DiscussionReview>(
@@ -62,28 +92,7 @@ export async function GET(
                 COUNT(review_likes.user_id) DESC, reviews.updated_at DESC`,
       [articleId, user.id],
     ),
-    database.query<DiscussionAnnotation>(
-      `SELECT
-         review_annotations.id,
-         reviews.id AS "reviewId",
-         users.username AS author,
-         review_annotations.page_number AS page,
-         review_annotations.quote,
-         review_annotations.translation,
-         review_annotations.content,
-         CASE WHEN review_annotations.rect_x IS NULL THEN NULL ELSE JSON_BUILD_OBJECT(
-           'x', review_annotations.rect_x,
-           'y', review_annotations.rect_y,
-           'width', review_annotations.rect_width,
-           'height', review_annotations.rect_height
-         ) END AS rect
-       FROM review_annotations
-       INNER JOIN reviews ON reviews.id = review_annotations.review_id
-       INNER JOIN users ON users.id = reviews.user_id
-       WHERE reviews.article_id = $1 AND reviews.user_id <> $2
-       ORDER BY review_annotations.page_number, review_annotations.id`,
-      [articleId, user.id],
-    ),
+    annotationsQuery,
     database.query<{ id: number; reviewId: number; note: string }>(
       `SELECT
          review_attachments.id,

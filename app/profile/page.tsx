@@ -2,6 +2,7 @@ import { KnowledgePage } from "@/app/knowledge-page";
 import { requireUser } from "@/lib/auth";
 import { getUserReviewProfile } from "@/lib/knowledge";
 import { UsernameForm } from "@/app/profile/username-form";
+import { MathTitle } from "@/app/math-title";
 
 export default async function ProfilePage() {
   const user = await requireUser();
@@ -22,7 +23,7 @@ export default async function ProfilePage() {
           <strong><i aria-hidden="true">♥</i>{profile.stats.totalLikes}</strong>
           <small>来自团队成员对你读书笔记的认可</small>
         </div>
-        <div><span>长评 / 解读</span><strong>{profile.stats.longReviews}</strong><small>系统性分享</small></div>
+        <div><span>评论</span><strong>{profile.stats.longReviews}</strong><small>成员观点分享</small></div>
         <div><span>读书笔记 PDF</span><strong>{profile.stats.notePdfs}</strong><small>截图与批注整理</small></div>
       </section>
 
@@ -31,14 +32,14 @@ export default async function ProfilePage() {
         {profile.reviews.map((review) => (
           <article key={review.id}>
             <div>
-              <span>长评论</span>
+              <span>评论</span>
               {review.mustRead
                 ? <em className="must-read-badge">✦ 必读</em>
                 : <small>★ {review.rating}</small>}
             </div>
-            <h3>{review.title}</h3>
+            <h3><MathTitle title={review.title} /></h3>
             <p>{review.content}</p>
-            {review.noteFileName && <a className="profile-note-link" href={`/api/reading-notes/${review.id}/pdf`} target="_blank">打开我的读书笔记 PDF ↗</a>}
+            {review.noteFileName && <a className="profile-note-link" href={`/reviews/new?article=${review.articleId}&note=${review.id}`}>在阅读器打开我的读书笔记</a>}
             <footer>
               <span>{new Intl.DateTimeFormat("zh-CN").format(new Date(review.updatedAt))}</span>
               <strong className={review.likeCount > 0 ? "has-likes" : ""}>

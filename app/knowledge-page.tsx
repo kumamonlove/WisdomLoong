@@ -2,6 +2,7 @@ import packageInfo from "@/package.json";
 import { SiteHeader, type PageName } from "@/app/site-header";
 import { ReadingNoteLikeButton } from "@/app/review-actions";
 import { MarkReadButton } from "@/app/reading-actions";
+import { MathTitle } from "@/app/math-title";
 import type { ArticleCardData } from "@/lib/knowledge";
 
 const appVersion = `v${packageInfo.version}`;
@@ -52,7 +53,7 @@ export function ArticleGrid({
           </div>
           <h3>
             <a href={`/reviews/new?article=${article.id}`}>
-              {article.title}
+              <MathTitle title={article.title} />
             </a>
           </h3>
           {article.recommendationSignals && (
@@ -67,7 +68,7 @@ export function ArticleGrid({
                 <span><i aria-hidden="true">✦</i>{article.recommendationSignals.mustReadCount} 人标记必读</span>
               )}
               {article.recommendationSignals.longReviewCount > 0 && (
-                <span><i aria-hidden="true">¶</i>包含 {article.recommendationSignals.longReviewCount} 篇深度解读</span>
+                <span><i aria-hidden="true">¶</i>包含 {article.recommendationSignals.longReviewCount} 篇评论</span>
               )}
               {article.recommendationSignals.likeCount > 0 && (
                 <span><i aria-hidden="true">♥</i>读书笔记获得 {article.recommendationSignals.likeCount} 个赞</span>
@@ -105,7 +106,7 @@ export function ArticleGrid({
             <div className="review-collection">
               <div className="review-collection-heading">
                 <strong>{article.reviews.length} 位成员的评论</strong>
-                <span>长评论优先</span>
+                <span>成员观点</span>
               </div>
               {article.reviews.map((review) => (
                 <details className="long-review" key={review.id}>
@@ -117,23 +118,10 @@ export function ArticleGrid({
                     {review.mustRead
                       ? <em className="must-read-badge">✦ 必读</em>
                       : <span>★ {review.rating}</span>}
-                    <small>{review.content.length} 字长评论</small>
+                    <small>{review.content.length} 字评论</small>
                   </summary>
                   <div>
                     <p>{review.content}</p>
-                    {review.annotations.length > 0 && (
-                      <div className="shared-annotations">
-                        <h4>逐页批注</h4>
-                        {review.annotations.map((annotation) => (
-                          <article key={annotation.id}>
-                            <strong>P.{annotation.page}</strong>
-                            {annotation.quote && <blockquote>{annotation.quote}</blockquote>}
-                            {annotation.translation && <p className="annotation-translation">{annotation.translation}</p>}
-                            <p>{annotation.content}</p>
-                          </article>
-                        ))}
-                      </div>
-                    )}
                     {review.attachments.length > 0 && (
                       <div className="review-attachments">
                         {review.attachments.map((attachment) => (
@@ -150,7 +138,7 @@ export function ArticleGrid({
                     )}
                     {review.noteFileName && (
                       <div className="reading-note-actions">
-                        <a href={`/api/reading-notes/${review.id}/pdf`} target="_blank">打开读书笔记 PDF ↗</a>
+                        <a href={`/reviews/new?article=${article.id}&note=${review.id}`}>在阅读器打开读书笔记</a>
                         <ReadingNoteLikeButton
                         initialCount={review.likeCount}
                         initiallyLiked={review.likedByViewer}
@@ -220,7 +208,7 @@ export function KnowledgePage({
         {children}
       </main>
       <footer id="footer">
-        <span>WisdomLoong · 目前仅供算法组内部交流学习使用</span>
+        <span>WisdomLoong · 仅供算法组内部交流学习使用</span>
         <span>{appVersion}</span>
       </footer>
     </div>

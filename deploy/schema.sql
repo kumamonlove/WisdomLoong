@@ -198,22 +198,22 @@ CREATE INDEX IF NOT EXISTS reading_note_pdfs_updated_idx
 
 WITH apply_once AS (
   INSERT INTO app_migrations (migration_key)
-  VALUES ('2026-08-03-remove-legacy-short-reviews')
-  ON CONFLICT (migration_key) DO NOTHING
-  RETURNING migration_key
-)
-DELETE FROM reviews
-WHERE CHAR_LENGTH(TRIM(reviews.content)) < 80
-  AND EXISTS (SELECT 1 FROM apply_once);
-
-WITH apply_once AS (
-  INSERT INTO app_migrations (migration_key)
   VALUES ('2026-08-03-remove-pre-v1.14-annotations')
   ON CONFLICT (migration_key) DO NOTHING
   RETURNING migration_key
 )
 DELETE FROM review_annotations
 WHERE review_annotations.created_at < TIMESTAMPTZ '2026-08-03 02:09:03+00'
+  AND EXISTS (SELECT 1 FROM apply_once);
+
+WITH apply_once AS (
+  INSERT INTO app_migrations (migration_key)
+  VALUES ('2026-08-03-remove-page-only-annotations')
+  ON CONFLICT (migration_key) DO NOTHING
+  RETURNING migration_key
+)
+DELETE FROM review_annotations
+WHERE (rect_x IS NULL OR rect_y IS NULL OR rect_width IS NULL OR rect_height IS NULL)
   AND EXISTS (SELECT 1 FROM apply_once);
 
 UPDATE reviews SET review_type = 'long' WHERE review_type <> 'long';
