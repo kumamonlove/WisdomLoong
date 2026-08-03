@@ -1964,6 +1964,25 @@ select {
   background: rgba(42, 140, 107, .1);
 }
 
+.reader-toolbar .view-mode-switch {
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(24, 24, 22, .04);
+}
+
+.reader-toolbar .view-mode-switch button {
+  min-height: 23px;
+  border: 0;
+  background: transparent;
+}
+
+.reader-toolbar .view-mode-switch button.selected {
+  color: var(--white);
+  background: var(--ink);
+}
+
 .reader-toolbar button:disabled {
   cursor: default;
   opacity: .42;
@@ -2022,6 +2041,30 @@ select {
   background: #d0cec7;
 }
 
+.pdf-page-scroll.is-continuous {
+  padding: 1px 0 20px;
+  scroll-behavior: smooth;
+}
+
+.pdf-page-scroll.is-continuous .pdf-page-canvas {
+  margin-bottom: 28px;
+}
+
+.continuous-page-number {
+  position: absolute;
+  z-index: 70;
+  top: 8px;
+  left: -42px;
+  min-width: 34px;
+  padding: 4px 5px;
+  color: var(--white);
+  border-radius: 5px;
+  background: rgba(24, 24, 22, .72);
+  font-size: 9px;
+  text-align: center;
+  pointer-events: none;
+}
+
 .pdf-page-canvas {
   position: relative;
   min-width: 1px;
@@ -2035,9 +2078,50 @@ select {
   display: block;
 }
 
+.pdf-text-layer {
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: clip;
+  color: transparent;
+  line-height: 1;
+  transform-origin: 0 0;
+  user-select: text;
+}
+
+.pdf-text-layer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.pdf-text-layer .markedContent {
+  display: contents;
+}
+
+.pdf-text-layer ::selection {
+  color: transparent;
+  background: rgba(39, 125, 161, .28);
+}
+
 .pdf-annotation-layer {
   position: absolute;
-  z-index: 1;
+  z-index: 3;
   inset: 0;
   overflow: visible;
   pointer-events: none;
@@ -2140,6 +2224,15 @@ select {
   font-size: 8px;
 }
 
+.pdf-annotation-tooltip small {
+  margin-top: 6px;
+  padding-top: 5px;
+  display: block;
+  color: rgba(255, 255, 255, .68);
+  border-top: 1px solid rgba(255, 255, 255, .16);
+  font-size: 8px;
+}
+
 .pdf-annotation-box.is-community:hover .pdf-annotation-tooltip,
 .pdf-annotation-box.is-community:focus-visible .pdf-annotation-tooltip,
 .pdf-annotation-box.is-community.is-active .pdf-annotation-tooltip {
@@ -2150,8 +2243,12 @@ select {
   --annotation-color: var(--accent);
 }
 
+.pdf-annotation-box.is-own.is-overlapping {
+  border-style: dashed;
+}
+
 .pdf-annotation-box.is-pending {
-  z-index: 2;
+  z-index: 60;
   border-style: dashed;
   background: rgba(214, 95, 64, 0.16);
 }

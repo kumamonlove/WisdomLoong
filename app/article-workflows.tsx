@@ -15,7 +15,7 @@ import {
 import { normalizeTags } from "@/lib/knowledge-types";
 import type { ReaderArticle } from "@/lib/knowledge";
 import { ReadingNoteLikeButton } from "@/app/review-actions";
-import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 
 type ArxivResult = {
   title: string;
@@ -550,7 +550,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.0`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.2`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -674,6 +674,7 @@ function PdfPageCanvas({
   zoom,
   onLoad,
   onError,
+  onTextSelect,
   children,
 }: {
   url: string;
@@ -681,9 +682,11 @@ function PdfPageCanvas({
   zoom: number;
   onLoad: () => void;
   onError: () => void;
+  onTextSelect: (text: string, page: number) => void;
   children: ReactNode;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const textLayerRef = useRef<HTMLDivElement>(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
 
@@ -698,7 +701,7 @@ function PdfPageCanvas({
           "pdfjs-dist/build/pdf.worker.min.mjs",
           import.meta.url,
         ).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.13.0`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.2`;
         const nextLoadingTask = pdfjs.getDocument(url);
         loadingTask = nextLoadingTask;
         const document = await nextLoadingTask.promise;
@@ -717,6 +720,7 @@ function PdfPageCanvas({
     if (!pdfDocument) return;
     let cancelled = false;
     let renderTask: RenderTask | undefined;
+    let textLayer: { cancel: () => void } | undefined;
     void (async () => {
       try {
         const pdfPage = await pdfDocument.getPage(Math.min(Math.max(1, page), pdfDocument.numPages));
@@ -739,6 +743,18 @@ function PdfPageCanvas({
         });
         renderTask = nextRenderTask;
         await nextRenderTask.promise;
+        const textContainer = textLayerRef.current;
+        if (textContainer && !cancelled) {
+          textContainer.replaceChildren();
+          textContainer.style.setProperty("--total-scale-factor", String(viewport.scale));
+          const pdfjs = await import("pdfjs-dist");
+          textLayer = new pdfjs.TextLayer({
+            textContentSource: await pdfPage.getTextContent(),
+            container: textContainer,
+            viewport,
+          });
+          await (textLayer as InstanceType<typeof pdfjs.TextLayer>).render();
+        }
         if (!cancelled) onLoad();
       } catch (error) {
         if (!cancelled && (error as Error).name !== "RenderingCancelledException") onError();
@@ -747,6 +763,7 @@ function PdfPageCanvas({
     return () => {
       cancelled = true;
       renderTask?.cancel();
+      textLayer?.cancel();
     };
   }, [pdfDocument, page, zoom, onLoad, onError]);
 
@@ -754,8 +771,211 @@ function PdfPageCanvas({
     <div className="pdf-page-scroll">
       <div className="pdf-page-canvas" style={{ width: pageSize.width || undefined, height: pageSize.height || undefined }}>
         <canvas ref={canvasRef} />
+        <div
+          className="textLayer pdf-text-layer"
+          onPointerUp={() => {
+            const selection = window.getSelection();
+            const text = selection?.toString().trim() ?? "";
+            if (text) onTextSelect(text, page);
+          }}
+          ref={textLayerRef}
+        />
         {children}
       </div>
+    </div>
+  );
+}
+
+function ContinuousPdfPage({
+  pdfDocument,
+  page,
+  zoom,
+  onLoad,
+  onError,
+  onVisible,
+  onTextSelect,
+  children,
+}: {
+  pdfDocument: PDFDocumentProxy;
+  page: number;
+  zoom: number;
+  onLoad: () => void;
+  onError: () => void;
+  onVisible: (page: number) => void;
+  onTextSelect: (text: string, page: number) => void;
+  children: ReactNode;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const textLayerRef = useRef<HTMLDivElement>(null);
+  const [pdfPage, setPdfPage] = useState<PDFPageProxy | null>(null);
+  const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
+  const [nearViewport, setNearViewport] = useState(page <= 2);
+
+  useEffect(() => {
+    let cancelled = false;
+    void pdfDocument.getPage(page).then((nextPage) => {
+      if (cancelled) return;
+      const viewport = nextPage.getViewport({ scale: (zoom / 100) * (96 / 72) });
+      setPdfPage(nextPage);
+      setPageSize({ width: viewport.width, height: viewport.height });
+    }).catch(() => {
+      if (!cancelled) onError();
+    });
+    return () => { cancelled = true; };
+  }, [pdfDocument, page, zoom, onError]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const preloadObserver = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setNearViewport(true);
+    }, { rootMargin: "900px 0px" });
+    const visibilityObserver = new IntersectionObserver(([entry]) => {
+      if (entry.intersectionRatio >= 0.3) onVisible(page);
+    }, { threshold: 0.3 });
+    preloadObserver.observe(container);
+    visibilityObserver.observe(container);
+    return () => {
+      preloadObserver.disconnect();
+      visibilityObserver.disconnect();
+    };
+  }, [onVisible, page]);
+
+  useEffect(() => {
+    if (!pdfPage || !nearViewport) return;
+    let cancelled = false;
+    let renderTask: RenderTask | undefined;
+    let textLayer: { cancel: () => void } | undefined;
+    void (async () => {
+      try {
+        const viewport = pdfPage.getViewport({ scale: (zoom / 100) * (96 / 72) });
+        const canvas = canvasRef.current;
+        if (!canvas || cancelled) return;
+        const pixelRatio = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(viewport.width * pixelRatio);
+        canvas.height = Math.floor(viewport.height * pixelRatio);
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("canvas unavailable");
+        renderTask = pdfPage.render({
+          canvas,
+          canvasContext: context,
+          viewport,
+          transform: pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
+        });
+        await renderTask.promise;
+        const textContainer = textLayerRef.current;
+        if (textContainer && !cancelled) {
+          textContainer.replaceChildren();
+          textContainer.style.setProperty("--total-scale-factor", String(viewport.scale));
+          const pdfjs = await import("pdfjs-dist");
+          textLayer = new pdfjs.TextLayer({
+            textContentSource: await pdfPage.getTextContent(),
+            container: textContainer,
+            viewport,
+          });
+          await (textLayer as InstanceType<typeof pdfjs.TextLayer>).render();
+        }
+        if (!cancelled) onLoad();
+      } catch (error) {
+        if (!cancelled && (error as Error).name !== "RenderingCancelledException") onError();
+      }
+    })();
+    return () => {
+      cancelled = true;
+      renderTask?.cancel();
+      textLayer?.cancel();
+    };
+  }, [pdfPage, nearViewport, zoom, onLoad, onError]);
+
+  return (
+    <div className="pdf-page-canvas continuous-page" data-page={page} ref={containerRef} style={{ width: pageSize.width || undefined, height: pageSize.height || undefined }}>
+      <canvas ref={canvasRef} />
+      <div
+        className="textLayer pdf-text-layer"
+        onPointerUp={() => {
+          const selection = window.getSelection();
+          const text = selection?.toString().trim() ?? "";
+          if (text) onTextSelect(text, page);
+        }}
+        ref={textLayerRef}
+      />
+      {children}
+      <span className="continuous-page-number">P.{page}</span>
+    </div>
+  );
+}
+
+function PdfContinuousCanvas({
+  url,
+  zoom,
+  initialPage,
+  onLoad,
+  onError,
+  onVisiblePage,
+  onTextSelect,
+  children,
+}: {
+  url: string;
+  zoom: number;
+  initialPage: number;
+  onLoad: () => void;
+  onError: () => void;
+  onVisiblePage: (page: number) => void;
+  onTextSelect: (text: string, page: number) => void;
+  children: (page: number) => ReactNode;
+}) {
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
+  const initialPageRef = useRef(initialPage);
+
+  useEffect(() => {
+    let cancelled = false;
+    let loadingTask: PDFDocumentLoadingTask | undefined;
+    setPdfDocument(null);
+    void (async () => {
+      try {
+        const pdfjs = await import("pdfjs-dist");
+        const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.2`;
+        loadingTask = pdfjs.getDocument(url);
+        const document = await loadingTask.promise;
+        if (!cancelled) setPdfDocument(document);
+      } catch {
+        if (!cancelled) onError();
+      }
+    })();
+    return () => {
+      cancelled = true;
+      void loadingTask?.destroy();
+    };
+  }, [url, onError]);
+
+  useEffect(() => {
+    if (!pdfDocument) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(`.continuous-page[data-page="${initialPageRef.current}"]`)?.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pdfDocument]);
+
+  return (
+    <div className="pdf-page-scroll is-continuous">
+      {pdfDocument && Array.from({ length: pdfDocument.numPages }, (_, index) => index + 1).map((page) => (
+        <ContinuousPdfPage
+          key={page}
+          onError={onError}
+          onLoad={onLoad}
+          onTextSelect={onTextSelect}
+          onVisible={onVisiblePage}
+          page={page}
+          pdfDocument={pdfDocument}
+          zoom={zoom}
+        >
+          {children(page)}
+        </ContinuousPdfPage>
+      ))}
     </div>
   );
 }
@@ -790,6 +1010,7 @@ export function ReviewComposer({
       1,
   );
   const [zoom, setZoom] = useState(100);
+  const [viewMode, setViewMode] = useState<"paged" | "continuous">("paged");
   const [focusMode, setFocusMode] = useState(startFocused);
   const [contextTab, setContextTab] = useState<"discussion" | "notes" | "review">("discussion");
   const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
@@ -867,6 +1088,16 @@ export function ReviewComposer({
       setDrawingAnnotation(false);
       setAnnotationStart(null);
       setActiveAnnotationId(null);
+    }
+  }
+
+  function navigateToPage(nextPage: number) {
+    const normalized = Math.max(1, Math.floor(nextPage) || 1);
+    setPage(normalized);
+    if (viewMode === "continuous") {
+      window.requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>(`.continuous-page[data-page="${normalized}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     }
   }
 
@@ -1151,6 +1382,16 @@ export function ReviewComposer({
     setMessage("请在当前 PDF 页面上拖动画框；位置会随页码一起保存并分享给伙伴。");
   }
 
+  function reuseCommunityAnnotationPosition(annotation: CommunityAnnotation) {
+    if (!annotation.rect) return;
+    setDrawingAnnotation(false);
+    setAnnotationStart(null);
+    setAnnotationRect({ ...annotation.rect });
+    setAnnotationPage(annotation.page);
+    setContextTab("notes");
+    setMessage(`已复用 ${annotation.author} 在第 ${annotation.page} 页的批注位置，请填写你的批注。`);
+  }
+
   async function readClipboard() {
     try {
       const value = await navigator.clipboard.readText();
@@ -1178,6 +1419,18 @@ export function ReviewComposer({
     } finally {
       setTranslating(false);
     }
+  }
+
+  function useSelectedPdfText(text: string, pageNumber: number) {
+    const normalized = text.replace(/\s+/g, " ").trim().slice(0, 12_000);
+    if (!normalized) return;
+    setPage(pageNumber);
+    setQuoteDraft(normalized);
+    setTranslation("");
+    setContextTab("notes");
+    setMessage(translationEnabled
+      ? `已选中第 ${pageNumber} 页原文，点击右侧“翻译成中文”。`
+      : "已选中论文原文；翻译服务尚未配置百炼 API Key。");
   }
 
   function useNotePdf(file: File, source: "generated" | "uploaded") {
@@ -1266,6 +1519,123 @@ export function ReviewComposer({
     } finally {
       setBusy(false);
     }
+  }
+
+  function renderPdfAnnotationLayer(pageNumber: number) {
+    const pageAnnotations = communityAnnotations.filter((item) => item.page === pageNumber);
+    const pageLayout = pageAnnotations.map((annotation, index, items) => ({
+      annotation,
+      number: index + 1,
+      overlapIndex: annotation.rect
+        ? items.slice(0, index).filter((item) => item.rect && rectanglesOverlap(annotation.rect!, item.rect)).length
+        : 0,
+    }));
+    const pageNotes = notes.filter((item) => item.page === pageNumber && item.rect);
+    const pendingOverlap = annotationRect && annotationPage === pageNumber
+      ? pageAnnotations.filter((annotation) => annotation.rect && rectanglesOverlap(annotationRect, annotation.rect)).length
+      : 0;
+
+    return (
+      <div
+        aria-label={drawingAnnotation ? `在 PDF 第 ${pageNumber} 页拖动画框` : `PDF 第 ${pageNumber} 页批注层`}
+        className={`pdf-annotation-layer${drawingAnnotation ? " is-drawing" : ""}`}
+        onPointerDown={(event) => {
+          if (!drawingAnnotation) return;
+          setPage(pageNumber);
+          setAnnotationPage(pageNumber);
+          event.currentTarget.setPointerCapture(event.pointerId);
+          const point = annotationPoint(event);
+          setAnnotationStart(point);
+          setAnnotationRect({ ...point, width: 0, height: 0 });
+        }}
+        onPointerMove={updateAnnotationRect}
+        onPointerUp={(event) => {
+          if (!annotationStart) return;
+          const point = annotationPoint(event);
+          const nextRect = {
+            x: Math.min(annotationStart.x, point.x),
+            y: Math.min(annotationStart.y, point.y),
+            width: Math.abs(point.x - annotationStart.x),
+            height: Math.abs(point.y - annotationStart.y),
+          };
+          setAnnotationStart(null);
+          setDrawingAnnotation(false);
+          if (nextRect.width < 1 || nextRect.height < 1) {
+            setAnnotationRect(null);
+            setMessage("画框太小，请重新拖动选择要批注的区域。");
+            return;
+          }
+          setPage(pageNumber);
+          setAnnotationRect(nextRect);
+          setAnnotationPage(pageNumber);
+          setMessage(`已框选第 ${pageNumber} 页，请在右侧填写批注并加入。`);
+        }}
+      >
+        {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.rect).map(({ annotation, number, overlapIndex }) => (
+          <button
+            aria-label={`批注 ${number}，${annotation.author}：${annotation.content}。点击在相同位置添加我的批注`}
+            className={`pdf-annotation-box is-community${activeAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
+            key={`community-${annotation.id}`}
+            onBlur={() => setActiveAnnotationId(null)}
+            onClick={(event) => {
+              event.stopPropagation();
+              reuseCommunityAnnotationPosition(annotation);
+            }}
+            onFocus={() => setActiveAnnotationId(annotation.id)}
+            onMouseEnter={() => setActiveAnnotationId(annotation.id)}
+            onMouseLeave={() => setActiveAnnotationId(null)}
+            style={{
+              left: `${annotation.rect!.x}%`,
+              top: `${annotation.rect!.y}%`,
+              width: `${annotation.rect!.width}%`,
+              height: `${annotation.rect!.height}%`,
+              transform: `translate(${overlapIndex * 4}px, ${overlapIndex * 4}px)`,
+              zIndex: activeAnnotationId === annotation.id ? 50 : 10 + overlapIndex,
+              "--annotation-color": annotationColor(annotation.author),
+            } as CSSProperties}
+            type="button"
+          >
+            <span>{number}</span>
+            <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}<small>点击在相同位置添加我的批注</small></strong>
+          </button>
+        ))}
+        {annotationsEnabled && pageNotes.map((item, index) => {
+          const overlapIndex = pageAnnotations.filter((annotation) =>
+            annotation.rect && rectanglesOverlap(item.rect!, annotation.rect)
+          ).length + pageNotes.slice(0, index).filter((note) =>
+            note.rect && rectanglesOverlap(item.rect!, note.rect)
+          ).length;
+          return (
+            <span
+              className={`pdf-annotation-box is-own${overlapIndex ? " is-overlapping" : ""}`}
+              key={`own-${index}`}
+              style={{
+                left: `${item.rect!.x}%`,
+                top: `${item.rect!.y}%`,
+                width: `${item.rect!.width}%`,
+                height: `${item.rect!.height}%`,
+                transform: `translate(${overlapIndex * 4}px, ${overlapIndex * 4}px)`,
+                zIndex: 20 + overlapIndex,
+              }}
+              title={`我的批注：${item.content}`}
+            ><span>我{index + 1}</span></span>
+          );
+        })}
+        {annotationsEnabled && annotationRect && annotationPage === pageNumber && (
+          <span
+            className="pdf-annotation-box is-pending"
+            style={{
+              left: `${annotationRect.x}%`,
+              top: `${annotationRect.y}%`,
+              width: `${annotationRect.width}%`,
+              height: `${annotationRect.height}%`,
+              transform: `translate(${pendingOverlap * 4}px, ${pendingOverlap * 4}px)`,
+            }}
+          ><span>新</span></span>
+        )}
+        {drawingAnnotation && !annotationStart && <strong>拖动鼠标框选论文中的图片或段落</strong>}
+      </div>
+    );
   }
 
   return (
@@ -1374,19 +1744,19 @@ export function ReviewComposer({
               <>
                 <div className="reader-toolbar">
                   <div>
-                    <button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">←</button>
-                    <label>第 <input min="1" onChange={(event) => setPage(Math.max(1, Number(event.target.value)))} type="number" value={page} /> 页</label>
-                    <button onClick={() => setPage((value) => value + 1)} type="button">→</button>
+                    <button disabled={page === 1} onClick={() => navigateToPage(page - 1)} type="button">←</button>
+                    <label>第 <input min="1" onChange={(event) => navigateToPage(Number(event.target.value))} type="number" value={page} /> 页</label>
+                    <button onClick={() => navigateToPage(page + 1)} type="button">→</button>
                   </div>
                   <div>
                     <button onClick={() => setZoom((value) => Math.max(60, value - 10))} type="button">−</button>
                     <span>{zoom}%</span>
                     <button onClick={() => setZoom((value) => Math.min(200, value + 10))} type="button">＋</button>
                   </div>
-                  <button className="active-focus" onClick={() => setFocusMode(false)} type="button">结束阅读</button>
-                  <button onClick={() => readerFileInput.current?.click()} type="button">
-                    ⇧ {localPdfName ? "更换本地 PDF" : "打开本地 PDF"}
-                  </button>
+                  <div className="view-mode-switch" aria-label="PDF 阅读模式">
+                    <button aria-pressed={viewMode === "paged"} className={viewMode === "paged" ? "selected" : ""} onClick={() => setViewMode("paged")} type="button">翻页</button>
+                    <button aria-pressed={viewMode === "continuous"} className={viewMode === "continuous" ? "selected" : ""} onClick={() => setViewMode("continuous")} type="button">长条</button>
+                  </div>
                   <button
                     aria-pressed={annotationsEnabled}
                     className={`annotation-toggle${annotationsEnabled ? " enabled" : ""}`}
@@ -1477,89 +1847,32 @@ export function ReviewComposer({
                       )}
                     </div>
                   )}
-                  {localPdfUrl && (
+                  {localPdfUrl && (viewMode === "paged" ? (
                     <PdfPageCanvas
                       key={`${articleId}-${pdfRenderAttempt}`}
                       onError={handlePdfPageError}
                       onLoad={handlePdfPageLoad}
+                      onTextSelect={useSelectedPdfText}
                       page={page}
                       url={localPdfUrl}
                       zoom={zoom}
                     >
-                      <div
-                      aria-label={drawingAnnotation ? "在当前 PDF 页拖动画框" : "PDF 画框批注层"}
-                      className={`pdf-annotation-layer${drawingAnnotation ? " is-drawing" : ""}`}
-                      onPointerDown={(event) => {
-                        if (!drawingAnnotation) return;
-                        event.currentTarget.setPointerCapture(event.pointerId);
-                        const point = annotationPoint(event);
-                        setAnnotationStart(point);
-                        setAnnotationRect({ ...point, width: 0, height: 0 });
-                      }}
-                      onPointerMove={updateAnnotationRect}
-                      onPointerUp={(event) => {
-                        if (!annotationStart) return;
-                        const point = annotationPoint(event);
-                        const nextRect = {
-                          x: Math.min(annotationStart.x, point.x),
-                          y: Math.min(annotationStart.y, point.y),
-                          width: Math.abs(point.x - annotationStart.x),
-                          height: Math.abs(point.y - annotationStart.y),
-                        };
-                        setAnnotationStart(null);
-                        setDrawingAnnotation(false);
-                        if (nextRect.width < 1 || nextRect.height < 1) {
-                          setAnnotationRect(null);
-                          setMessage("画框太小，请重新拖动选择要批注的区域。");
-                          return;
-                        }
-                        setAnnotationRect(nextRect);
-                        setAnnotationPage(page);
-                        setMessage(`已框选第 ${page} 页，请在右侧填写批注并加入。`);
-                      }}
-                      >
-                      {annotationsEnabled && currentAnnotationLayout.filter(({ annotation }) => annotation.rect).map(({ annotation, number, overlapIndex }) => (
-                        <button
-                          aria-label={`批注 ${number}，${annotation.author}：${annotation.content}`}
-                          className={`pdf-annotation-box is-community${activeAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
-                          key={`community-${annotation.id}`}
-                          onBlur={() => setActiveAnnotationId(null)}
-                          onFocus={() => setActiveAnnotationId(annotation.id)}
-                          onMouseEnter={() => setActiveAnnotationId(annotation.id)}
-                          onMouseLeave={() => setActiveAnnotationId(null)}
-                          style={{
-                            left: `${annotation.rect!.x}%`,
-                            top: `${annotation.rect!.y}%`,
-                            width: `${annotation.rect!.width}%`,
-                            height: `${annotation.rect!.height}%`,
-                            transform: `translate(${overlapIndex * 4}px, ${overlapIndex * 4}px)`,
-                            zIndex: activeAnnotationId === annotation.id ? 50 : 10 + overlapIndex,
-                            "--annotation-color": annotationColor(annotation.author),
-                          } as CSSProperties}
-                          type="button"
-                        >
-                          <span>{number}</span>
-                          <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}</strong>
-                        </button>
-                      ))}
-                      {annotationsEnabled && notes.filter((item) => item.page === page && item.rect).map((item, index) => (
-                        <span
-                          className="pdf-annotation-box is-own"
-                          key={`own-${index}`}
-                          style={{ left: `${item.rect!.x}%`, top: `${item.rect!.y}%`, width: `${item.rect!.width}%`, height: `${item.rect!.height}%` }}
-                          title={`我的批注：${item.content}`}
-                        ><span>我{index + 1}</span></span>
-                      ))}
-                      {annotationsEnabled && annotationRect && annotationPage === page && (
-                        <span
-                          className="pdf-annotation-box is-pending"
-                          style={{ left: `${annotationRect.x}%`, top: `${annotationRect.y}%`, width: `${annotationRect.width}%`, height: `${annotationRect.height}%` }}
-                        />
-                      )}
-                      {drawingAnnotation && !annotationStart && <strong>拖动鼠标框选论文中的图片或段落</strong>}
-                      </div>
+                      {renderPdfAnnotationLayer(page)}
                     </PdfPageCanvas>
-                  )}
+                  ) : (
+                    <PdfContinuousCanvas
+                      initialPage={page}
+                      key={`${articleId}-${pdfRenderAttempt}-continuous`}
+                      onError={handlePdfPageError}
+                      onLoad={handlePdfPageLoad}
+                      onTextSelect={useSelectedPdfText}
+                      onVisiblePage={setPage}
+                      url={localPdfUrl}
+                      zoom={zoom}
+                    >
+                      {(pageNumber) => renderPdfAnnotationLayer(pageNumber)}
+                    </PdfContinuousCanvas>
+                  ))}
                 </div>
                 <div className="reading-bookmark">
                   <div>
@@ -1706,7 +2019,7 @@ export function ReviewComposer({
         {translationEnabled ? (
           <section className="translation-assistant">
             <div>
-              <strong>中译助手</strong>
+              <strong>论文中译 · Qwen-MT Flash</strong>
               <button onClick={readClipboard} type="button">从剪贴板粘贴</button>
             </div>
             <textarea
@@ -1714,7 +2027,7 @@ export function ReviewComposer({
                 setQuoteDraft(event.target.value);
                 setTranslation("");
               }}
-              placeholder="在论文中复制英文段落，然后点“从剪贴板粘贴”…"
+              placeholder="直接在左侧 PDF 中选中文字，或从剪贴板粘贴…"
               rows={4}
               value={quoteDraft}
             />

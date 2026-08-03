@@ -42,11 +42,12 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.DASHSCOPE_TRANSLATION_MODEL ?? "qwen-mt-plus",
+        model: process.env.DASHSCOPE_TRANSLATION_MODEL ?? "qwen-mt-flash",
         messages: [{ role: "user", content: text }],
         translation_options: {
           source_lang: "auto",
           target_lang: "Chinese",
+          domains: "Academic paper in robotics, artificial intelligence, machine learning, computer vision, reinforcement learning, or embodied intelligence. Translate into precise, fluent Simplified Chinese academic prose. Preserve equations, symbols, variable names, citations, model names, dataset names, and standard English abbreviations. Use consistent technical terminology and do not add explanations that are absent from the source.",
         },
       }),
       signal: AbortSignal.timeout(45_000),
