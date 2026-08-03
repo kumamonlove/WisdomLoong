@@ -566,7 +566,7 @@ async function generateReadingNotePdf({
   if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.25`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.26`;
   const pdfDocument = await pdfjs.getDocument(pdfUrl).promise;
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
@@ -873,7 +873,7 @@ function PdfContinuousCanvas({
       try {
         const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.25`;
+        pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.26`;
         loadingTask = pdfjs.getDocument({
           url,
           disableAutoFetch: true,
@@ -959,6 +959,7 @@ export function ReviewComposer({
       1,
   );
   const [zoom, setZoom] = useState(100);
+  const [fitWidthEnabled, setFitWidthEnabled] = useState(false);
   const [focusMode, setFocusMode] = useState(startFocused);
   const [contextTab, setContextTab] = useState<"annotations" | "translate" | "community" | "publish">("annotations");
   const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
@@ -1005,6 +1006,7 @@ export function ReviewComposer({
   const notePdfPreviewRef = useRef("");
   const sessionPdfUrls = useRef(new Map<number, string>());
   const articlePageBeforeNote = useRef(page);
+  const pdfFrameRef = useRef<HTMLDivElement>(null);
 
   const selectedArticle = availableArticles.find((item) => item.id === articleId);
   const activePartnerNote = communityReviews.find((review) => review.id === partnerNoteReviewId && review.noteFileName) ?? null;
@@ -1044,8 +1046,24 @@ export function ReviewComposer({
       : 0,
   })), [currentPageAnnotations]);
   const handlePdfZoom = useCallback((delta: number) => {
-    setZoom((value) => Math.max(60, Math.min(200, value + delta)));
+    setFitWidthEnabled(false);
+    setZoom((value) => Math.max(30, Math.min(250, value + delta)));
   }, []);
+  const fitPdfToWidth = useCallback(() => {
+    const frame = pdfFrameRef.current;
+    const scroll = frame?.querySelector<HTMLElement>(".pdf-page-scroll");
+    const visiblePage = frame?.querySelector<HTMLElement>(`.continuous-page[data-page="${page}"]`)
+      ?? frame?.querySelector<HTMLElement>(".continuous-page");
+    if (!scroll || !visiblePage) return;
+    const pageWidth = visiblePage.getBoundingClientRect().width;
+    const availableWidth = scroll.clientWidth;
+    if (pageWidth <= 0 || availableWidth <= 0) return;
+    setZoom((current) => Math.max(30, Math.min(250, Math.round(current * availableWidth / pageWidth))));
+  }, [page]);
+  const enableFitWidth = useCallback(() => {
+    setFitWidthEnabled(true);
+    window.requestAnimationFrame(fitPdfToWidth);
+  }, [fitPdfToWidth]);
   const handlePdfDocumentReady = useCallback((pageCount: number) => {
     setPdfPageCount(pageCount);
   }, []);
@@ -1137,6 +1155,20 @@ export function ReviewComposer({
   useEffect(() => {
     setPdfPageCount(0);
   }, [activeReaderPdfUrl]);
+
+  useEffect(() => {
+    if (!fitWidthEnabled) return;
+    const frame = pdfFrameRef.current;
+    const scroll = frame?.querySelector<HTMLElement>(".pdf-page-scroll");
+    if (!scroll) return;
+    const frameId = window.requestAnimationFrame(fitPdfToWidth);
+    const observer = new ResizeObserver(fitPdfToWidth);
+    observer.observe(scroll);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      observer.disconnect();
+    };
+  }, [fitWidthEnabled, fitPdfToWidth, activeReaderPdfUrl]);
 
   useEffect(() => {
     if (localCache.status === "ready") {
@@ -1724,9 +1756,17 @@ export function ReviewComposer({
                     )}
                   </div>
                   <div className="reader-zoom-tools">
-                    <button onClick={() => setZoom((value) => Math.max(60, value - 10))} type="button">−</button>
+                    <button onClick={() => handlePdfZoom(-10)} title="缩小 PDF" type="button">−</button>
                     <span>{zoom}%</span>
-                    <button onClick={() => setZoom((value) => Math.min(200, value + 10))} type="button">＋</button>
+                    <button onClick={() => handlePdfZoom(10)} title="放大 PDF" type="button">＋</button>
+                    <button
+                      aria-pressed={fitWidthEnabled}
+                      className={fitWidthEnabled ? "fit-width active" : "fit-width"}
+                      disabled={pdfLoading}
+                      onClick={enableFitWidth}
+                      title="让 PDF 左右撑满阅读区域"
+                      type="button"
+                    >适合宽度</button>
                   </div>
                   {!viewingPartnerNote && (
                     <div className="reader-annotation-tools">
@@ -1778,6 +1818,7 @@ export function ReviewComposer({
                     setReaderDragging(false);
                     if (!viewingPartnerNote) useReaderPdf(event.dataTransfer.files[0]);
                   }}
+                  ref={pdfFrameRef}
                 >
                   {readerDragging && (
                     <div className="reader-pdf-drop">

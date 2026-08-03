@@ -2141,6 +2141,17 @@ select {
   border-left: 1px solid var(--line);
 }
 
+.reader-toolbar .reader-zoom-tools .fit-width {
+  margin-left: 3px;
+  padding-inline: 12px;
+}
+
+.reader-toolbar .reader-zoom-tools .fit-width.active {
+  color: var(--white);
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
 .reader-toolbar .reader-annotation-tools {
   margin-left: auto;
   padding-left: 10px;

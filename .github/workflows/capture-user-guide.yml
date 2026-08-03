@@ -137,6 +137,18 @@ jobs:
               canvas instanceof HTMLCanvasElement && canvas.width > 0 && canvas.height > 0;
           }, { timeout: 45000 });
           console.log(`PDF_FIRST_PAGE_MS ${Date.now() - readerStartedAt}`);
+          await page.getByRole('button', { name: '适合宽度' }).click();
+          await page.waitForFunction(() => {
+            const scroll = document.querySelector('.pdf-page-scroll');
+            const visiblePage = document.querySelector('.continuous-page');
+            return scroll instanceof HTMLElement && visiblePage instanceof HTMLElement &&
+              Math.abs(scroll.clientWidth - visiblePage.getBoundingClientRect().width) <= 6;
+          });
+          const fittedWidths = await page.evaluate(() => ({
+            reader: document.querySelector('.pdf-page-scroll')?.clientWidth,
+            pdf: Math.round(document.querySelector('.continuous-page')?.getBoundingClientRect().width ?? 0),
+          }));
+          console.log(`PDF_FIT_WIDTH reader=${fittedWidths.reader} pdf=${fittedWidths.pdf}`);
           await page.waitForTimeout(1000);
           await shot('06-reader-annotations');
 
