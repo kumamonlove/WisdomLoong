@@ -27,7 +27,7 @@ export function SiteHeader({
     const updateHeader = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        setCompact(window.scrollY > 56);
+        setCompact((current) => current ? window.scrollY > 28 : window.scrollY > 68);
       });
     };
 

@@ -116,6 +116,13 @@ jobs:
             PDF_CACHE_DIR=/srv/wisdomloong/pdf-cache /tmp/prewarm-pdfs.sh
             chmod +x /tmp/backfill-abstracts.sh
             sudo /tmp/backfill-abstracts.sh \"\$release\"
+            sudo install -d -o ${ALIYUN_USER} -g ${ALIYUN_USER} /srv/wisdomloong/static
+            if [ -d /srv/wisdomloong/current/.next/static ]; then
+              cp -a /srv/wisdomloong/current/.next/static/. /srv/wisdomloong/static/
+            fi
+            cp -a \"\$release/.next/static/.\" /srv/wisdomloong/static/
+            find /srv/wisdomloong/static -type f -mtime +30 -delete
+            find /srv/wisdomloong/static -mindepth 1 -type d -empty -delete
             sudo ln -sfn \"\$release\" /srv/wisdomloong/current
             sudo install -m 644 /tmp/wisdomloong.service /etc/systemd/system/wisdomloong.service
             sudo install -m 644 /tmp/nginx.conf /etc/nginx/sites-available/wisdomloong
