@@ -4,6 +4,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { normalizeTags } from "@/lib/knowledge-types";
 
+export type ArticleMetadataUpdate = {
+  publishedAt?: string | null;
+  publisher?: string;
+  tags?: string[];
+};
+
 async function responseJson(response: Response) {
   const data = (await response.json()) as { error?: string };
   if (!response.ok) throw new Error(data.error ?? "保存失败");
@@ -19,11 +25,13 @@ export function ArticleMetadataEditor({
   initialPublishedAt,
   initialPublisher,
   initialTags,
+  onSaved,
 }: {
   articleId: number;
   initialPublishedAt: string | null;
   initialPublisher: string;
   initialTags: string[];
+  onSaved?: (update: ArticleMetadataUpdate) => void;
 }) {
   const router = useRouter();
   const [publishedAt, setPublishedAt] = useState(initialPublishedAt ?? "");
@@ -51,6 +59,7 @@ export function ArticleMetadataEditor({
       setPublisher(nextPublisher);
       setPublisherSaved(true);
       setMessage("发布机构已保存。");
+      onSaved?.({ publisher: nextPublisher });
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "发布机构保存失败");
@@ -76,6 +85,7 @@ export function ArticleMetadataEditor({
       setTags(normalized);
       setTagDraft("");
       setMessage("标签已保存。");
+      onSaved?.({ tags: normalized });
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "标签保存失败");
@@ -94,6 +104,7 @@ export function ArticleMetadataEditor({
         body: JSON.stringify({ publishedAt: publishedAt || null }),
       }));
       setMessage(publishedAt ? "发布日期已保存。" : "发布日期已清除。");
+      onSaved?.({ publishedAt: publishedAt || null });
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "发布日期保存失败");
@@ -117,7 +128,7 @@ export function ArticleMetadataEditor({
           </div>
           <label>
             <input onChange={(event) => setTagDraft(event.target.value)} placeholder="添加标签" value={tagDraft} />
-            <button disabled={busy || !tagDraft.trim()} onClick={() => void saveTags([...tags, tagDraft])} type="button">添加</button>
+            <button disabled={busy || !tagDraft.trim()} onClick={() => void saveTags([...tags, tagDraft])} type="button">添加并保存</button>
           </label>
         </section>
         <section>

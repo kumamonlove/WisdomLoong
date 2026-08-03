@@ -686,7 +686,7 @@ select {
   margin-top: 10px;
   padding: 16px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -706,8 +706,9 @@ select {
 }
 
 .card-metadata-editor label {
-  display: flex;
-  gap: 5px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
 }
 
 .card-metadata-editor input {
@@ -732,6 +733,8 @@ select {
   cursor: pointer;
   font-size: 11px;
   font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .card-metadata-editor button:disabled {
@@ -746,11 +749,14 @@ select {
 }
 
 .card-metadata-tags button {
+  max-width: 100%;
   min-height: 30px;
   padding: 5px 9px;
   color: var(--accent);
   border-color: rgba(214, 95, 64, .22);
   border-radius: 999px;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .card-metadata-editor > div > p {
