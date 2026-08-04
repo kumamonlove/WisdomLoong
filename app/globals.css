@@ -939,7 +939,7 @@ select {
   position: absolute;
   width: 260px;
   min-height: 136px;
-  padding: 15px 16px;
+  padding: 10px 14px 14px;
   display: grid;
   align-content: start;
   gap: 9px;
@@ -949,7 +949,6 @@ select {
   border-radius: 15px;
   background: rgba(255, 255, 255, .92);
   box-shadow: 0 12px 28px rgba(41, 37, 32, .1);
-  cursor: grab;
   touch-action: none;
   user-select: none;
   transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
@@ -971,7 +970,44 @@ select {
   box-shadow: 0 0 0 5px rgba(76, 104, 91, .11);
 }
 
-.manual-graph-node > header {
+.manual-node-drag-handle {
+  width: fit-content;
+  min-width: 108px;
+  padding: 6px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #486355;
+  border: 1px dashed rgba(76, 104, 91, .46);
+  border-radius: 8px;
+  background: rgba(76, 104, 91, .09);
+  cursor: grab;
+  font-size: 8px;
+  font-weight: 800;
+  touch-action: none;
+}
+
+.manual-node-drag-handle:active {
+  cursor: grabbing;
+  background: rgba(76, 104, 91, .16);
+}
+
+.manual-node-drag-handle i {
+  font-size: 14px;
+  font-style: normal;
+  line-height: .7;
+}
+
+.manual-node-reading-link {
+  display: grid;
+  gap: 8px;
+  color: inherit;
+  border-radius: 9px;
+  outline-offset: 4px;
+  text-decoration: none;
+}
+
+.manual-node-reading-link > header {
   padding: 0;
   display: flex;
   justify-content: space-between;
@@ -986,7 +1022,7 @@ select {
   font-weight: 800;
 }
 
-.manual-graph-node > header span {
+.manual-node-reading-link > header span {
   overflow: hidden;
   color: var(--muted);
   font-size: 8px;
@@ -994,7 +1030,7 @@ select {
   white-space: nowrap;
 }
 
-.manual-graph-node > strong {
+.manual-node-reading-link > strong {
   display: -webkit-box;
   overflow: hidden;
   font-size: 12px;
@@ -1003,7 +1039,7 @@ select {
   -webkit-line-clamp: 3;
 }
 
-.manual-graph-node > p {
+.manual-node-reading-link > p {
   margin: 0;
   display: -webkit-box;
   overflow: hidden;
@@ -1012,6 +1048,41 @@ select {
   line-height: 1.5;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.manual-node-reading-link > small {
+  color: var(--accent);
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.manual-node-reading-link:hover > strong {
+  color: #8e422f;
+}
+
+.graph-card-read-state {
+  position: absolute;
+  z-index: 4;
+  top: 11px;
+  right: 12px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  color: transparent;
+  border: 2px solid rgba(91, 97, 91, .34);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .88);
+  font-size: 10px;
+  font-weight: 900;
+  box-shadow: 0 3px 8px rgba(24, 24, 22, .08);
+}
+
+.graph-card-read-state.is-read {
+  color: var(--white);
+  border-color: #5b7d6b;
+  background: #5b7d6b;
 }
 
 .manual-node-remove,
@@ -1029,7 +1100,7 @@ select {
 .manual-node-remove {
   position: absolute;
   top: -9px;
-  right: -9px;
+  left: -9px;
   width: 25px;
   height: 25px;
 }
@@ -1188,15 +1259,15 @@ select {
 }
 
 .graph-waiting-cards > article {
+  position: relative;
   min-height: 190px;
-  padding: 15px;
+  padding: 0;
   display: grid;
   align-content: start;
   gap: 8px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(255, 255, 255, .8);
-  cursor: grab;
   transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
 }
 
@@ -1204,6 +1275,19 @@ select {
   border-color: rgba(214, 95, 64, .38);
   box-shadow: 0 12px 28px rgba(24, 24, 22, .08);
   transform: translateY(-2px);
+}
+
+.graph-waiting-reading-link {
+  padding: 15px 42px 10px 15px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.graph-waiting-reading-link:hover strong {
+  color: #8e422f;
 }
 
 .graph-waiting-cards time {
@@ -1221,14 +1305,14 @@ select {
   -webkit-line-clamp: 3;
 }
 
-.graph-waiting-cards span,
-.graph-waiting-cards p,
-.graph-waiting-cards small {
+.graph-waiting-reading-link > span,
+.graph-waiting-reading-link > p,
+.graph-waiting-reading-link > small {
   color: var(--muted);
   font-size: 9px;
 }
 
-.graph-waiting-cards p {
+.graph-waiting-reading-link > p {
   margin: 0;
   display: -webkit-box;
   overflow: hidden;
@@ -1237,10 +1321,37 @@ select {
   -webkit-line-clamp: 3;
 }
 
-.graph-waiting-cards small {
+.graph-waiting-reading-link > small {
   margin-top: auto;
   color: #486355;
   font-weight: 800;
+}
+
+.graph-waiting-drag-handle {
+  margin: auto 12px 12px;
+  padding: 9px 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #486355;
+  border: 1px dashed rgba(76, 104, 91, .5);
+  border-radius: 9px;
+  background: rgba(76, 104, 91, .09);
+  cursor: grab;
+  font-size: 9px;
+  font-weight: 820;
+}
+
+.graph-waiting-drag-handle:active {
+  cursor: grabbing;
+  background: rgba(76, 104, 91, .16);
+}
+
+.graph-waiting-drag-handle i {
+  font-size: 15px;
+  font-style: normal;
+  line-height: .7;
 }
 
 .graph-waiting-empty {

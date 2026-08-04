@@ -17,7 +17,7 @@ export default async function KnowledgeGraphPage({
   const selectedDomain = domains.some((item) => item.domain === requested)
     ? requested!
     : domains[0]?.domain ?? "VLA";
-  const graph = await getKnowledgeGraph(selectedDomain);
+  const graph = await getKnowledgeGraph(selectedDomain, user.id);
 
   return (
     <KnowledgePage

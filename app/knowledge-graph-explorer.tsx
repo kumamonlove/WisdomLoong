@@ -199,7 +199,7 @@ export function KnowledgeGraphExplorer({
 
       <section className="manual-graph-intro">
         <div><span>共享人工画板</span><h2>{graph.domain}</h2></div>
-        <p>把下方论文拖入画板；拖动节点调整位置，再从节点右侧圆点拖到另一节点建立思想继承关系。</p>
+        <p>使用卡片上明确标出的拖动区域整理画板；点击卡片内容直接开始阅读，再从节点右侧连接点建立思想继承关系。</p>
         <strong className={saving ? "saving" : ""}>{saving ? "正在保存…" : "所有修改对成员共享"}</strong>
         {message && <small role="alert">{message}</small>}
       </section>
@@ -257,19 +257,29 @@ export function KnowledgeGraphExplorer({
               <article
                 className={`manual-graph-node${selectedId === node.articleId ? " selected" : ""}${connectingFrom !== null && connectingFrom !== node.articleId ? " connect-target" : ""}`}
                 key={node.articleId}
-                onClick={() => setSelectedId(node.articleId)}
                 onDragOver={(event) => {
                   if (connectingFrom !== null && connectingFrom !== node.articleId) event.preventDefault();
                 }}
                 onDrop={(event) => connectTo(event, node.articleId)}
-                onPointerDown={(event) => startMoving(event, node)}
-                onPointerMove={moveNode}
-                onPointerUp={finishMoving}
                 style={{ left: node.x, top: node.y }}
               >
-                <header><time>{node.publishedAt?.slice(0, 7) ?? "日期待补"}</time><span>{node.publisher === "机构待补充" || node.publisher.toLocaleLowerCase() === "arxiv" ? "" : node.publisher}</span></header>
-                <strong><MathTitle title={node.title} /></strong>
-                {node.note && <p>{node.note}</p>}
+                <button
+                  aria-label="拖动节点位置"
+                  className="manual-node-drag-handle"
+                  onPointerDown={(event) => startMoving(event, node)}
+                  onPointerMove={moveNode}
+                  onPointerUp={finishMoving}
+                  type="button"
+                ><i aria-hidden="true">⠿</i><span>拖动节点</span></button>
+                <a className="manual-node-reading-link" href={`/reviews/new?article=${node.articleId}`}>
+                  <header><time>{node.publishedAt?.slice(0, 7) ?? "日期待补"}</time><span>{node.publisher === "机构待补充" || node.publisher.toLocaleLowerCase() === "arxiv" ? "" : node.publisher}</span></header>
+                  <strong><MathTitle title={node.title} /></strong>
+                  {node.note && <p>{node.note}</p>}
+                  <small>点击进入阅读 →</small>
+                </a>
+                <span aria-label={node.isRead ? "已读" : "未读"} className={`graph-card-read-state${node.isRead ? " is-read" : ""}`} role="img" title={node.isRead ? "已读" : "未读"}>
+                  {node.isRead ? "✓" : ""}
+                </span>
                 <button
                   aria-label="从画板移除"
                   className="manual-node-remove"
@@ -310,23 +320,30 @@ export function KnowledgeGraphExplorer({
       </section>
 
       <section className="graph-waiting-section">
-        <header><div><span>等待放置</span><strong>{waiting.length} 篇论文</strong></div><p>按住整张卡片，拖到上方画板中的合适位置。</p></header>
+        <header><div><span>等待放置</span><strong>{waiting.length} 篇论文</strong></div><p>拖动卡片底部的把手进行放置；点击卡片内容直接阅读。</p></header>
         {waiting.length > 0 ? (
           <div className="graph-waiting-cards">
             {waiting.map((article) => (
-              <article
-                draggable
-                key={article.articleId}
-                onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData("application/x-wisdomloong-article", String(article.articleId));
-                }}
-              >
-                <time>{article.publishedAt?.slice(0, 7) ?? "日期待补"}</time>
-                <strong><MathTitle title={article.title} /></strong>
-                <span>{article.publisher === "机构待补充" || article.publisher.toLocaleLowerCase() === "arxiv" ? "" : article.publisher}</span>
-                <p>{article.abstract || "摘要正在补齐。"}</p>
-                <small>拖入画板 ＋</small>
+              <article key={article.articleId}>
+                <a className="graph-waiting-reading-link" href={`/reviews/new?article=${article.articleId}`}>
+                  <time>{article.publishedAt?.slice(0, 7) ?? "日期待补"}</time>
+                  <strong><MathTitle title={article.title} /></strong>
+                  <span>{article.publisher === "机构待补充" || article.publisher.toLocaleLowerCase() === "arxiv" ? "" : article.publisher}</span>
+                  <p>{article.abstract || "摘要正在补齐。"}</p>
+                  <small>点击进入阅读 →</small>
+                </a>
+                <span aria-label={article.isRead ? "已读" : "未读"} className={`graph-card-read-state${article.isRead ? " is-read" : ""}`} role="img" title={article.isRead ? "已读" : "未读"}>
+                  {article.isRead ? "✓" : ""}
+                </span>
+                <button
+                  className="graph-waiting-drag-handle"
+                  draggable
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("application/x-wisdomloong-article", String(article.articleId));
+                  }}
+                  type="button"
+                ><i aria-hidden="true">⠿</i><span>拖入画板</span></button>
               </article>
             ))}
           </div>

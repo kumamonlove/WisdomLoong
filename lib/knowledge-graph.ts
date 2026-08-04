@@ -13,6 +13,7 @@ export type KnowledgeGraphArticle = {
   publishedAt: string | null;
   publisher: string;
   abstract: string;
+  isRead: boolean;
 };
 
 export type KnowledgeGraphCanvasNode = KnowledgeGraphArticle & {
@@ -77,26 +78,34 @@ export async function getKnowledgeGraphDomains() {
   return result.rows;
 }
 
-export async function getKnowledgeGraph(domain: string): Promise<KnowledgeGraphData> {
+export async function getKnowledgeGraph(domain: string, userId: number): Promise<KnowledgeGraphData> {
   const [articles, nodes, edges] = await Promise.all([
     database.query<KnowledgeGraphArticle>(
       `SELECT id AS "articleId", title, published_at::text AS "publishedAt", publisher,
-              LEFT(COALESCE(NULLIF(abstract_zh, ''), abstract), 360) AS abstract
+              LEFT(COALESCE(NULLIF(abstract_zh, ''), abstract), 360) AS abstract,
+              EXISTS (
+                SELECT 1 FROM article_reads
+                WHERE article_reads.user_id = $2 AND article_reads.article_id = articles.id
+              ) AS "isRead"
        FROM articles
        WHERE $1 = ANY(CASE WHEN CARDINALITY(tags) > 0 THEN tags ELSE ARRAY[category] END)
        ORDER BY published_at ASC NULLS LAST, created_at ASC, id ASC`,
-      [domain],
+      [domain, userId],
     ),
     database.query<KnowledgeGraphCanvasNode>(
       `SELECT articles.id AS "articleId", articles.title,
               articles.published_at::text AS "publishedAt", articles.publisher,
               LEFT(COALESCE(NULLIF(articles.abstract_zh, ''), articles.abstract), 360) AS abstract,
-              canvas.position_x::int AS x, canvas.position_y::int AS y, canvas.note
+              canvas.position_x::int AS x, canvas.position_y::int AS y, canvas.note,
+              EXISTS (
+                SELECT 1 FROM article_reads
+                WHERE article_reads.user_id = $2 AND article_reads.article_id = articles.id
+              ) AS "isRead"
        FROM knowledge_graph_canvas_nodes canvas
        JOIN articles ON articles.id = canvas.article_id
        WHERE canvas.domain = $1
        ORDER BY canvas.updated_at ASC`,
-      [domain],
+      [domain, userId],
     ),
     database.query<KnowledgeGraphCanvasEdge>(
       `SELECT id, source_article_id AS "sourceArticleId", target_article_id AS "targetArticleId"

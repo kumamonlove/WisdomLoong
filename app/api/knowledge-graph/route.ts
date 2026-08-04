@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   if (!domain || domain.length > 24 || domain === "全部") {
     return NextResponse.json({ error: "请选择有效的知识领域" }, { status: 400 });
   }
-  return NextResponse.json({ graph: await getKnowledgeGraph(domain) });
+  return NextResponse.json({ graph: await getKnowledgeGraph(domain, user.id) });
 }
 
 export async function POST(request: Request) {
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   }
   try {
     await mutateKnowledgeGraph(body, user.id);
-    return NextResponse.json({ ok: true, graph: await getKnowledgeGraph(body.domain) });
+    return NextResponse.json({ ok: true, graph: await getKnowledgeGraph(body.domain, user.id) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "画板保存失败";
     return NextResponse.json({ error: message }, { status: 400 });
