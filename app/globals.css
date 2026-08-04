@@ -5215,12 +5215,16 @@ select {
 
 .saved-notes > div {
   display: grid;
-  grid-template-columns: 1fr 24px;
+  grid-template-columns: minmax(0, 1fr) auto 24px;
   align-items: center;
   gap: 3px;
 }
 
-.saved-notes > div > button:first-child {
+.saved-notes > div.is-editing {
+  display: block;
+}
+
+.saved-note-jump {
   padding: 8px;
   display: grid;
   grid-template-columns: 34px 1fr;
@@ -5232,7 +5236,24 @@ select {
   text-align: left;
 }
 
-.saved-notes > div > button:last-child {
+.saved-note-edit {
+  min-height: 28px;
+  padding: 0 7px;
+  color: var(--muted);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.saved-note-edit:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, .8);
+}
+
+.saved-note-delete {
   width: 24px;
   height: 24px;
   padding: 0;
@@ -5243,9 +5264,82 @@ select {
   cursor: pointer;
 }
 
-.saved-notes > div > button:last-child:hover {
+.saved-note-delete:hover {
   color: var(--white);
   background: var(--accent);
+}
+
+.saved-note-editor {
+  padding: 10px;
+  border: 1px solid rgba(214, 95, 64, .3);
+  border-radius: 8px;
+  background: var(--white);
+  box-shadow: 0 8px 22px rgba(24, 24, 22, .07);
+}
+
+.saved-note-editor label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.saved-note-editor textarea {
+  width: 100%;
+  min-height: 82px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  outline: none;
+  background: var(--paper);
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.saved-note-editor textarea:focus {
+  border-color: rgba(214, 95, 64, .5);
+  box-shadow: 0 0 0 3px rgba(214, 95, 64, .1);
+}
+
+.saved-note-editor footer {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.saved-note-editor footer > span {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.saved-note-editor footer > div {
+  display: flex;
+  gap: 5px;
+}
+
+.saved-note-editor footer button {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.saved-note-editor footer button:last-child {
+  color: var(--white);
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.saved-note-editor footer button:disabled {
+  cursor: not-allowed;
+  opacity: .4;
 }
 
 .saved-notes strong {

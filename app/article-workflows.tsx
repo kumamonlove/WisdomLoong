@@ -1134,6 +1134,8 @@ export function ReviewComposer({
   const [localPdfName, setLocalPdfName] = useState("");
   const [readerDragging, setReaderDragging] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
+  const [editingAnnotationIndex, setEditingAnnotationIndex] = useState<number | null>(null);
+  const [editingAnnotationContent, setEditingAnnotationContent] = useState("");
   const [quoteDraft, setQuoteDraft] = useState("");
   const [translation, setTranslation] = useState("");
   const [translating, setTranslating] = useState(false);
@@ -1580,6 +1582,8 @@ export function ReviewComposer({
     setMustRead(article?.ownReview?.mustRead ?? false);
     setContent(article?.ownReview?.content ?? "");
     setNotes((article?.savedAnnotations ?? article?.ownReview?.annotations ?? []).filter((note) => note.rect));
+    setEditingAnnotationIndex(null);
+    setEditingAnnotationContent("");
     setAnnotationSaveStatus("saved");
     setBookmark(article?.lastReadPage
       ? { page: article.lastReadPage, positionY: article.lastReadPositionY ?? 0 }
@@ -1754,6 +1758,34 @@ export function ReviewComposer({
     const nextNotes = notes.filter((_, itemIndex) => itemIndex !== index);
     setNotes(nextNotes);
     persistAnnotationDrafts(articleId, nextNotes);
+    if (editingAnnotationIndex === index) {
+      setEditingAnnotationIndex(null);
+      setEditingAnnotationContent("");
+    } else if (editingAnnotationIndex !== null && editingAnnotationIndex > index) {
+      setEditingAnnotationIndex(editingAnnotationIndex - 1);
+    }
+  }
+
+  function startEditingAnnotation(index: number) {
+    setEditingAnnotationIndex(index);
+    setEditingAnnotationContent(notes[index]?.content ?? "");
+  }
+
+  function cancelEditingAnnotation() {
+    setEditingAnnotationIndex(null);
+    setEditingAnnotationContent("");
+  }
+
+  function saveEditedAnnotation() {
+    if (editingAnnotationIndex === null || !editingAnnotationContent.trim()) return;
+    const nextNotes = notes.map((note, index) => index === editingAnnotationIndex
+      ? { ...note, content: editingAnnotationContent.trim() }
+      : note
+    );
+    setNotes(nextNotes);
+    persistAnnotationDrafts(articleId, nextNotes);
+    setEditingAnnotationIndex(null);
+    setEditingAnnotationContent("");
   }
 
   function reuseCommunityAnnotationPosition(annotation: CommunityAnnotation) {
@@ -2692,16 +2724,42 @@ export function ReviewComposer({
                     : "批注已实时保存"}
               </p>
               {notes.map((note, index) => (
-                <div key={`${note.page}-${index}`}>
-                  <button
-                    onClick={() => {
-                      articlePageBeforeNote.current = note.page;
-                      if (viewingPartnerNote) returnToArticle();
-                      else navigateToPage(note.page);
-                    }}
-                    type="button"
-                  ><strong>批注 {index + 1}</strong><span>▣ {note.content}</span></button>
-                  <button aria-label="删除这条批注" onClick={() => deleteAnnotation(index)} type="button">×</button>
+                <div className={editingAnnotationIndex === index ? "is-editing" : ""} key={`${note.page}-${index}`}>
+                  {editingAnnotationIndex === index ? (
+                    <div className="saved-note-editor">
+                      <label htmlFor={`annotation-edit-${index}`}>修改批注 {index + 1}</label>
+                      <textarea
+                        autoFocus
+                        id={`annotation-edit-${index}`}
+                        maxLength={4000}
+                        onChange={(event) => setEditingAnnotationContent(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") cancelEditingAnnotation();
+                          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") saveEditedAnnotation();
+                        }}
+                        rows={4}
+                        value={editingAnnotationContent}
+                      />
+                      <footer>
+                        <span>Esc 取消 · Ctrl/⌘ + Enter 保存</span>
+                        <div><button onClick={cancelEditingAnnotation} type="button">取消</button><button disabled={!editingAnnotationContent.trim()} onClick={saveEditedAnnotation} type="button">保存修改</button></div>
+                      </footer>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        className="saved-note-jump"
+                        onClick={() => {
+                          articlePageBeforeNote.current = note.page;
+                          if (viewingPartnerNote) returnToArticle();
+                          else navigateToPage(note.page);
+                        }}
+                        type="button"
+                      ><strong>批注 {index + 1}</strong><span>▣ {note.content}</span></button>
+                      <button aria-label={`编辑批注 ${index + 1}`} className="saved-note-edit" onClick={() => startEditingAnnotation(index)} type="button">编辑</button>
+                      <button aria-label={`删除批注 ${index + 1}`} className="saved-note-delete" onClick={() => deleteAnnotation(index)} type="button">×</button>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
