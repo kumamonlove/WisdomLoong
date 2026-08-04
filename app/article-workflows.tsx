@@ -1934,7 +1934,11 @@ export function ReviewComposer({
   }
 
   function useSelectedPdfText(text: string, pageNumber: number) {
-    const normalized = text.replace(/\s+/g, " ").trim().slice(0, 12_000);
+    const normalized = text
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 12_000);
     if (!normalized) return;
     setPage(pageNumber);
     setQuoteDraft(normalized);

@@ -10,6 +10,13 @@ type AnnotationInput = {
   rect?: { x?: number; y?: number; width?: number; height?: number } | null;
 };
 
+function sanitizeAnnotationText(value: string | undefined, maxLength: number) {
+  return (value ?? "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .trim()
+    .slice(0, maxLength);
+}
+
 function normalizeAnnotations(value: unknown) {
   return (Array.isArray(value) ? value : [])
     .slice(0, 50)
@@ -26,9 +33,9 @@ function normalizeAnnotations(value: unknown) {
         : null;
       return {
         page: Math.max(1, Math.floor(Number(annotation.page) || 1)),
-        quote: annotation.quote?.trim().slice(0, 12_000) ?? "",
-        translation: annotation.translation?.trim().slice(0, 12_000) ?? "",
-        content: annotation.content?.trim().slice(0, 4_000) ?? "",
+        quote: sanitizeAnnotationText(annotation.quote, 12_000),
+        translation: sanitizeAnnotationText(annotation.translation, 12_000),
+        content: sanitizeAnnotationText(annotation.content, 4_000),
         rect: normalizedRect && normalizedRect.width >= 1 && normalizedRect.height >= 1
           ? normalizedRect
           : null,
