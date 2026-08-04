@@ -984,7 +984,7 @@ function PdfContinuousCanvas({
     let cancelled = false;
     let loadingTask: PDFDocumentLoadingTask | undefined;
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 150_000);
+    const timeout = window.setTimeout(() => controller.abort(), 210_000);
     setPdfDocument(null);
     void (async () => {
       try {
@@ -1077,7 +1077,6 @@ export function ReviewComposer({
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
   const [articleReadFilter, setArticleReadFilter] = useState<"all" | "unread" | "read">("all");
-  const [articlePage, setArticlePage] = useState(1);
   const [showAllArticleTags, setShowAllArticleTags] = useState(false);
   const [rating, setRating] = useState<number | null>(startingReview?.rating ?? null);
   const [mustRead, setMustRead] = useState(startingReview?.mustRead ?? false);
@@ -1180,13 +1179,6 @@ export function ReviewComposer({
   }, [articleReadFilter, articleSearch, articleTag, availableArticles]);
   const unreadArticleCount = availableArticles.filter((article) => !article.isRead).length;
   const readArticleCount = availableArticles.length - unreadArticleCount;
-  const articlePageSize = 5;
-  const articlePageCount = Math.max(1, Math.ceil(filteredArticles.length / articlePageSize));
-  const visibleArticlePage = Math.min(articlePage, articlePageCount);
-  const paginatedArticles = filteredArticles.slice(
-    (visibleArticlePage - 1) * articlePageSize,
-    visibleArticlePage * articlePageSize,
-  );
   const visibleSearchableTags = showAllArticleTags
     ? searchableTags
     : [
@@ -1382,14 +1374,6 @@ export function ReviewComposer({
   }, [articles]);
 
   useEffect(() => {
-    setArticlePage(1);
-  }, [articleReadFilter, articleSearch, articleTag]);
-
-  useEffect(() => {
-    if (articlePage > articlePageCount) setArticlePage(articlePageCount);
-  }, [articlePage, articlePageCount]);
-
-  useEffect(() => {
     if (!incompleteAbstractIds) return;
     let cancelled = false;
 
@@ -1455,16 +1439,6 @@ export function ReviewComposer({
       window.localStorage.removeItem(annotationDraftStorageKey(articleId));
     }
   }, [articleId, persistAnnotationDrafts]);
-
-  useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.getRegistrations().then((registrations) =>
-        Promise.all(registrations
-          .filter((registration) => registration.active?.scriptURL.endsWith("/pdf-cache-worker.js"))
-          .map((registration) => registration.unregister()))
-      );
-    }
-  }, []);
 
   useEffect(() => {
     if (!articleId) return;
@@ -1597,6 +1571,15 @@ export function ReviewComposer({
     setArticlePdfReady(false);
     setCommunityAnnotations([]);
     setPdfLoading(true);
+    setFocusMode(true);
+  }
+
+  function beginReadingArticle(id: number) {
+    if (id === articleId) {
+      beginReading();
+      return;
+    }
+    selectArticle(id);
     setFocusMode(true);
   }
 
@@ -2132,44 +2115,57 @@ export function ReviewComposer({
           </div>
         </div>
         <div className="article-search-results">
-          {paginatedArticles.map((article) => (
-            <button
+          {filteredArticles.map((article) => (
+            <article
               className={article.id === articleId ? "selected" : ""}
               key={article.id}
-              onClick={() => selectArticle(article.id)}
-              type="button"
             >
               <div className="library-result-meta">
                 <span>
                   {article.publisher !== "机构待补充" && article.publisher.toLocaleLowerCase() !== "arxiv"
                     ? article.publisher
-                    : ""}
+                    : article.publishedAt ?? ""}
                 </span>
-                <em className={article.isRead ? "is-read" : "is-unread"}>
-                  {article.isRead ? "已读" : "未读"}
-                </em>
+                {article.id === articleId
+                  ? <em className="is-selected">正在预览</em>
+                  : <em className={article.isRead ? "is-read" : "is-unread"}>{article.isRead ? "已读" : "未读"}</em>}
               </div>
-              <strong><MathTitle title={article.title} /></strong>
-              <small>{article.tags.join(" · ")}</small>
-            </button>
+              <button
+                className="library-card-title"
+                onClick={() => selectArticle(article.id)}
+                type="button"
+              >
+                <MathTitle title={article.title} />
+              </button>
+              <div className="library-card-tags" aria-label="文章标签">
+                {(article.tags.length ? article.tags : [article.category]).slice(0, 4).map((tag) => (
+                  <span key={tag}>{tag}</span>
+                ))}
+              </div>
+              <div className="library-card-actions">
+                <button
+                  className="library-start-reading"
+                  onClick={() => beginReadingArticle(article.id)}
+                  type="button"
+                >
+                  {article.lastReadPage ? "继续阅读" : "开始阅读"} <span aria-hidden="true">→</span>
+                </button>
+                <MarkReadButton
+                  articleId={article.id}
+                  initialRead={article.isRead}
+                  key={`library-${article.id}-${article.isRead}`}
+                  onChange={(isRead) => setAvailableArticles((current) => current.map((item) =>
+                    item.id === article.id ? { ...item, isRead } : item
+                  ))}
+                />
+              </div>
+              <p className="library-card-abstract">
+                {article.abstractZh || article.abstract || "摘要正在识别补齐。"}
+              </p>
+            </article>
           ))}
           {filteredArticles.length === 0 && <p>没有匹配文章</p>}
         </div>
-        {filteredArticles.length > articlePageSize && (
-          <nav className="article-library-pagination" aria-label="文章库分页">
-            <button
-              disabled={visibleArticlePage === 1}
-              onClick={() => setArticlePage((current) => Math.max(1, current - 1))}
-              type="button"
-            >上一页</button>
-            <span>{visibleArticlePage} / {articlePageCount}</span>
-            <button
-              disabled={visibleArticlePage === articlePageCount}
-              onClick={() => setArticlePage((current) => Math.min(articlePageCount, current + 1))}
-              type="button"
-            >下一页</button>
-          </nav>
-        )}
       </aside>
 
       <section className="paper-reader">
@@ -2391,7 +2387,7 @@ export function ReviewComposer({
                         <>
                           <small>
                             {localCache.status === "timeout"
-                              ? "已等待约 150 秒。你可以重试，或下载 PDF 后拖入这个阅读区域。"
+                              ? "下载等待时间较长。你可以重试，或下载 PDF 后拖入这个阅读区域。"
                               : "你可以重试，或下载 PDF 后拖入这个阅读区域。"}
                           </small>
                           <div className="pdf-fallback-actions">

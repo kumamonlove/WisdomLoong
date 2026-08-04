@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { mkdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
@@ -9,6 +9,8 @@ import {
   arxivPdfUrl,
   pdfCacheDirectory,
   pdfCachePath,
+  validPdfCacheSize,
+  warmPdfCache,
 } from "@/lib/pdf-cache";
 
 export const runtime = "nodejs";
@@ -77,21 +79,19 @@ export async function GET(
 
   await mkdir(pdfCacheDirectory, { recursive: true });
   const filePath = pdfCachePath(articleId);
-  try {
-    const file = await stat(filePath);
-    if (file.size > 0) {
-      return cachedResponse(articleId, filePath, file.size, request.headers.get("range"));
-    }
-  } catch {
-    // 首次访问时继续从论文源站获取。
+  const cachedSize = await validPdfCacheSize(articleId);
+  if (cachedSize) {
+    return cachedResponse(articleId, filePath, cachedSize, request.headers.get("range"));
   }
 
   const activeDownload = activePdfDownloads.get(articleId);
   if (activeDownload) {
     try {
       await activeDownload;
-      const file = await stat(filePath);
-      return cachedResponse(articleId, filePath, file.size, request.headers.get("range"));
+      const completedSize = await validPdfCacheSize(articleId);
+      if (completedSize) {
+        return cachedResponse(articleId, filePath, completedSize, request.headers.get("range"));
+      }
     } catch {
       // 上一次下载失败时由本次请求重试。
     }
@@ -111,32 +111,10 @@ export async function GET(
   }
 
   try {
-    const response = await fetch(remoteUrl, {
-      cache: "no-store",
-      headers: { "User-Agent": "WisdomLoong/1.10 PDF cache" },
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!response.ok || !response.body) throw new Error(`PDF source returned ${response.status}`);
-
-    const [clientStream, cacheStream] = response.body.tee();
-    const temporaryPath = `${filePath}.${process.pid}.tmp`;
-    const cachePromise = new Response(cacheStream).arrayBuffer()
-      .then(async (buffer) => {
-        await writeFile(temporaryPath, Buffer.from(buffer));
-        await rename(temporaryPath, filePath);
-      })
-      .finally(() => activePdfDownloads.delete(articleId));
-    activePdfDownloads.set(articleId, cachePromise);
-    void cachePromise.catch((error) => console.error("PDF cache write failed", error));
-
-    const headers = new Headers({
-      "Cache-Control": "private, max-age=3600",
-      "Content-Type": "application/pdf",
-      "X-WisdomLoong-Cache": "MISS",
-    });
-    const contentLength = response.headers.get("content-length");
-    if (contentLength) headers.set("Content-Length", contentLength);
-    return new NextResponse(clientStream, { headers });
+    await warmPdfCache(articleId, sourceUrl);
+    const completedSize = await validPdfCacheSize(articleId);
+    if (!completedSize) throw new Error("PDF cache validation failed");
+    return cachedResponse(articleId, filePath, completedSize, request.headers.get("range"));
   } catch (error) {
     console.error("PDF proxy failed", error);
     return NextResponse.json(

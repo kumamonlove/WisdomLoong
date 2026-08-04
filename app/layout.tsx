@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PdfIdlePreloader } from "@/app/pdf-idle-preloader";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
@@ -14,7 +15,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        {children}
+        <PdfIdlePreloader />
+      </body>
     </html>
   );
 }

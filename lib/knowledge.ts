@@ -127,22 +127,29 @@ export function parseReviewFilter(
 
 export async function getTeamReadingArticles() {
   const result = await database.query<ArticleCardData>(
-    `WITH member_activity AS (
-       SELECT article_id, user_id, MAX(activity_at) AS last_activity_at
-       FROM (
-         SELECT article_id, user_id, viewed_at AS activity_at FROM article_recent_views
-         UNION ALL
-         SELECT article_id, user_id, read_at AS activity_at FROM article_reads
-       ) activity
-       GROUP BY article_id, user_id
-     ),
-     team_activity AS (
+    `WITH review_stats AS (
        SELECT
          article_id,
-         COUNT(DISTINCT user_id)::int AS read_count,
-         MAX(last_activity_at) AS last_activity_at
-       FROM member_activity
+         ROUND(AVG(rating)::numeric, 1)::float AS average_rating,
+         BOOL_OR(must_read) AS must_read,
+         COUNT(*)::int AS long_review_count,
+         COUNT(*) FILTER (WHERE must_read)::int AS must_read_count,
+         MAX(updated_at) AS last_reviewed_at
+       FROM reviews
        GROUP BY article_id
+     ),
+     note_like_stats AS (
+       SELECT reviews.article_id, COUNT(review_likes.user_id)::int AS like_count
+       FROM reviews
+       INNER JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
+       LEFT JOIN review_likes ON review_likes.review_id = reviews.id
+       GROUP BY reviews.article_id
+     ),
+     latest_reviews AS (
+       SELECT DISTINCT ON (article_id)
+         article_id, user_id, content
+       FROM reviews
+       ORDER BY article_id, updated_at DESC, id DESC
      )
      SELECT
        articles.id,
@@ -153,31 +160,22 @@ export async function getTeamReadingArticles() {
        articles.published_at::text AS "publishedAt",
        articles.source_url AS "sourceUrl",
        articles.authors,
-       NULL::text AS "reviewAuthor",
-       NULL::text AS "reviewContent",
+       latest_reviewer.username AS "reviewAuthor",
+       latest_reviews.content AS "reviewContent",
        review_stats.average_rating AS rating,
        review_stats.must_read AS "mustRead",
        JSON_BUILD_OBJECT(
-         'readCount', team_activity.read_count,
+         'readCount', 0,
          'longReviewCount', review_stats.long_review_count,
          'mustReadCount', review_stats.must_read_count,
-         'likeCount', review_stats.like_count
+         'likeCount', COALESCE(note_like_stats.like_count, 0)
        ) AS "recommendationSignals"
-     FROM team_activity
-     INNER JOIN articles ON articles.id = team_activity.article_id
-     LEFT JOIN LATERAL (
-       SELECT
-         ROUND(AVG(reviews.rating)::numeric, 1)::float AS average_rating,
-         BOOL_OR(reviews.must_read) AS must_read,
-         COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.review_type = 'long')::int AS long_review_count,
-         COUNT(DISTINCT reviews.id) FILTER (WHERE reviews.must_read)::int AS must_read_count,
-         COUNT(DISTINCT review_likes.user_id) FILTER (WHERE reading_note_pdfs.review_id IS NOT NULL)::int AS like_count
-       FROM reviews
-       LEFT JOIN review_likes ON review_likes.review_id = reviews.id
-       LEFT JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
-       WHERE reviews.article_id = articles.id
-     ) review_stats ON TRUE
-     ORDER BY team_activity.last_activity_at DESC
+     FROM review_stats
+     INNER JOIN articles ON articles.id = review_stats.article_id
+     INNER JOIN latest_reviews ON latest_reviews.article_id = articles.id
+     INNER JOIN users latest_reviewer ON latest_reviewer.id = latest_reviews.user_id
+     LEFT JOIN note_like_stats ON note_like_stats.article_id = articles.id
+     ORDER BY review_stats.last_reviewed_at DESC
      LIMIT 4`,
   );
 
