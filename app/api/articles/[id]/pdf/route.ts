@@ -18,10 +18,31 @@ export const dynamic = "force-dynamic";
 
 const cacheMaxAge = 60 * 60 * 24 * 30;
 
-type ArticleSource = { sourceUrl: string };
+type ArticleSource = { sourceUrl: string; title: string };
 
-function cachedResponse(articleId: number, filePath: string, size: number, rangeHeader: string | null) {
+function downloadDisposition(title: string, articleId: number) {
+  const filename = (title || `paper-${articleId}`)
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120) || `paper-${articleId}`;
+  const encoded = encodeURIComponent(`${filename}.pdf`).replace(/[!'()*]/g, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+  return `attachment; filename="paper-${articleId}.pdf"; filename*=UTF-8''${encoded}`;
+}
+
+function cachedResponse(
+  articleId: number,
+  filePath: string,
+  size: number,
+  rangeHeader: string | null,
+  disposition: string | null,
+) {
   const redirectPrefix = process.env.PDF_ACCEL_REDIRECT_PREFIX;
+  const downloadHeaders: Record<string, string> = disposition
+    ? { "Content-Disposition": disposition }
+    : {};
   if (redirectPrefix) {
     return new NextResponse(null, {
       headers: {
@@ -30,6 +51,7 @@ function cachedResponse(articleId: number, filePath: string, size: number, range
         "X-Accel-Redirect": `${redirectPrefix}/${articleId}.pdf`,
         "X-WisdomLoong-Cache": "HIT",
         "X-WisdomLoong-Delivery": "nginx-sendfile",
+        ...downloadHeaders,
       },
     });
   }
@@ -48,6 +70,7 @@ function cachedResponse(articleId: number, filePath: string, size: number, range
           "Content-Range": `bytes ${start}-${end}/${size}`,
           "Content-Type": "application/pdf",
           "X-WisdomLoong-Cache": "HIT",
+          ...downloadHeaders,
         },
       });
     }
@@ -61,6 +84,7 @@ function cachedResponse(articleId: number, filePath: string, size: number, range
       "Content-Length": String(size),
       "Content-Type": "application/pdf",
       "X-WisdomLoong-Cache": "HIT",
+      ...downloadHeaders,
     },
   });
 }
@@ -77,11 +101,23 @@ export async function GET(
     return NextResponse.json({ error: "文章不存在" }, { status: 404 });
   }
 
+  const wantsDownload = new URL(request.url).searchParams.get("download") === "1";
+  let article = wantsDownload
+    ? (await database.query<ArticleSource>(
+        `SELECT source_url AS "sourceUrl", title FROM articles WHERE id = $1`,
+        [articleId],
+      )).rows[0]
+    : undefined;
+  if (wantsDownload && !article) {
+    return NextResponse.json({ error: "文章不存在" }, { status: 404 });
+  }
+  const disposition = wantsDownload ? downloadDisposition(article!.title, articleId) : null;
+
   await mkdir(pdfCacheDirectory, { recursive: true });
   const filePath = pdfCachePath(articleId);
   const cachedSize = await validPdfCacheSize(articleId);
   if (cachedSize) {
-    return cachedResponse(articleId, filePath, cachedSize, request.headers.get("range"));
+    return cachedResponse(articleId, filePath, cachedSize, request.headers.get("range"), disposition);
   }
 
   const activeDownload = activePdfDownloads.get(articleId);
@@ -90,18 +126,18 @@ export async function GET(
       await activeDownload;
       const completedSize = await validPdfCacheSize(articleId);
       if (completedSize) {
-        return cachedResponse(articleId, filePath, completedSize, request.headers.get("range"));
+        return cachedResponse(articleId, filePath, completedSize, request.headers.get("range"), disposition);
       }
     } catch {
       // 上一次下载失败时由本次请求重试。
     }
   }
 
-  const result = await database.query<ArticleSource>(
-    `SELECT source_url AS "sourceUrl" FROM articles WHERE id = $1`,
+  article ??= (await database.query<ArticleSource>(
+    `SELECT source_url AS "sourceUrl", title FROM articles WHERE id = $1`,
     [articleId],
-  );
-  const sourceUrl = result.rows[0]?.sourceUrl;
+  )).rows[0];
+  const sourceUrl = article?.sourceUrl;
   const remoteUrl = sourceUrl ? arxivPdfUrl(sourceUrl) : null;
   if (!remoteUrl) {
     return NextResponse.json(
@@ -114,7 +150,7 @@ export async function GET(
     await warmPdfCache(articleId, sourceUrl);
     const completedSize = await validPdfCacheSize(articleId);
     if (!completedSize) throw new Error("PDF cache validation failed");
-    return cachedResponse(articleId, filePath, completedSize, request.headers.get("range"));
+    return cachedResponse(articleId, filePath, completedSize, request.headers.get("range"), disposition);
   } catch (error) {
     console.error("PDF proxy failed", error);
     return NextResponse.json(

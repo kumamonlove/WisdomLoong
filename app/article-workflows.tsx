@@ -2392,6 +2392,13 @@ export function ReviewComposer({
                       type="button"
                     >适合宽度</button>
                   </div>
+                  <div className="reader-file-tools">
+                    <a
+                      download
+                      href={`/api/articles/${selectedArticle.id}/pdf?download=1`}
+                      title="把当前论文 PDF 下载到本地"
+                    ><i aria-hidden="true">↓</i><span>下载 PDF</span></a>
+                  </div>
                   {!viewingPartnerNote && (
                     <div className="reader-annotation-tools">
                       <button
