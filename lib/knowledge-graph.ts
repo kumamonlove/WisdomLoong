@@ -53,6 +53,7 @@ type AiGraph = {
 };
 
 const activeDomainRefreshes = new Map<string, Promise<void>>();
+const knowledgeGraphAnalysisVersion = 2;
 
 function compactText(value: string, length: number) {
   return value.replace(/\s+/g, " ").trim().slice(0, length);
@@ -118,6 +119,7 @@ async function requestGraphAnalysis(domain: string, articles: GraphArticle[], pr
         content: [
           "你是机器人学研究史与技术谱系编辑。请为指定领域维护一棵严格基于证据的论文发展树。",
           "父节点必须比子节点更早，且只有存在明确方法、问题定义、训练范式或思想继承时才能连接；没有可靠前驱就作为根节点。",
+          "禁止仅按发表时间把论文串成单链。若多篇工作共同直接继承同一篇代表作，它们必须作为该代表作的并列分支；例如多篇论文都直接继承 pi0.5，就都把 pi0.5 设为父节点。",
           "每篇贡献用简洁中文写 25–70 字，说明它相对前序工作的新增价值，不能只改写标题。",
           "lineageReason 用 20–60 字解释继承关系；根节点说明它开启或汇合了什么方向。",
           "narrative 用 150–500 字维护该领域从早到晚的内部发展叙事，点出主要分支、汇合和仍未解决的问题。",
@@ -181,7 +183,10 @@ export async function getKnowledgeGraphDomains() {
        domain_articles."articleCount",
        COALESCE(analyzed."analyzedCount", 0)::int AS "analyzedCount",
        COALESCE(knowledge_graph_domains.narrative, '') AS narrative,
-       COALESCE(knowledge_graph_domains.status, 'pending') AS status,
+       CASE
+         WHEN COALESCE(knowledge_graph_domains.analysis_version, 0) < ${knowledgeGraphAnalysisVersion} THEN 'pending'
+         ELSE COALESCE(knowledge_graph_domains.status, 'pending')
+       END AS status,
        knowledge_graph_domains.updated_at::text AS "updatedAt"
      FROM domain_articles
      LEFT JOIN knowledge_graph_domains USING (domain)
@@ -246,11 +251,12 @@ async function rebuildDomain(domain: string) {
     [domain],
   );
   await database.query(
-    `INSERT INTO knowledge_graph_domains (domain, status, article_count, last_error)
-     VALUES ($1, 'pending', $2, '')
+    `INSERT INTO knowledge_graph_domains (domain, status, article_count, analysis_version, last_error)
+     VALUES ($1, 'pending', $2, $3, '')
      ON CONFLICT (domain) DO UPDATE
-     SET status = 'pending', article_count = EXCLUDED.article_count, last_error = '', updated_at = NOW()`,
-    [domain, articles.length],
+     SET status = 'pending', article_count = EXCLUDED.article_count,
+         analysis_version = EXCLUDED.analysis_version, last_error = '', updated_at = NOW()`,
+    [domain, articles.length, knowledgeGraphAnalysisVersion],
   );
 
   try {
@@ -263,6 +269,7 @@ async function rebuildDomain(domain: string) {
       await client.query(
         `UPDATE knowledge_graph_domains
          SET narrative = $2, status = 'ready', article_count = $3,
+             analysis_version = ${knowledgeGraphAnalysisVersion},
              last_error = '', updated_at = NOW()
          WHERE domain = $1`,
         [domain, compactText(typeof graph.narrative === "string" ? graph.narrative : "", 4_000), articles.length],

@@ -57,6 +57,7 @@ domains="$(sudo -u postgres psql --dbname="$database_name" --tuples-only --no-al
   LEFT JOIN knowledge_graph_domains USING (domain)
   LEFT JOIN analyzed USING (domain)
   WHERE knowledge_graph_domains.status IS DISTINCT FROM 'ready'
+     OR COALESCE(knowledge_graph_domains.analysis_version, 0) < 2
      OR COALESCE(analyzed.analyzed_count, 0) <> domain_counts.article_count
      OR COALESCE(knowledge_graph_domains.article_count, 0) <> domain_counts.article_count
   ORDER BY domain_counts.article_count DESC, domain_counts.domain

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { WheelEvent } from "react";
 import { useRouter } from "next/navigation";
 import { MathTitle } from "@/app/math-title";
 import type {
@@ -29,24 +30,42 @@ function nodeLayout(nodes: KnowledgeGraphNode[]) {
     return depth;
   };
   nodes.forEach(depthOf);
-  const groups = new Map<number, KnowledgeGraphNode[]>();
+  const primaryParent = new Map<number, number>();
+  const children = new Map<number, KnowledgeGraphNode[]>();
   for (const node of nodes) {
-    const depth = depths.get(node.articleId) ?? 0;
-    groups.set(depth, [...(groups.get(depth) ?? []), node]);
+    const parent = node.parentArticleIds.find((id) => nodeMap.has(id));
+    if (parent === undefined) continue;
+    primaryParent.set(node.articleId, parent);
+    children.set(parent, [...(children.get(parent) ?? []), node]);
   }
-  const maxDepth = Math.max(0, ...groups.keys());
-  const maxRows = Math.max(1, ...[...groups.values()].map((items) => items.length));
+  const byDate = (left: KnowledgeGraphNode, right: KnowledgeGraphNode) =>
+    (left.publishedAt ?? "9999").localeCompare(right.publishedAt ?? "9999") || left.articleId - right.articleId;
+  for (const items of children.values()) items.sort(byDate);
+
+  const maxDepth = Math.max(0, ...depths.values());
   const width = Math.max(920, (maxDepth + 1) * 300 + 100);
-  const height = Math.max(460, maxRows * 190 + 100);
   const positions = new Map<number, { x: number; y: number }>();
-  for (const [depth, items] of groups) {
-    const usedHeight = items.length * 190;
-    const top = Math.max(50, (height - usedHeight) / 2 + 15);
-    items.forEach((node, index) => positions.set(node.articleId, {
-      x: 50 + depth * 300,
-      y: top + index * 190,
-    }));
+  const placed = new Set<number>();
+  let nextLeafRow = 0;
+  const placeBranch = (node: KnowledgeGraphNode): number => {
+    const existing = positions.get(node.articleId);
+    if (existing) return existing.y;
+    placed.add(node.articleId);
+    const branchChildren = children.get(node.articleId) ?? [];
+    const childRows = branchChildren.map(placeBranch);
+    const y = childRows.length
+      ? (childRows[0] + childRows[childRows.length - 1]) / 2
+      : 58 + nextLeafRow++ * 178;
+    positions.set(node.articleId, { x: 50 + (depths.get(node.articleId) ?? 0) * 300, y });
+    return y;
+  };
+  const roots = nodes.filter((node) => !primaryParent.has(node.articleId)).sort(byDate);
+  for (const root of roots) {
+    placeBranch(root);
+    nextLeafRow += 0.45;
   }
+  for (const node of nodes) if (!placed.has(node.articleId)) placeBranch(node);
+  const height = Math.max(500, ...[...positions.values()].map((position) => position.y + 188));
   return { width, height, positions, nodeMap };
 }
 
@@ -91,6 +110,22 @@ export function KnowledgeGraphExplorer({
   const layout = useMemo(() => nodeLayout(graph.nodes), [graph.nodes]);
   const related = useMemo(() => relatedNodes(activeId, graph.nodes), [activeId, graph.nodes]);
   const activeNode = graph.nodes.find((node) => node.articleId === activeId) ?? null;
+
+  function panTree(event: WheelEvent<HTMLDivElement>) {
+    const viewport = event.currentTarget;
+    const maxTop = viewport.scrollHeight - viewport.clientHeight;
+    const maxLeft = viewport.scrollWidth - viewport.clientWidth;
+    if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    const canMoveVertically = maxTop > 0 && (
+      (event.deltaY < 0 && viewport.scrollTop > 0) ||
+      (event.deltaY > 0 && viewport.scrollTop < maxTop)
+    );
+    if (canMoveVertically || maxLeft <= 0) return;
+    const nextLeft = Math.max(0, Math.min(maxLeft, viewport.scrollLeft + event.deltaY));
+    if (nextLeft === viewport.scrollLeft) return;
+    event.preventDefault();
+    viewport.scrollLeft = nextLeft;
+  }
 
   async function refreshGraph(automatic = false) {
     if (refreshing) return;
@@ -173,9 +208,9 @@ export function KnowledgeGraphExplorer({
       <section className="knowledge-tree-section">
         <header>
           <div><span>思想继承树</span><strong>{graph.nodes.length} 个研究节点</strong></div>
-          <p>点击节点可聚焦其前驱与后续分支；横向滚动查看完整技术路径。</p>
+          <p>点击节点可聚焦其前驱与全部后续分支；滚轮与触控板均可浏览完整树图。</p>
         </header>
-        <div className="knowledge-tree-viewport">
+        <div className="knowledge-tree-viewport" onWheel={panTree}>
           <div className="knowledge-tree-canvas" style={{ width: layout.width, height: layout.height }}>
             <svg aria-hidden="true" height={layout.height} width={layout.width}>
               <defs>

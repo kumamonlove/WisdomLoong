@@ -76,9 +76,13 @@ CREATE TABLE IF NOT EXISTS knowledge_graph_domains (
   status VARCHAR(12) NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending', 'ready', 'error')),
   article_count INTEGER NOT NULL DEFAULT 0,
+  analysis_version INTEGER NOT NULL DEFAULT 0,
   last_error TEXT NOT NULL DEFAULT '',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE knowledge_graph_domains
+  ADD COLUMN IF NOT EXISTS analysis_version INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS knowledge_graph_nodes (
   domain TEXT NOT NULL REFERENCES knowledge_graph_domains(domain) ON DELETE CASCADE,

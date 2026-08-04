@@ -1076,7 +1076,7 @@ export function ReviewComposer({
   const [expandedArticleId, setExpandedArticleId] = useState<number | null>(startingArticleId || null);
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
-  const [articleMonthIndex, setArticleMonthIndex] = useState<number | null>(null);
+  const [articleMonthIndex, setArticleMonthIndex] = useState(0);
   const [articleFocusRevision, setArticleFocusRevision] = useState(0);
   const [showAllArticleTags, setShowAllArticleTags] = useState(false);
   const [rating, setRating] = useState<number | null>(startingReview?.rating ?? null);
@@ -1167,25 +1167,24 @@ export function ReviewComposer({
     () => ["全部", ...new Set(availableArticles.flatMap((article) => article.tags))],
     [availableArticles],
   );
-  const articleMonths = useMemo(() => [...new Set(
-    availableArticles
-      .map((article) => article.publishedAt?.slice(0, 7) ?? "")
-      .filter(Boolean),
-  )].sort(), [availableArticles]);
-  const selectedArticleMonth = articleMonthIndex === null
-    ? null
-    : articleMonths[Math.min(articleMonthIndex, Math.max(0, articleMonths.length - 1))] ?? null;
   const filteredArticles = useMemo(() => {
     const terms = articleSearch.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
     return availableArticles.filter((article) => {
       if (articleTag !== "全部" && !article.tags.includes(articleTag)) return false;
-      if (selectedArticleMonth && article.publishedAt?.slice(0, 7) !== selectedArticleMonth) return false;
       const haystack = [article.title, article.publisher, article.authors.join(" "), article.tags.join(" ")]
         .join(" ")
         .toLocaleLowerCase();
       return terms.every((term) => haystack.includes(term));
     });
-  }, [articleSearch, articleTag, availableArticles, selectedArticleMonth]);
+  }, [articleSearch, articleTag, availableArticles]);
+  const articleMonths = useMemo(() => [...new Set(
+    filteredArticles
+      .map((article) => article.publishedAt?.slice(0, 7) ?? "")
+      .filter(Boolean),
+  )].sort().reverse(), [filteredArticles]);
+  const selectedArticleMonth = articleMonths[
+    Math.min(articleMonthIndex, Math.max(0, articleMonths.length - 1))
+  ] ?? null;
   const visibleSearchableTags = showAllArticleTags
     ? searchableTags
     : [
@@ -1431,6 +1430,33 @@ export function ReviewComposer({
   }, [articleFocusRevision, articleId, expandedArticleId, focusMode]);
 
   useEffect(() => {
+    setArticleMonthIndex(0);
+  }, [articleSearch, articleTag]);
+
+  useEffect(() => {
+    if (focusMode || articleMonths.length === 0) return;
+    let frame = 0;
+    const updateVisibleMonth = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const cards = [...document.querySelectorAll<HTMLElement>("[data-article-month]")];
+        const visible = cards.find((card) => card.getBoundingClientRect().bottom > 150) ?? cards.at(-1);
+        const month = visible?.dataset.articleMonth;
+        const index = month ? articleMonths.indexOf(month) : -1;
+        if (index >= 0) setArticleMonthIndex(index);
+      });
+    };
+    updateVisibleMonth();
+    window.addEventListener("scroll", updateVisibleMonth, { passive: true });
+    window.addEventListener("resize", updateVisibleMonth, { passive: true });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", updateVisibleMonth);
+      window.removeEventListener("resize", updateVisibleMonth);
+    };
+  }, [articleMonths, focusMode]);
+
+  useEffect(() => {
     const saved = window.localStorage.getItem("wisdomloong-annotations-enabled");
     if (saved === "false") {
       setAnnotationsEnabled(false);
@@ -1586,14 +1612,10 @@ export function ReviewComposer({
 
   function selectArticleMonth(index: number) {
     const month = articleMonths[index];
+    if (!month) return;
     setArticleMonthIndex(index);
-    const firstInMonth = availableArticles.find((article) => article.publishedAt?.slice(0, 7) === month);
-    if (firstInMonth && firstInMonth.id !== articleId) selectArticle(firstInMonth.id);
-    else if (firstInMonth) {
-      setExpandedArticleId(firstInMonth.id);
-      articleFocusRequest.current = firstInMonth.id;
-      setArticleFocusRevision((value) => value + 1);
-    }
+    const target = document.querySelector<HTMLElement>(`[data-article-month="${month}"]`);
+    target?.scrollIntoView({ behavior: "auto", block: "start" });
   }
 
   function beginReading() {
@@ -2102,30 +2124,6 @@ export function ReviewComposer({
             <span>找到 {filteredArticles.length} 篇</span>
             {articleSearch && <button onClick={() => setArticleSearch("")} type="button">清空</button>}
           </div>
-          {articleMonths.length > 0 && (
-            <div className="library-time-axis">
-              <div>
-                <span>论文时间轴</span>
-                <strong>{selectedArticleMonth ?? "全部时间"}</strong>
-                {selectedArticleMonth && (
-                  <button onClick={() => setArticleMonthIndex(null)} type="button">查看全部</button>
-                )}
-              </div>
-              <input
-                aria-label="按论文年月筛选"
-                max={Math.max(0, articleMonths.length - 1)}
-                min="0"
-                onChange={(event) => selectArticleMonth(Number(event.target.value))}
-                step="1"
-                type="range"
-                value={articleMonthIndex ?? Math.max(0, articleMonths.length - 1)}
-              />
-              <div>
-                <small>{articleMonths[0]}</small>
-                <small>{articleMonths.at(-1)}</small>
-              </div>
-            </div>
-          )}
           <div className="library-tag-filter">
             {visibleSearchableTags.map((tag) => (
               <button
@@ -2146,11 +2144,13 @@ export function ReviewComposer({
             )}
           </div>
         </div>
+        <div className="article-library-body">
         <div className="article-search-results">
           {filteredArticles.map((article) => (
             <article
               aria-expanded={article.id === expandedArticleId}
               className={article.id === expandedArticleId ? "selected" : ""}
+              data-article-month={article.publishedAt?.slice(0, 7) ?? undefined}
               data-article-library-id={article.id}
               key={article.id}
               onClick={(event) => {
@@ -2265,6 +2265,23 @@ export function ReviewComposer({
             </article>
           ))}
           {filteredArticles.length === 0 && <p>没有匹配文章</p>}
+        </div>
+        {articleMonths.length > 1 && (
+          <aside className="library-time-rail" aria-label="论文时间导航">
+            <strong>{selectedArticleMonth}</strong>
+            <small>{articleMonths[0]}</small>
+            <input
+              aria-label="拖动到对应年月"
+              max={articleMonths.length - 1}
+              min="0"
+              onChange={(event) => selectArticleMonth(Number(event.target.value))}
+              step="1"
+              type="range"
+              value={Math.min(articleMonthIndex, articleMonths.length - 1)}
+            />
+            <small>{articleMonths.at(-1)}</small>
+          </aside>
+        )}
         </div>
       </aside>
 
