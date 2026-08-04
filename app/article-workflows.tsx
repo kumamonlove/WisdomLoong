@@ -1076,6 +1076,7 @@ export function ReviewComposer({
   const [expandedArticleId, setExpandedArticleId] = useState<number | null>(startingArticleId || null);
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
+  const [articleChronology, setArticleChronology] = useState<"latest" | "classic">("latest");
   const [articleMonthIndex, setArticleMonthIndex] = useState(0);
   const [articleFocusRevision, setArticleFocusRevision] = useState(0);
   const [showAllArticleTags, setShowAllArticleTags] = useState(false);
@@ -1175,13 +1176,21 @@ export function ReviewComposer({
         .join(" ")
         .toLocaleLowerCase();
       return terms.every((term) => haystack.includes(term));
+    }).sort((left, right) => {
+      const leftDate = left.publishedAt ?? "";
+      const rightDate = right.publishedAt ?? "";
+      if (!leftDate) return rightDate ? 1 : right.id - left.id;
+      if (!rightDate) return -1;
+      return articleChronology === "latest"
+        ? rightDate.localeCompare(leftDate) || right.id - left.id
+        : leftDate.localeCompare(rightDate) || left.id - right.id;
     });
-  }, [articleSearch, articleTag, availableArticles]);
+  }, [articleChronology, articleSearch, articleTag, availableArticles]);
   const articleMonths = useMemo(() => [...new Set(
     filteredArticles
       .map((article) => article.publishedAt?.slice(0, 7) ?? "")
       .filter(Boolean),
-  )].sort().reverse(), [filteredArticles]);
+  )], [filteredArticles]);
   const selectedArticleMonth = articleMonths[
     Math.min(articleMonthIndex, Math.max(0, articleMonths.length - 1))
   ] ?? null;
@@ -1431,7 +1440,7 @@ export function ReviewComposer({
 
   useEffect(() => {
     setArticleMonthIndex(0);
-  }, [articleSearch, articleTag]);
+  }, [articleChronology, articleSearch, articleTag]);
 
   useEffect(() => {
     if (focusMode || articleMonths.length === 0) return;
@@ -2167,10 +2176,13 @@ export function ReviewComposer({
               tabIndex={0}
             >
               <div className="library-result-meta">
+                <time dateTime={article.publishedAt ?? undefined}>
+                  <i aria-hidden="true" />{article.publishedAt ?? "日期待补"}
+                </time>
                 <span>
                   {article.publisher !== "机构待补充" && article.publisher.toLocaleLowerCase() !== "arxiv"
                     ? article.publisher
-                    : article.publishedAt ?? ""}
+                    : ""}
                 </span>
               </div>
               <h3 className="library-card-title">
@@ -2267,19 +2279,26 @@ export function ReviewComposer({
           {filteredArticles.length === 0 && <p>没有匹配文章</p>}
         </div>
         {articleMonths.length > 1 && (
-          <aside className="library-time-rail" aria-label="论文时间导航">
-            <strong>{selectedArticleMonth}</strong>
-            <small>{articleMonths[0]}</small>
-            <input
-              aria-label="拖动到对应年月"
-              max={articleMonths.length - 1}
-              min="0"
-              onChange={(event) => selectArticleMonth(Number(event.target.value))}
-              step="1"
-              type="range"
-              value={Math.min(articleMonthIndex, articleMonths.length - 1)}
-            />
-            <small>{articleMonths.at(-1)}</small>
+          <aside className={`library-time-rail ${articleChronology}`} aria-label="论文时间导航">
+            <div className="library-time-direction" aria-label="时间排序方式">
+              <button className={articleChronology === "latest" ? "selected" : ""} onClick={() => setArticleChronology("latest")} type="button">追随潮流</button>
+              <button className={articleChronology === "classic" ? "selected" : ""} onClick={() => setArticleChronology("classic")} type="button">回味经典</button>
+            </div>
+            <div className="library-time-orbit">
+              <i aria-hidden="true" />
+              <strong>{selectedArticleMonth}</strong>
+              <small>{articleMonths[0]}</small>
+              <input
+                aria-label="拖动到对应年月"
+                max={articleMonths.length - 1}
+                min="0"
+                onChange={(event) => selectArticleMonth(Number(event.target.value))}
+                step="1"
+                type="range"
+                value={Math.min(articleMonthIndex, articleMonths.length - 1)}
+              />
+              <small>{articleMonths.at(-1)}</small>
+            </div>
           </aside>
         )}
         </div>

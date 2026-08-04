@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { database } from "@/lib/db";
 import { normalizeTags } from "@/lib/knowledge-types";
-import { refreshKnowledgeGraphForArticle } from "@/lib/knowledge-graph";
 
 export async function PATCH(
   request: Request,
@@ -61,8 +60,5 @@ export async function PATCH(
   if (result.rowCount === 0) {
     return NextResponse.json({ error: "没有找到这篇文章" }, { status: 404 });
   }
-  void refreshKnowledgeGraphForArticle(articleId).catch((error) =>
-    console.error("Article metadata graph refresh failed", error),
-  );
   return NextResponse.json(response);
 }

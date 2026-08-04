@@ -2,7 +2,6 @@ import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { database } from "@/lib/db";
-import { refreshKnowledgeGraphForArticle } from "@/lib/knowledge-graph";
 import { translateAcademicText } from "@/lib/academic-translation";
 import { articleCategories, normalizeTags } from "@/lib/knowledge-types";
 import { extractPdfFrontMatter } from "@/lib/pdf-abstract";
@@ -169,9 +168,6 @@ export async function POST(request: Request) {
     temporaryPath = null;
 
     await client.query("COMMIT");
-    void refreshKnowledgeGraphForArticle(articleId).catch((error) =>
-      console.error("Uploaded article graph placement failed", error),
-    );
     return NextResponse.json({
       ok: true,
       articleId,

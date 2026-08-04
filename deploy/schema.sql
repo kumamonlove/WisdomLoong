@@ -99,6 +99,38 @@ CREATE TABLE IF NOT EXISTS knowledge_graph_nodes (
 CREATE INDEX IF NOT EXISTS knowledge_graph_nodes_article_idx
   ON knowledge_graph_nodes(article_id);
 
+CREATE TABLE IF NOT EXISTS knowledge_graph_canvas_nodes (
+  domain TEXT NOT NULL,
+  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  position_x INTEGER NOT NULL DEFAULT 80 CHECK (position_x BETWEEN 0 AND 7500),
+  position_y INTEGER NOT NULL DEFAULT 80 CHECK (position_y BETWEEN 0 AND 7500),
+  note TEXT NOT NULL DEFAULT '',
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (domain, article_id)
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_graph_canvas_edges (
+  id BIGSERIAL PRIMARY KEY,
+  domain TEXT NOT NULL,
+  source_article_id INTEGER NOT NULL,
+  target_article_id INTEGER NOT NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT knowledge_graph_canvas_edges_distinct CHECK (source_article_id <> target_article_id),
+  CONSTRAINT knowledge_graph_canvas_edges_source_fkey
+    FOREIGN KEY (domain, source_article_id)
+    REFERENCES knowledge_graph_canvas_nodes(domain, article_id) ON DELETE CASCADE,
+  CONSTRAINT knowledge_graph_canvas_edges_target_fkey
+    FOREIGN KEY (domain, target_article_id)
+    REFERENCES knowledge_graph_canvas_nodes(domain, article_id) ON DELETE CASCADE,
+  CONSTRAINT knowledge_graph_canvas_edges_unique
+    UNIQUE (domain, source_article_id, target_article_id)
+);
+
+CREATE INDEX IF NOT EXISTS knowledge_graph_canvas_edges_domain_idx
+  ON knowledge_graph_canvas_edges(domain);
+
 CREATE TABLE IF NOT EXISTS reading_list (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,

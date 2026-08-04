@@ -23,14 +23,14 @@ export default async function KnowledgeGraphPage({
     <KnowledgePage
       page="categories"
       title="知识图谱"
-      description="沿时间与思想继承关系，理解各研究领域的技术演进"
+      description="共同整理各领域论文之间的思想继承与发展分支"
       username={user.username}
     >
       {domains.length > 0 ? (
         <KnowledgeGraphExplorer domains={domains} graph={graph} />
       ) : (
         <section className="empty graph-empty">
-          <span>01</span><h3>知识图谱等待第一篇文章</h3><p>添加带领域标签的文章后，AI 会自动建立发展树。</p>
+          <span>01</span><h3>知识图谱等待第一篇文章</h3><p>添加带领域标签的文章后，成员可以共同拖放整理。</p>
         </section>
       )}
     </KnowledgePage>

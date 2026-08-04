@@ -1,166 +1,56 @@
-import { execFile } from "node:child_process";
-import { access } from "node:fs/promises";
-import { promisify } from "node:util";
-import { getAcademicTranslationConfig } from "@/lib/academic-translation";
+import type { PoolClient } from "pg";
 import { database } from "@/lib/db";
-import { pdfCachePath } from "@/lib/pdf-cache";
-
-const execFileAsync = promisify(execFile);
 
 export type KnowledgeGraphDomain = {
   domain: string;
   articleCount: number;
-  analyzedCount: number;
-  narrative: string;
-  status: "pending" | "ready" | "error";
-  updatedAt: string | null;
+  placedCount: number;
 };
 
-export type KnowledgeGraphNode = {
+export type KnowledgeGraphArticle = {
   articleId: number;
   title: string;
   publishedAt: string | null;
   publisher: string;
-  contribution: string;
-  lineageReason: string;
-  parentArticleIds: number[];
-  analysisSource: "title" | "abstract" | "fulltext";
-};
-
-export type KnowledgeGraphData = KnowledgeGraphDomain & {
-  nodes: KnowledgeGraphNode[];
-};
-
-type GraphArticle = {
-  id: number;
-  title: string;
   abstract: string;
-  abstractZh: string;
-  authors: string[];
-  publisher: string;
-  publishedAt: string | null;
-  createdAt: string;
 };
 
-type AiGraph = {
-  narrative?: unknown;
-  nodes?: {
-    articleId?: unknown;
-    contribution?: unknown;
-    lineageReason?: unknown;
-    parentArticleIds?: unknown;
-  }[];
+export type KnowledgeGraphCanvasNode = KnowledgeGraphArticle & {
+  x: number;
+  y: number;
+  note: string;
 };
 
-const activeDomainRefreshes = new Map<string, Promise<void>>();
-const knowledgeGraphAnalysisVersion = 2;
+export type KnowledgeGraphCanvasEdge = {
+  id: number;
+  sourceArticleId: number;
+  targetArticleId: number;
+};
 
-function compactText(value: string, length: number) {
-  return value.replace(/\s+/g, " ").trim().slice(0, length);
+export type KnowledgeGraphData = {
+  domain: string;
+  articleCount: number;
+  placedCount: number;
+  articles: KnowledgeGraphArticle[];
+  nodes: KnowledgeGraphCanvasNode[];
+  edges: KnowledgeGraphCanvasEdge[];
+};
+
+export type KnowledgeGraphMutation =
+  | { action: "place"; domain: string; articleId: number; x: number; y: number }
+  | { action: "move"; domain: string; articleId: number; x: number; y: number }
+  | { action: "remove"; domain: string; articleId: number }
+  | { action: "connect"; domain: string; sourceArticleId: number; targetArticleId: number }
+  | { action: "disconnect"; domain: string; edgeId: number }
+  | { action: "note"; domain: string; articleId: number; note: string };
+
+function normalizeDomain(value: unknown) {
+  return typeof value === "string" ? value.trim().slice(0, 24) : "";
 }
 
-function fallbackContribution(article: GraphArticle) {
-  const evidence = compactText(article.abstractZh || article.abstract, 90);
-  return evidence || `围绕“${compactText(article.title, 68)}”提出该领域的一项研究方案。`;
-}
-
-async function fullTextEvidence(articleId: number) {
-  const path = pdfCachePath(articleId);
-  try {
-    await access(path);
-    const { stdout } = await execFileAsync(
-      "pdftotext",
-      ["-f", "1", "-l", "12", "-raw", "-enc", "UTF-8", path, "-"],
-      { maxBuffer: 2 * 1024 * 1024, timeout: 30_000 },
-    );
-    return compactText(stdout, 8_000);
-  } catch {
-    return "";
-  }
-}
-
-async function articleEvidence(article: GraphArticle) {
-  const abstract = compactText(article.abstractZh || article.abstract, 4_500);
-  if (abstract) return { source: "abstract" as const, text: abstract };
-  const fulltext = await fullTextEvidence(article.id);
-  if (fulltext) return { source: "fulltext" as const, text: fulltext };
-  return { source: "title" as const, text: article.title };
-}
-
-function parseJsonObject(value: string) {
-  const normalized = value.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  const start = normalized.indexOf("{");
-  const end = normalized.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("knowledge graph AI returned invalid JSON");
-  return JSON.parse(normalized.slice(start, end + 1)) as AiGraph;
-}
-
-async function requestGraphAnalysis(domain: string, articles: GraphArticle[], previousNarrative: string) {
-  const { apiKey, baseUrl, model } = getAcademicTranslationConfig();
-  if (!apiKey) throw new Error("knowledge graph AI key is not configured");
-
-  const evidence = await Promise.all(articles.map(async (article) => ({
-    articleId: article.id,
-    title: article.title,
-    date: article.publishedAt || article.createdAt.slice(0, 10),
-    publisher: article.publisher === "机构待补充" || article.publisher.toLocaleLowerCase() === "arxiv"
-      ? ""
-      : article.publisher,
-    ...(await articleEvidence(article)),
-  })));
-  const requestBody = JSON.stringify({
-    model,
-    temperature: 0.1,
-    stream: false,
-    max_tokens: Math.min(10_000, Math.max(1_200, articles.length * 280)),
-    messages: [
-      {
-        role: "system",
-        content: [
-          "你是机器人学研究史与技术谱系编辑。请为指定领域维护一棵严格基于证据的论文发展树。",
-          "父节点必须比子节点更早，且只有存在明确方法、问题定义、训练范式或思想继承时才能连接；没有可靠前驱就作为根节点。",
-          "禁止仅按发表时间把论文串成单链。若多篇工作共同直接继承同一篇代表作，它们必须作为该代表作的并列分支；例如多篇论文都直接继承 pi0.5，就都把 pi0.5 设为父节点。",
-          "每篇贡献用简洁中文写 25–70 字，说明它相对前序工作的新增价值，不能只改写标题。",
-          "lineageReason 用 20–60 字解释继承关系；根节点说明它开启或汇合了什么方向。",
-          "narrative 用 150–500 字维护该领域从早到晚的内部发展叙事，点出主要分支、汇合和仍未解决的问题。",
-          "只返回 JSON：{narrative:string,nodes:[{articleId:number,contribution:string,lineageReason:string,parentArticleIds:number[]}]}。",
-        ].join("\n"),
-      },
-      {
-        role: "user",
-        content: JSON.stringify({ domain, previousNarrative, articles: evidence }),
-      },
-    ],
-  });
-
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: requestBody,
-        signal: AbortSignal.timeout(150_000),
-      });
-      const data = await response.json().catch(() => ({})) as {
-        choices?: { message?: { content?: string } }[];
-        error?: { message?: string };
-      };
-      if (!response.ok) {
-        throw new Error(`knowledge graph AI failed (${response.status}): ${data.error?.message ?? "unknown error"}`);
-      }
-      const content = data.choices?.[0]?.message?.content;
-      if (!content) throw new Error("knowledge graph AI returned empty content");
-      return { graph: parseJsonObject(content), evidence };
-    } catch (error) {
-      lastError = error;
-      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1_500));
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("knowledge graph AI request failed");
+function normalizeCoordinate(value: unknown) {
+  const coordinate = Number(value);
+  return Number.isFinite(coordinate) ? Math.max(0, Math.min(7_500, Math.round(coordinate))) : null;
 }
 
 export async function getKnowledgeGraphDomains() {
@@ -173,176 +63,159 @@ export async function getKnowledgeGraphDomains() {
        ) tag
        WHERE tag <> '全部'
        GROUP BY tag
-     ), analyzed AS (
-       SELECT domain, COUNT(*)::int AS "analyzedCount"
-       FROM knowledge_graph_nodes
+     ), placed AS (
+       SELECT domain, COUNT(*)::int AS "placedCount"
+       FROM knowledge_graph_canvas_nodes
        GROUP BY domain
      )
-     SELECT
-       domain_articles.domain,
-       domain_articles."articleCount",
-       COALESCE(analyzed."analyzedCount", 0)::int AS "analyzedCount",
-       COALESCE(knowledge_graph_domains.narrative, '') AS narrative,
-       CASE
-         WHEN COALESCE(knowledge_graph_domains.analysis_version, 0) < ${knowledgeGraphAnalysisVersion} THEN 'pending'
-         ELSE COALESCE(knowledge_graph_domains.status, 'pending')
-       END AS status,
-       knowledge_graph_domains.updated_at::text AS "updatedAt"
+     SELECT domain_articles.domain, domain_articles."articleCount",
+            COALESCE(placed."placedCount", 0)::int AS "placedCount"
      FROM domain_articles
-     LEFT JOIN knowledge_graph_domains USING (domain)
-     LEFT JOIN analyzed USING (domain)
+     LEFT JOIN placed USING (domain)
      ORDER BY domain_articles."articleCount" DESC, domain_articles.domain`,
   );
   return result.rows;
 }
 
 export async function getKnowledgeGraph(domain: string): Promise<KnowledgeGraphData> {
-  const [domains, nodes] = await Promise.all([
-    getKnowledgeGraphDomains(),
-    database.query<KnowledgeGraphNode>(
-      `SELECT
-         articles.id AS "articleId",
-         articles.title,
-         articles.published_at::text AS "publishedAt",
-         articles.publisher,
-         COALESCE(knowledge_graph_nodes.contribution,
-           NULLIF(LEFT(COALESCE(NULLIF(articles.abstract_zh, ''), articles.abstract), 180), ''),
-           '等待 AI 总结该文章在本领域的贡献') AS contribution,
-         COALESCE(knowledge_graph_nodes.lineage_reason, '') AS "lineageReason",
-         COALESCE(knowledge_graph_nodes.parent_article_ids, '{}') AS "parentArticleIds",
-         COALESCE(knowledge_graph_nodes.analysis_source, 'title') AS "analysisSource"
+  const [articles, nodes, edges] = await Promise.all([
+    database.query<KnowledgeGraphArticle>(
+      `SELECT id AS "articleId", title, published_at::text AS "publishedAt", publisher,
+              LEFT(COALESCE(NULLIF(abstract_zh, ''), abstract), 360) AS abstract
        FROM articles
-       LEFT JOIN knowledge_graph_nodes
-         ON knowledge_graph_nodes.article_id = articles.id
-        AND knowledge_graph_nodes.domain = $1
-       WHERE $1 = ANY(
-         CASE WHEN CARDINALITY(articles.tags) > 0 THEN articles.tags ELSE ARRAY[articles.category] END
-       )
-       ORDER BY articles.published_at ASC NULLS LAST, articles.created_at ASC, articles.id ASC`,
+       WHERE $1 = ANY(CASE WHEN CARDINALITY(tags) > 0 THEN tags ELSE ARRAY[category] END)
+       ORDER BY published_at ASC NULLS LAST, created_at ASC, id ASC`,
+      [domain],
+    ),
+    database.query<KnowledgeGraphCanvasNode>(
+      `SELECT articles.id AS "articleId", articles.title,
+              articles.published_at::text AS "publishedAt", articles.publisher,
+              LEFT(COALESCE(NULLIF(articles.abstract_zh, ''), articles.abstract), 360) AS abstract,
+              canvas.position_x::int AS x, canvas.position_y::int AS y, canvas.note
+       FROM knowledge_graph_canvas_nodes canvas
+       JOIN articles ON articles.id = canvas.article_id
+       WHERE canvas.domain = $1
+       ORDER BY canvas.updated_at ASC`,
+      [domain],
+    ),
+    database.query<KnowledgeGraphCanvasEdge>(
+      `SELECT id, source_article_id AS "sourceArticleId", target_article_id AS "targetArticleId"
+       FROM knowledge_graph_canvas_edges
+       WHERE domain = $1
+       ORDER BY id`,
       [domain],
     ),
   ]);
-  const selected = domains.find((item) => item.domain === domain);
   return {
     domain,
-    articleCount: selected?.articleCount ?? nodes.rows.length,
-    analyzedCount: selected?.analyzedCount ?? 0,
-    narrative: selected?.narrative ?? "",
-    status: selected?.status ?? "pending",
-    updatedAt: selected?.updatedAt ?? null,
+    articleCount: articles.rows.length,
+    placedCount: nodes.rows.length,
+    articles: articles.rows,
     nodes: nodes.rows,
+    edges: edges.rows,
   };
 }
 
-async function rebuildDomain(domain: string) {
-  const articlesResult = await database.query<GraphArticle>(
-    `SELECT id, title, abstract, abstract_zh AS "abstractZh", authors, publisher,
-            published_at::text AS "publishedAt", created_at::text AS "createdAt"
-     FROM articles
-     WHERE $1 = ANY(CASE WHEN CARDINALITY(tags) > 0 THEN tags ELSE ARRAY[category] END)
-     ORDER BY published_at ASC NULLS LAST, created_at ASC, id ASC`,
-    [domain],
+async function articleBelongsToDomain(client: PoolClient, articleId: number, domain: string) {
+  const result = await client.query(
+    `SELECT 1 FROM articles
+     WHERE id = $1
+       AND $2 = ANY(CASE WHEN CARDINALITY(tags) > 0 THEN tags ELSE ARRAY[category] END)`,
+    [articleId, domain],
   );
-  const articles = articlesResult.rows;
-  if (articles.length === 0) return;
+  return Boolean(result.rowCount);
+}
 
-  const previous = await database.query<{ narrative: string }>(
-    "SELECT narrative FROM knowledge_graph_domains WHERE domain = $1",
-    [domain],
-  );
-  await database.query(
-    `INSERT INTO knowledge_graph_domains (domain, status, article_count, analysis_version, last_error)
-     VALUES ($1, 'pending', $2, $3, '')
-     ON CONFLICT (domain) DO UPDATE
-     SET status = 'pending', article_count = EXCLUDED.article_count,
-         analysis_version = EXCLUDED.analysis_version, last_error = '', updated_at = NOW()`,
-    [domain, articles.length, knowledgeGraphAnalysisVersion],
-  );
-
+export async function mutateKnowledgeGraph(raw: KnowledgeGraphMutation, userId: number) {
+  const domain = normalizeDomain(raw.domain);
+  if (!domain || domain === "全部") throw new Error("请选择有效的知识领域");
+  const client = await database.connect();
   try {
-    const { graph, evidence } = await requestGraphAnalysis(domain, articles, previous.rows[0]?.narrative ?? "");
-    const order = new Map(articles.map((article, index) => [article.id, index]));
-    const aiNodes = new Map((graph.nodes ?? []).map((node) => [Number(node.articleId), node]));
-    const client = await database.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query(
-        `UPDATE knowledge_graph_domains
-         SET narrative = $2, status = 'ready', article_count = $3,
-             analysis_version = ${knowledgeGraphAnalysisVersion},
-             last_error = '', updated_at = NOW()
-         WHERE domain = $1`,
-        [domain, compactText(typeof graph.narrative === "string" ? graph.narrative : "", 4_000), articles.length],
-      );
-      for (const [index, article] of articles.entries()) {
-        const node = aiNodes.get(article.id);
-        const parents = Array.isArray(node?.parentArticleIds)
-          ? [...new Set(node.parentArticleIds.map(Number).filter((id) =>
-              Number.isInteger(id) && id !== article.id && (order.get(id) ?? Infinity) < index
-            ))].slice(0, 3)
-          : [];
-        const source = evidence.find((item) => item.articleId === article.id)?.source ?? "title";
+    await client.query("BEGIN");
+    if (raw.action === "place" || raw.action === "move") {
+      const articleId = Number(raw.articleId);
+      const x = normalizeCoordinate(raw.x);
+      const y = normalizeCoordinate(raw.y);
+      if (!Number.isInteger(articleId) || x === null || y === null) throw new Error("节点位置无效");
+      if (!await articleBelongsToDomain(client, articleId, domain)) throw new Error("文章不属于该领域");
+      if (raw.action === "place") {
         await client.query(
-          `INSERT INTO knowledge_graph_nodes (
-             domain, article_id, contribution, lineage_reason, parent_article_ids, analysis_source, updated_at
-           ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+          `INSERT INTO knowledge_graph_canvas_nodes
+             (domain, article_id, position_x, position_y, updated_by, updated_at)
+           VALUES ($1, $2, $3, $4, $5, NOW())
            ON CONFLICT (domain, article_id) DO UPDATE
-           SET contribution = EXCLUDED.contribution,
-               lineage_reason = EXCLUDED.lineage_reason,
-               parent_article_ids = EXCLUDED.parent_article_ids,
-               analysis_source = EXCLUDED.analysis_source,
-               updated_at = NOW()`,
-          [
-            domain,
-            article.id,
-            compactText(typeof node?.contribution === "string" ? node.contribution : fallbackContribution(article), 500),
-            compactText(typeof node?.lineageReason === "string" ? node.lineageReason : "", 500),
-            parents,
-            source,
-          ],
+           SET position_x = EXCLUDED.position_x, position_y = EXCLUDED.position_y,
+               updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+          [domain, articleId, x, y, userId],
         );
+      } else {
+        const result = await client.query(
+          `UPDATE knowledge_graph_canvas_nodes
+           SET position_x = $3, position_y = $4, updated_by = $5, updated_at = NOW()
+           WHERE domain = $1 AND article_id = $2`,
+          [domain, articleId, x, y, userId],
+        );
+        if (!result.rowCount) throw new Error("节点尚未放入画板");
       }
+    } else if (raw.action === "remove") {
       await client.query(
-        `DELETE FROM knowledge_graph_nodes
-         WHERE domain = $1 AND NOT (article_id = ANY($2::integer[]))`,
-        [domain, articles.map((article) => article.id)],
+        "DELETE FROM knowledge_graph_canvas_nodes WHERE domain = $1 AND article_id = $2",
+        [domain, Number(raw.articleId)],
       );
-      await client.query("COMMIT");
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
+    } else if (raw.action === "note") {
+      const note = typeof raw.note === "string" ? raw.note.trim().slice(0, 500) : "";
+      const result = await client.query(
+        `UPDATE knowledge_graph_canvas_nodes
+         SET note = $3, updated_by = $4, updated_at = NOW()
+         WHERE domain = $1 AND article_id = $2`,
+        [domain, Number(raw.articleId), note, userId],
+      );
+      if (!result.rowCount) throw new Error("节点尚未放入画板");
+    } else if (raw.action === "connect") {
+      const source = Number(raw.sourceArticleId);
+      const target = Number(raw.targetArticleId);
+      if (!Number.isInteger(source) || !Number.isInteger(target) || source === target) {
+        throw new Error("请选择两个不同的节点");
+      }
+      const nodes = await client.query<{ article_id: number }>(
+        `SELECT article_id FROM knowledge_graph_canvas_nodes
+         WHERE domain = $1 AND article_id = ANY($2::integer[])`,
+        [domain, [source, target]],
+      );
+      if (nodes.rowCount !== 2) throw new Error("请先把两篇文章都放入画板");
+      const cycle = await client.query(
+        `WITH RECURSIVE descendants(article_id) AS (
+           SELECT $3::integer
+           UNION
+           SELECT edges.target_article_id
+           FROM knowledge_graph_canvas_edges edges
+           JOIN descendants ON descendants.article_id = edges.source_article_id
+           WHERE edges.domain = $1
+         )
+         SELECT 1 FROM descendants WHERE article_id = $2 LIMIT 1`,
+        [domain, source, target],
+      );
+      if (cycle.rowCount) throw new Error("这条连线会形成循环，无法保存");
+      await client.query(
+        `INSERT INTO knowledge_graph_canvas_edges
+           (domain, source_article_id, target_article_id, created_by)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (domain, source_article_id, target_article_id) DO NOTHING`,
+        [domain, source, target, userId],
+      );
+    } else if (raw.action === "disconnect") {
+      await client.query(
+        "DELETE FROM knowledge_graph_canvas_edges WHERE id = $1 AND domain = $2",
+        [Number(raw.edgeId), domain],
+      );
+    } else {
+      throw new Error("不支持的画板操作");
     }
+    await client.query("COMMIT");
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await database.query(
-      `UPDATE knowledge_graph_domains
-       SET status = 'error', last_error = $2, updated_at = NOW()
-       WHERE domain = $1`,
-      [domain, message.slice(0, 1_000)],
-    );
+    await client.query("ROLLBACK");
     throw error;
+  } finally {
+    client.release();
   }
-}
-
-export function refreshKnowledgeGraphDomain(domain: string) {
-  const normalized = domain.trim().slice(0, 24);
-  if (!normalized || normalized === "全部") return Promise.resolve();
-  const active = activeDomainRefreshes.get(normalized);
-  if (active) return active;
-  const refresh = rebuildDomain(normalized).finally(() => activeDomainRefreshes.delete(normalized));
-  activeDomainRefreshes.set(normalized, refresh);
-  return refresh;
-}
-
-export async function refreshKnowledgeGraphForArticle(articleId: number) {
-  const result = await database.query<{ tags: string[]; category: string }>(
-    "SELECT tags, category FROM articles WHERE id = $1",
-    [articleId],
-  );
-  const article = result.rows[0];
-  if (!article) return;
-  const domains = article.tags.length ? article.tags : [article.category];
-  for (const domain of domains) await refreshKnowledgeGraphDomain(domain);
 }
