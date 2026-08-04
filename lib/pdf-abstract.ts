@@ -1,13 +1,9 @@
-import type { TextItem, TextMarkedContent } from "pdfjs-dist/types/src/display/api";
+import { spawn } from "node:child_process";
 
-const abstractHeading = /(?:^|\s)(?:abstract|summary)\s*(?:[—–:\-]\s*)?/i;
-// Small-caps fonts are often exposed by PDF.js as "I NTRODUCTION", so allow
+const abstractHeading = /(?:^|\s)(?:abstract|a\s+b\s+s\s+t\s+r\s+a\s+c\s+t|summary|s\s+u\s+m\s+m\s+a\s+r\s+y)\s*(?:[—–:\-]\s*)?/i;
+// Small-caps fonts are often exposed by PDF text extractors as "I NTRODUCTION", so allow
 // whitespace between heading letters while keeping the section boundary strict.
 const followingHeading = /\s+(?:(?:(?:i|1)\s*[.\-:]?\s*)?i\s*n\s*t\s*r\s*o\s*d\s*u\s*c\s*t\s*i\s*o\s*n|i\s*n\s*d\s*e\s*x\s+t\s*e\s*r\s*m\s*s?|k\s*e\s*y\s*w\s*o\s*r\s*d\s*s?|c\s*c\s*s\s+c\s*o\s*n\s*c\s*e\s*p\s*t\s*s?)\b/i;
-
-function isTextItem(item: TextItem | TextMarkedContent): item is TextItem {
-  return "str" in item;
-}
 
 function normalizeExtractedText(text: string) {
   return text
@@ -65,12 +61,6 @@ export function findPublishedAtInText(text: string) {
   return "";
 }
 
-function findPublishedAtInPdfMetadata(value: unknown) {
-  if (typeof value !== "string") return "";
-  const match = /^D:(19\d{2}|20\d{2})(\d{2})(\d{2})/.exec(value);
-  return match ? validIsoDate(Number(match[1]), Number(match[2]), Number(match[3])) : "";
-}
-
 export function findAbstractInText(text: string) {
   const searchable = text.slice(0, 30_000);
   const start = abstractHeading.exec(searchable);
@@ -86,42 +76,58 @@ export function findAbstractInText(text: string) {
 }
 
 export async function extractPdfFrontMatter(buffer: Buffer) {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask = pdfjs.getDocument({
-    data: new Uint8Array(buffer),
-    useWorkerFetch: false,
-    isEvalSupported: false,
+  const extractText = (layout: "-raw" | "-layout") => new Promise<string>((resolve, reject) => {
+    const process = spawn("pdftotext", ["-f", "1", "-l", "3", layout, "-enc", "UTF-8", "-", "-"], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const output: Buffer[] = [];
+    const errors: Buffer[] = [];
+    let outputBytes = 0;
+    const timer = setTimeout(() => {
+      process.kill("SIGKILL");
+      reject(new Error("PDF text extraction timed out"));
+    }, 30_000);
+
+    process.stdout.on("data", (chunk: Buffer) => {
+      outputBytes += chunk.byteLength;
+      if (outputBytes > 2 * 1024 * 1024) {
+        process.kill("SIGKILL");
+        return;
+      }
+      output.push(chunk);
+    });
+    process.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
+    process.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    process.on("close", (code) => {
+      clearTimeout(timer);
+      if (outputBytes > 2 * 1024 * 1024) {
+        reject(new Error("PDF text extraction output is too large"));
+      } else if (code === 0) {
+        resolve(Buffer.concat(output).toString("utf8"));
+      } else {
+        reject(new Error(Buffer.concat(errors).toString("utf8").trim() || `pdftotext exited with code ${code}`));
+      }
+    });
+    process.stdin.on("error", () => undefined);
+    process.stdin.end(buffer);
   });
 
-  try {
-    const document = await loadingTask.promise;
-    const pages: string[] = [];
-    const pageLimit = Math.min(3, document.numPages);
-
-    for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
-      const page = await document.getPage(pageNumber);
-      const content = await page.getTextContent();
-      pages.push(
-        content.items
-          .filter(isTextItem)
-          .map((item) => `${item.str}${item.hasEOL ? "\n" : " "}`)
-          .join(""),
-      );
-      page.cleanup();
-    }
-
-    const text = pages.join("\n");
-    const metadata = await document.getMetadata().catch(() => null);
-    const info = metadata?.info as unknown as Record<string, unknown> | undefined;
-    const result = {
-      abstract: findAbstractInText(text),
-      publishedAt: findPublishedAtInText(pages[0] ?? "") || findPublishedAtInPdfMetadata(info?.CreationDate),
-    };
-    await document.destroy();
-    return result;
-  } finally {
-    await loadingTask.destroy().catch(() => undefined);
+  const rawText = await extractText("-raw");
+  let abstract = findAbstractInText(rawText);
+  let textForDate = rawText;
+  if (!abstract) {
+    const layoutText = await extractText("-layout");
+    abstract = findAbstractInText(layoutText);
+    textForDate = layoutText || rawText;
   }
+
+  return {
+    abstract,
+    publishedAt: findPublishedAtInText(textForDate.split("\f", 1)[0] ?? ""),
+  };
 }
 
 export async function extractPdfAbstract(buffer: Buffer) {

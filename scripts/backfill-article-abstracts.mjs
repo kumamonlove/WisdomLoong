@@ -7,7 +7,7 @@ const execFileAsync = promisify(execFile);
 const cacheDirectory = process.env.PDF_CACHE_DIR || "/srv/wisdomloong/pdf-cache";
 const systemPrompt =
   "Translate academic papers into precise, fluent Simplified Chinese. Preserve equations, symbols, variables, citations, model and dataset names, and standard English abbreviations. Keep technical terminology consistent. Return only the translation.";
-const abstractHeading = /(?:^|\s)(?:abstract|summary)\s*(?:[—–:\-]\s*)?/i;
+const abstractHeading = /(?:^|\s)(?:abstract|a\s+b\s+s\s+t\s+r\s+a\s+c\s+t|summary|s\s+u\s+m\s+m\s+a\s+r\s+y)\s*(?:[—–:\-]\s*)?/i;
 const followingHeading = /\s+(?:(?:(?:i|1)\s*[.\-:]?\s*)?i\s*n\s*t\s*r\s*o\s*d\s*u\s*c\s*t\s*i\s*o\s*n|i\s*n\s*d\s*e\s*x\s+t\s*e\s*r\s*m\s*s?|k\s*e\s*y\s*w\s*o\s*r\s*d\s*s?|c\s*c\s*s\s+c\s*o\s*n\s*c\s*e\s*p\s*t\s*s?)\b/i;
 
 function normalizeExtractedText(text) {
@@ -35,12 +35,16 @@ export function findAbstractInText(text) {
 }
 
 async function extractAbstract(pdfPath) {
-  const { stdout } = await execFileAsync(
-    "pdftotext",
-    ["-f", "1", "-l", "3", "-raw", "-enc", "UTF-8", pdfPath, "-"],
-    { maxBuffer: 2 * 1024 * 1024, timeout: 30_000 },
-  );
-  return findAbstractInText(stdout);
+  for (const layout of ["-raw", "-layout"]) {
+    const { stdout } = await execFileAsync(
+      "pdftotext",
+      ["-f", "1", "-l", "3", layout, "-enc", "UTF-8", pdfPath, "-"],
+      { maxBuffer: 2 * 1024 * 1024, timeout: 30_000 },
+    );
+    const abstract = findAbstractInText(stdout);
+    if (abstract) return abstract;
+  }
+  return "";
 }
 
 async function translate(text) {

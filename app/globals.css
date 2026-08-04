@@ -1076,9 +1076,12 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .mark-read-button {
+  max-width: 100%;
+  min-height: 34px;
   padding: 9px 13px;
   color: var(--white);
   border: 1px solid var(--accent);
@@ -1087,6 +1090,8 @@ select {
   cursor: pointer;
   font-size: 11px;
   font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
   box-shadow: 0 5px 14px rgba(214, 95, 64, 0.18);
   transition: transform 160ms ease, background 160ms ease;
 }
@@ -1752,10 +1757,22 @@ select {
   top: 90px;
   max-height: calc(100vh - 108px);
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .article-library {
-  padding: 14px;
+  padding: 0;
+}
+
+.article-library-banner {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(248, 246, 239, 0.98);
+  box-shadow: 0 8px 18px rgba(24, 24, 22, 0.04);
+  backdrop-filter: blur(12px);
 }
 
 .library-heading,
@@ -1769,7 +1786,7 @@ select {
   letter-spacing: 0.08em;
 }
 
-.article-library > input {
+.article-library-banner > input {
   width: 100%;
   height: 38px;
   padding: 0 10px;
@@ -1781,7 +1798,7 @@ select {
 }
 
 .article-search-results {
-  margin-top: 10px;
+  margin: 10px 14px 14px;
   display: grid;
   gap: 5px;
 }
@@ -1816,6 +1833,8 @@ select {
 }
 
 .library-read-filter button {
+  min-width: 0;
+  min-height: 30px;
   padding: 6px 4px;
   color: var(--muted);
   border: 0;
@@ -1832,15 +1851,21 @@ select {
 }
 
 .library-tag-filter {
-  margin: 9px -2px 0;
-  padding: 2px;
+  max-height: 82px;
+  margin-top: 9px;
+  padding: 2px 2px 5px;
   display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
   gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: rgba(24, 24, 22, 0.32) transparent;
+  scrollbar-width: thin;
 }
 
 .library-tag-filter button {
+  min-height: 27px;
   padding: 5px 7px;
   flex: 0 0 auto;
   color: var(--muted);
@@ -1997,6 +2022,11 @@ select {
   border-bottom: 1px solid var(--line);
 }
 
+.reader-titlebar > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .reader-titlebar span {
   color: var(--accent);
   font-size: 10px;
@@ -2007,6 +2037,7 @@ select {
   margin: 5px 0;
   font-size: 16px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .reader-titlebar p {
@@ -2044,6 +2075,7 @@ select {
 }
 
 .reader-title-actions {
+  min-width: 126px;
   flex: 0 0 auto;
   display: flex;
   align-items: flex-end;
@@ -2052,8 +2084,19 @@ select {
 }
 
 .reader-title-actions .mark-read-button {
+  width: auto;
+  min-width: 112px;
   padding: 7px 10px;
   font-size: 9px;
+}
+
+.abstract-repairing {
+  padding: 12px 14px;
+  color: var(--muted);
+  border: 1px dashed rgba(214, 95, 64, 0.34);
+  border-radius: 8px;
+  background: rgba(214, 95, 64, 0.05);
+  font-size: 12px;
 }
 
 .reader-metadata-summary {
@@ -4111,6 +4154,26 @@ select {
   font-weight: 700;
 }
 
+.focus-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.focus-status-actions .mark-read-button {
+  min-height: 0;
+  color: var(--white);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: transparent;
+  box-shadow: none;
+}
+
+.focus-status-actions .mark-read-button.done {
+  color: rgba(248, 246, 239, 0.72);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .profile-stats {
   margin-top: 44px;
   display: grid;
@@ -4852,6 +4915,28 @@ select {
 
   .reader-workspace {
     grid-template-columns: 1fr;
+  }
+
+  .article-library-banner {
+    top: 76px;
+  }
+
+  .reader-titlebar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reader-title-actions {
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-end;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .reader-title-actions .mark-read-button {
+    min-width: 0;
   }
 
   .article-library,

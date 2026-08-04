@@ -1178,6 +1178,13 @@ export function ReviewComposer({
   }, [articleReadFilter, articleSearch, articleTag, availableArticles]);
   const unreadArticleCount = availableArticles.filter((article) => !article.isRead).length;
   const readArticleCount = availableArticles.length - unreadArticleCount;
+  const incompleteAbstractIds = useMemo(
+    () => availableArticles
+      .filter((article) => !article.abstract || !article.abstractZh)
+      .map((article) => article.id)
+      .join(","),
+    [availableArticles],
+  );
   const currentPageAnnotations = useMemo(
     () => viewingPartnerNote ? [] : communityAnnotations.filter((item) => item.page === page),
     [communityAnnotations, page, viewingPartnerNote],
@@ -1337,6 +1344,35 @@ export function ReviewComposer({
       current.find((item) => item.id === article.id) ?? article
     ));
   }, [articles]);
+
+  useEffect(() => {
+    if (!incompleteAbstractIds) return;
+    let cancelled = false;
+
+    const refreshAbstracts = () => {
+      fetch(`/api/articles/abstracts?ids=${incompleteAbstractIds}`, { cache: "no-store" })
+        .then(responseJson)
+        .then((data) => {
+          if (cancelled) return;
+          const updates = new Map(
+            ((data.articles as { id: number; abstract: string; abstractZh: string }[]) ?? [])
+              .map((article) => [article.id, article]),
+          );
+          setAvailableArticles((current) => current.map((article) => {
+            const update = updates.get(article.id);
+            return update ? { ...article, abstract: update.abstract, abstractZh: update.abstractZh } : article;
+          }));
+        })
+        .catch(() => undefined);
+    };
+
+    refreshAbstracts();
+    const timer = window.setInterval(refreshAbstracts, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [incompleteAbstractIds]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("wisdomloong-annotations-enabled");
@@ -1974,53 +2010,67 @@ export function ReviewComposer({
                 ? "论文已打开 · 后续页面按需加载"
                 : "点击右侧结束阅读"}
           </small>
-          <button onClick={() => setFocusMode(false)} type="button">结束阅读</button>
+          <div className="focus-status-actions">
+            {selectedArticle && !viewingPartnerNote && (
+              <MarkReadButton
+                articleId={selectedArticle.id}
+                initialRead={selectedArticle.isRead}
+                key={`focus-${selectedArticle.id}-${selectedArticle.isRead}`}
+                onChange={(isRead) => setAvailableArticles((current) => current.map((article) =>
+                  article.id === selectedArticle.id ? { ...article, isRead } : article
+                ))}
+              />
+            )}
+            <button onClick={() => setFocusMode(false)} type="button">结束阅读</button>
+          </div>
         </div>
       )}
       <aside className="article-library">
-        <div className="library-heading">
-          <span>文章库</span>
-          <strong>{unreadArticleCount} 未读 · {readArticleCount} 已读</strong>
-        </div>
-        <input
-          aria-label="搜索已有文章"
-          onChange={(event) => setArticleSearch(event.target.value)}
-          placeholder="搜索标题、作者、机构或标签…"
-          type="search"
-          value={articleSearch}
-        />
-        <div className="library-search-meta">
-          <span>找到 {filteredArticles.length} 篇</span>
-          {articleSearch && <button onClick={() => setArticleSearch("")} type="button">清空</button>}
-        </div>
-        <div className="library-read-filter" aria-label="按阅读状态筛选">
-          <button
-            className={articleReadFilter === "all" ? "selected" : ""}
-            onClick={() => setArticleReadFilter("all")}
-            type="button"
-          >全部 {availableArticles.length}</button>
-          <button
-            className={articleReadFilter === "unread" ? "selected" : ""}
-            onClick={() => setArticleReadFilter("unread")}
-            type="button"
-          >未读 {unreadArticleCount}</button>
-          <button
-            className={articleReadFilter === "read" ? "selected" : ""}
-            onClick={() => setArticleReadFilter("read")}
-            type="button"
-          >已读 {readArticleCount}</button>
-        </div>
-        <div className="library-tag-filter">
-          {searchableTags.map((tag) => (
+        <div className="article-library-banner">
+          <div className="library-heading">
+            <span>文章库</span>
+            <strong>{unreadArticleCount} 未读 · {readArticleCount} 已读</strong>
+          </div>
+          <input
+            aria-label="搜索已有文章"
+            onChange={(event) => setArticleSearch(event.target.value)}
+            placeholder="搜索标题、作者、机构或标签…"
+            type="search"
+            value={articleSearch}
+          />
+          <div className="library-search-meta">
+            <span>找到 {filteredArticles.length} 篇</span>
+            {articleSearch && <button onClick={() => setArticleSearch("")} type="button">清空</button>}
+          </div>
+          <div className="library-read-filter" aria-label="按阅读状态筛选">
             <button
-              className={articleTag === tag ? "selected" : ""}
-              key={tag}
-              onClick={() => setArticleTag(tag)}
+              className={articleReadFilter === "all" ? "selected" : ""}
+              onClick={() => setArticleReadFilter("all")}
               type="button"
-            >
-              {tag}
-            </button>
-          ))}
+            >全部 {availableArticles.length}</button>
+            <button
+              className={articleReadFilter === "unread" ? "selected" : ""}
+              onClick={() => setArticleReadFilter("unread")}
+              type="button"
+            >未读 {unreadArticleCount}</button>
+            <button
+              className={articleReadFilter === "read" ? "selected" : ""}
+              onClick={() => setArticleReadFilter("read")}
+              type="button"
+            >已读 {readArticleCount}</button>
+          </div>
+          <div className="library-tag-filter">
+            {searchableTags.map((tag) => (
+              <button
+                className={articleTag === tag ? "selected" : ""}
+                key={tag}
+                onClick={() => setArticleTag(tag)}
+                type="button"
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="article-search-results">
           {filteredArticles.map((article) => (
@@ -2034,7 +2084,7 @@ export function ReviewComposer({
                 <span>
                   {article.publisher !== "机构待补充" && article.publisher.toLocaleLowerCase() !== "arxiv"
                     ? article.publisher
-                    : "团队文章"}
+                    : ""}
                 </span>
                 <em className={article.isRead ? "is-read" : "is-unread"}>
                   {article.isRead ? "已读" : "未读"}
@@ -2080,7 +2130,7 @@ export function ReviewComposer({
             </header>
             <div className="reader-metadata-summary" aria-label="文章信息">
               <div><strong>标签</strong><span>{selectedArticle.tags.join(" · ")}</span></div>
-              <div><strong>发布机构</strong><span>{selectedArticle.publisher === "机构待补充" || selectedArticle.publisher.toLocaleLowerCase() === "arxiv" ? "暂无" : selectedArticle.publisher}</span></div>
+              <div><strong>发布机构</strong><span>{selectedArticle.publisher === "机构待补充" || selectedArticle.publisher.toLocaleLowerCase() === "arxiv" ? "" : selectedArticle.publisher}</span></div>
               <div><strong>发布日期</strong><span>{selectedArticle.publishedAt ?? "暂无"}</span></div>
             </div>
             <ArticleMetadataEditor
@@ -2303,7 +2353,9 @@ export function ReviewComposer({
               <div className="article-reading-preview">
                 <section>
                   <span>摘要</span>
-                  <p>{selectedArticle.abstract || "这篇文章暂时没有摘要。"}</p>
+                  <p className={!selectedArticle.abstract ? "abstract-repairing" : undefined}>
+                    {selectedArticle.abstract || "摘要正在识别补齐，完成后会自动显示。"}
+                  </p>
                   {selectedArticle.abstractZh && (
                     <div className="translated-abstract">
                       <strong>中文摘要</strong>
