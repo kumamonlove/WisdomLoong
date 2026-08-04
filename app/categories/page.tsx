@@ -23,6 +23,7 @@ export default async function KnowledgeGraphPage({
     <KnowledgePage
       page="categories"
       title="知识图谱"
+      titleSuffix="（即将上线）"
       description="共同整理各领域论文之间的思想继承与发展分支"
       username={user.username}
     >

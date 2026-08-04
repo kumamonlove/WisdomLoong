@@ -188,6 +188,7 @@ export function KnowledgePage({
   username,
   eyebrow = "WISDOMLOONG KNOWLEDGE LIBRARY",
   title,
+  titleSuffix,
   description,
   action,
   children,
@@ -196,6 +197,7 @@ export function KnowledgePage({
   username: string;
   eyebrow?: string;
   title: string;
+  titleSuffix?: string;
   description: string;
   action?: React.ReactNode;
   children: React.ReactNode;
@@ -207,7 +209,7 @@ export function KnowledgePage({
         <section className="heading">
           <div>
             <p>{eyebrow}</p>
-            <h1>{title}</h1>
+            <h1>{title}{titleSuffix && <small className="heading-title-suffix">{titleSuffix}</small>}</h1>
             <span>{description}</span>
           </div>
           {action}

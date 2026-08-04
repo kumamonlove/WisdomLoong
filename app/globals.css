@@ -369,6 +369,17 @@ main {
   letter-spacing: -0.065em;
 }
 
+.heading-title-suffix {
+  margin-left: 10px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: clamp(12px, 1.8vw, 17px);
+  font-weight: 650;
+  letter-spacing: 0;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .heading > div > span {
   color: var(--muted);
 }
