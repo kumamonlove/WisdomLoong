@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import {
+  Fragment,
   useMemo,
   useRef,
   useState,
@@ -1077,7 +1078,6 @@ export function ReviewComposer({
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
   const [articleChronology, setArticleChronology] = useState<"latest" | "classic">("latest");
-  const [articleMonthIndex, setArticleMonthIndex] = useState(0);
   const [articleFocusRevision, setArticleFocusRevision] = useState(0);
   const [showAllArticleTags, setShowAllArticleTags] = useState(false);
   const [rating, setRating] = useState<number | null>(startingReview?.rating ?? null);
@@ -1186,14 +1186,6 @@ export function ReviewComposer({
         : leftDate.localeCompare(rightDate) || left.id - right.id;
     });
   }, [articleChronology, articleSearch, articleTag, availableArticles]);
-  const articleMonths = useMemo(() => [...new Set(
-    filteredArticles
-      .map((article) => article.publishedAt?.slice(0, 7) ?? "")
-      .filter(Boolean),
-  )], [filteredArticles]);
-  const selectedArticleMonth = articleMonths[
-    Math.min(articleMonthIndex, Math.max(0, articleMonths.length - 1))
-  ] ?? null;
   const visibleSearchableTags = showAllArticleTags
     ? searchableTags
     : [
@@ -1439,33 +1431,6 @@ export function ReviewComposer({
   }, [articleFocusRevision, articleId, expandedArticleId, focusMode]);
 
   useEffect(() => {
-    setArticleMonthIndex(0);
-  }, [articleChronology, articleSearch, articleTag]);
-
-  useEffect(() => {
-    if (focusMode || articleMonths.length === 0) return;
-    let frame = 0;
-    const updateVisibleMonth = () => {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => {
-        const cards = [...document.querySelectorAll<HTMLElement>("[data-article-month]")];
-        const visible = cards.find((card) => card.getBoundingClientRect().bottom > 150) ?? cards.at(-1);
-        const month = visible?.dataset.articleMonth;
-        const index = month ? articleMonths.indexOf(month) : -1;
-        if (index >= 0) setArticleMonthIndex(index);
-      });
-    };
-    updateVisibleMonth();
-    window.addEventListener("scroll", updateVisibleMonth, { passive: true });
-    window.addEventListener("resize", updateVisibleMonth, { passive: true });
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", updateVisibleMonth);
-      window.removeEventListener("resize", updateVisibleMonth);
-    };
-  }, [articleMonths, focusMode]);
-
-  useEffect(() => {
     const saved = window.localStorage.getItem("wisdomloong-annotations-enabled");
     if (saved === "false") {
       setAnnotationsEnabled(false);
@@ -1617,14 +1582,6 @@ export function ReviewComposer({
       ? { status: "ready", progress: 100 }
       : { status: "loading", progress: 1 });
     setFocusMode(false);
-  }
-
-  function selectArticleMonth(index: number) {
-    const month = articleMonths[index];
-    if (!month) return;
-    setArticleMonthIndex(index);
-    const target = document.querySelector<HTMLElement>(`[data-article-month="${month}"]`);
-    target?.scrollIntoView({ behavior: "auto", block: "start" });
   }
 
   function beginReading() {
@@ -2133,6 +2090,14 @@ export function ReviewComposer({
             <span>找到 {filteredArticles.length} 篇</span>
             {articleSearch && <button onClick={() => setArticleSearch("")} type="button">清空</button>}
           </div>
+          <div className="library-chronology-switch" aria-label="文章时间排序方式">
+            <button className={articleChronology === "latest" ? "selected" : ""} onClick={() => setArticleChronology("latest")} type="button">
+              <span>追随潮流</span><small>最新优先</small>
+            </button>
+            <button className={articleChronology === "classic" ? "selected" : ""} onClick={() => setArticleChronology("classic")} type="button">
+              <span>回味经典</span><small>最早优先</small>
+            </button>
+          </div>
           <div className="library-tag-filter">
             {visibleSearchableTags.map((tag) => (
               <button
@@ -2153,15 +2118,22 @@ export function ReviewComposer({
             )}
           </div>
         </div>
-        <div className="article-library-body">
         <div className="article-search-results">
-          {filteredArticles.map((article) => (
+          {filteredArticles.map((article, index) => {
+            const month = article.publishedAt?.slice(0, 7) ?? "日期待补";
+            const previousMonth = filteredArticles[index - 1]?.publishedAt?.slice(0, 7) ?? (index > 0 ? "日期待补" : "");
+            return (
+            <Fragment key={article.id}>
+              {month !== previousMonth && (
+                <div className="library-month-divider">
+                  <time>{month === "日期待补" ? month : `${month.slice(0, 4)} 年 ${month.slice(5)} 月`}</time>
+                  <span />
+                </div>
+              )}
             <article
               aria-expanded={article.id === expandedArticleId}
               className={article.id === expandedArticleId ? "selected" : ""}
-              data-article-month={article.publishedAt?.slice(0, 7) ?? undefined}
               data-article-library-id={article.id}
-              key={article.id}
               onClick={(event) => {
                 if ((event.target as HTMLElement).closest("button, a, input, textarea, select, details, summary, form")) return;
                 if (article.id === expandedArticleId) setExpandedArticleId(null);
@@ -2275,32 +2247,10 @@ export function ReviewComposer({
                 </div>
               )}
             </article>
-          ))}
+            </Fragment>
+            );
+          })}
           {filteredArticles.length === 0 && <p>没有匹配文章</p>}
-        </div>
-        {articleMonths.length > 1 && (
-          <aside className={`library-time-rail ${articleChronology}`} aria-label="论文时间导航">
-            <div className="library-time-direction" aria-label="时间排序方式">
-              <button className={articleChronology === "latest" ? "selected" : ""} onClick={() => setArticleChronology("latest")} type="button">追随潮流</button>
-              <button className={articleChronology === "classic" ? "selected" : ""} onClick={() => setArticleChronology("classic")} type="button">回味经典</button>
-            </div>
-            <div className="library-time-orbit">
-              <i aria-hidden="true" />
-              <strong>{selectedArticleMonth}</strong>
-              <small>{articleMonths[0]}</small>
-              <input
-                aria-label="拖动到对应年月"
-                max={articleMonths.length - 1}
-                min="0"
-                onChange={(event) => selectArticleMonth(Number(event.target.value))}
-                step="1"
-                type="range"
-                value={Math.min(articleMonthIndex, articleMonths.length - 1)}
-              />
-              <small>{articleMonths.at(-1)}</small>
-            </div>
-          </aside>
-        )}
         </div>
       </aside>
 
