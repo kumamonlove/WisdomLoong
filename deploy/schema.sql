@@ -108,6 +108,16 @@ ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS position_y REAL NOT NULL D
 CREATE INDEX IF NOT EXISTS reading_progress_user_updated_idx
   ON reading_progress(user_id, updated_at DESC);
 
+CREATE TABLE IF NOT EXISTS article_recent_views (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, article_id)
+);
+
+CREATE INDEX IF NOT EXISTS article_recent_views_user_viewed_idx
+  ON article_recent_views(user_id, viewed_at DESC);
+
 CREATE TABLE IF NOT EXISTS reading_annotation_drafts (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,

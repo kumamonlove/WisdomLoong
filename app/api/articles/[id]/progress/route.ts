@@ -34,3 +34,21 @@ export async function PATCH(
   }
   return NextResponse.json({ ok: true, page, positionY });
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  const articleId = Number((await params).id);
+  if (!Number.isInteger(articleId)) {
+    return NextResponse.json({ error: "文章不存在" }, { status: 404 });
+  }
+
+  await database.query(
+    "DELETE FROM reading_progress WHERE user_id = $1 AND article_id = $2",
+    [user.id, articleId],
+  );
+  return NextResponse.json({ ok: true });
+}

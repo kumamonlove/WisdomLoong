@@ -55,7 +55,7 @@ export function SiteHeader({
         <div className="header-actions">
           <nav aria-label="主要导航">
             <a className={page === "recommended" ? "active" : ""} href="/">
-              推荐阅读
+              阅读动态
             </a>
             <a
               className={page === "categories" ? "active" : ""}

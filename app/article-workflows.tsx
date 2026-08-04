@@ -1354,6 +1354,27 @@ export function ReviewComposer({
     }
   }
 
+  async function deleteBookmark() {
+    if (!bookmark || !articleId || bookmarkSaving) return;
+    if (!window.confirm("确定删除这个阅读书签吗？")) return;
+    const previousBookmark = bookmark;
+    setBookmark(null);
+    setBookmarkSaving(true);
+    try {
+      const response = await fetch(`/api/articles/${articleId}/progress`, { method: "DELETE" });
+      await responseJson(response);
+      setAvailableArticles((current) => current.map((article) => article.id === articleId
+        ? { ...article, lastReadPage: null, lastReadPositionY: null }
+        : article));
+      setMessage("书签已删除。");
+    } catch (error) {
+      setBookmark(previousBookmark);
+      setMessage(error instanceof Error ? error.message : "书签删除失败");
+    } finally {
+      setBookmarkSaving(false);
+    }
+  }
+
   useEffect(() => {
     setAvailableArticles((current) => articles.map((article) =>
       current.find((item) => item.id === article.id) ?? article
@@ -1396,6 +1417,14 @@ export function ReviewComposer({
       window.clearInterval(timer);
     };
   }, [incompleteAbstractIds]);
+
+  useEffect(() => {
+    if (!articleId || !focusMode) return;
+    void fetch(`/api/articles/${articleId}/recent`, {
+      method: "POST",
+      keepalive: true,
+    }).catch(() => undefined);
+  }, [articleId, focusMode]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("wisdomloong-annotations-enabled");
@@ -2233,12 +2262,21 @@ export function ReviewComposer({
                         type="button"
                       >{bookmarkSaving ? "保存中…" : placingBookmark ? "取消放置" : "＋ 加书签"}</button>
                       {bookmark && (
-                        <button
-                          className="bookmark-jump-button"
-                          onClick={() => navigateToPosition(bookmark)}
-                          title={`跳到第 ${bookmark.page} 页页内 ${Math.round(bookmark.positionY)}%`}
-                          type="button"
-                        >🔖 第 {bookmark.page} 页</button>
+                        <>
+                          <button
+                            className="bookmark-jump-button"
+                            onClick={() => navigateToPosition(bookmark)}
+                            title={`跳到第 ${bookmark.page} 页页内 ${Math.round(bookmark.positionY)}%`}
+                            type="button"
+                          >🔖 跳转到书签</button>
+                          <button
+                            className="bookmark-delete-button"
+                            disabled={bookmarkSaving}
+                            onClick={() => void deleteBookmark()}
+                            title="删除当前阅读书签"
+                            type="button"
+                          >删除书签</button>
+                        </>
                       )}
                     </div>
                   )}

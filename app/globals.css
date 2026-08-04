@@ -1735,11 +1735,73 @@ select {
 }
 
 .reader-workspace:not(.focus-mode) {
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .reader-workspace:not(.focus-mode) .reader-notebook {
   display: none;
+}
+
+.reader-workspace:not(.focus-mode) .article-library,
+.reader-workspace:not(.focus-mode) .paper-reader {
+  grid-column: 1;
+}
+
+.reader-workspace:not(.focus-mode) .article-library {
+  position: static;
+  width: 100%;
+}
+
+.reader-workspace:not(.focus-mode) .article-library-banner {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) 280px;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.reader-workspace:not(.focus-mode) .library-heading {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+}
+
+.reader-workspace:not(.focus-mode) .article-library-banner > input {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.reader-workspace:not(.focus-mode) .library-search-meta {
+  grid-column: 1;
+  grid-row: 3;
+  margin-top: 0;
+}
+
+.reader-workspace:not(.focus-mode) .library-read-filter {
+  grid-column: 2;
+  grid-row: 2;
+  margin-top: 0;
+}
+
+.reader-workspace:not(.focus-mode) .library-tag-filter {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  margin-top: 2px;
+}
+
+.reader-workspace:not(.focus-mode) .article-search-results {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.reader-workspace:not(.focus-mode) .article-search-results > button {
+  min-height: 112px;
+  align-content: start;
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.reader-workspace:not(.focus-mode) .article-search-results > button.selected {
+  border-left: 3px solid var(--accent);
+  box-shadow: 0 7px 20px rgba(24, 24, 22, 0.07);
 }
 
 .article-library,
@@ -2382,6 +2444,18 @@ select {
   color: #704f00;
   border-color: #d7b44b;
   background: #fffdf3;
+}
+
+.reader-toolbar .bookmark-delete-button {
+  color: #8f3f2d;
+  border-color: rgba(173, 72, 49, 0.34);
+  background: rgba(255, 248, 245, 0.9);
+}
+
+.reader-toolbar .bookmark-delete-button:hover {
+  color: var(--white);
+  border-color: #9f412d;
+  background: #9f412d;
 }
 
 .reader-toolbar .reader-bookmark-tools {
@@ -4809,6 +4883,12 @@ select {
   align-self: end;
 }
 
+@media (max-width: 1000px) and (min-width: 721px) {
+  .reader-workspace:not(.focus-mode) .article-search-results {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 720px) {
   .header-inner {
     width: calc(100% - 40px);
@@ -4960,6 +5040,24 @@ select {
     position: sticky;
     z-index: 4;
     top: 76px;
+  }
+
+  .reader-workspace:not(.focus-mode) .article-library-banner {
+    display: block;
+  }
+
+  .reader-workspace:not(.focus-mode) .library-heading {
+    margin-bottom: 12px;
+  }
+
+  .reader-workspace:not(.focus-mode) .library-search-meta,
+  .reader-workspace:not(.focus-mode) .library-read-filter,
+  .reader-workspace:not(.focus-mode) .library-tag-filter {
+    margin-top: 9px;
+  }
+
+  .reader-workspace:not(.focus-mode) .article-search-results {
+    grid-template-columns: 1fr;
   }
 
   .reader-titlebar {
