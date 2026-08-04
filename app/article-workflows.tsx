@@ -30,10 +30,20 @@ type ArxivResult = {
   externalId: string;
 };
 
+class ApiResponseError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiResponseError";
+    this.status = status;
+  }
+}
+
 async function responseJson(response: Response) {
   const data = await response.json().catch(() => ({})) as { error?: string; [key: string]: unknown };
   if (!response.ok) {
-    throw new Error(data.error ?? `服务器请求失败（${response.status}）`);
+    throw new ApiResponseError(data.error ?? `服务器请求失败（${response.status}）`, response.status);
   }
   return data;
 }
@@ -1319,7 +1329,6 @@ export function ReviewComposer({
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: payload,
-          keepalive: payload.length < 60_000,
         });
         await responseJson(response);
         if (annotationSaveRevisions.current.get(targetArticleId) === revision) {
@@ -1342,8 +1351,13 @@ export function ReviewComposer({
         ) {
           setAnnotationSaveStatus("error");
           setAnnotationSaveError(error instanceof Error ? error.message : "批注保存请求失败");
-          setServerConnection("disconnected");
-          setServerConnectionError(error instanceof Error ? error.message : "批注保存请求失败");
+          if (!(error instanceof ApiResponseError)) {
+            setServerConnection("disconnected");
+            setServerConnectionError(error instanceof Error ? error.message : "无法连接应用服务器");
+          } else if (error.status === 401) {
+            setServerConnection("disconnected");
+            setServerConnectionError("登录已失效，请重新登录");
+          }
         }
       });
   }, []);
