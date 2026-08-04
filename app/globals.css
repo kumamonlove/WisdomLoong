@@ -2725,6 +2725,44 @@ select {
   backdrop-filter: blur(12px);
 }
 
+.library-banner-restore {
+  position: sticky;
+  z-index: 6;
+  top: 72px;
+  width: fit-content;
+  margin: 10px 0 0 12px;
+  padding: 8px 12px 8px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  border: 1px solid rgba(24, 24, 22, .15);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 8px 22px rgba(24, 24, 22, .1);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 780;
+  backdrop-filter: blur(12px);
+}
+
+.library-banner-restore:hover {
+  border-color: rgba(214, 95, 64, .42);
+  box-shadow: 0 10px 26px rgba(214, 95, 64, .12);
+}
+
+.library-banner-restore i {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: var(--white);
+  border-radius: 50%;
+  background: var(--accent);
+  font-size: 12px;
+  font-style: normal;
+}
+
 .library-heading,
 .notebook-heading {
   margin-bottom: 12px;
@@ -2736,6 +2774,29 @@ select {
   letter-spacing: 0.08em;
 }
 
+.library-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.library-heading > div > button {
+  padding: 5px 8px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .56);
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.library-heading > div > button:hover {
+  color: var(--accent);
+  border-color: rgba(214, 95, 64, .3);
+}
+
 .reader-workspace:not(.focus-mode) .library-heading > span {
   color: var(--ink);
   font-size: 22px;
@@ -2743,7 +2804,7 @@ select {
   letter-spacing: -0.03em;
 }
 
-.reader-workspace:not(.focus-mode) .library-heading > strong {
+.reader-workspace:not(.focus-mode) .library-heading > div > strong {
   align-self: center;
   color: var(--muted);
   font-size: 11px;
@@ -2967,6 +3028,14 @@ select {
   scroll-margin-top: 252px;
   text-align: left;
   transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.article-library.banner-hidden .article-search-results {
+  margin-top: 10px;
+}
+
+.article-library.banner-hidden .article-search-results > article {
+  scroll-margin-top: 124px;
 }
 
 .article-search-results > article:hover {

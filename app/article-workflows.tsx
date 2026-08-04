@@ -1078,6 +1078,7 @@ export function ReviewComposer({
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
   const [articleChronology, setArticleChronology] = useState<"latest" | "classic">("latest");
+  const [libraryBannerHidden, setLibraryBannerHidden] = useState(false);
   const [articleFocusRevision, setArticleFocusRevision] = useState(0);
   const [showAllArticleTags, setShowAllArticleTags] = useState(false);
   const [rating, setRating] = useState<number | null>(startingReview?.rating ?? null);
@@ -1436,6 +1437,10 @@ export function ReviewComposer({
       setAnnotationsEnabled(false);
       setDrawingAnnotation(false);
     }
+  }, []);
+
+  useEffect(() => {
+    setLibraryBannerHidden(window.localStorage.getItem("wisdomloong-library-banner-hidden") === "true");
   }, []);
 
   useEffect(() => {
@@ -2073,11 +2078,30 @@ export function ReviewComposer({
           </div>
         </div>
       )}
-      <aside className="article-library">
+      <aside className={`article-library${libraryBannerHidden ? " banner-hidden" : ""}`}>
+        {libraryBannerHidden ? (
+          <button
+            className="library-banner-restore"
+            onClick={() => {
+              setLibraryBannerHidden(false);
+              window.localStorage.setItem("wisdomloong-library-banner-hidden", "false");
+            }}
+            type="button"
+          ><i aria-hidden="true">⌄</i><span>显示文章库工具</span></button>
+        ) : (
         <div className="article-library-banner">
           <div className="library-heading">
             <span>文章库</span>
-            <strong>{availableArticles.length} 篇文章</strong>
+            <div>
+              <strong>{availableArticles.length} 篇文章</strong>
+              <button
+                onClick={() => {
+                  setLibraryBannerHidden(true);
+                  window.localStorage.setItem("wisdomloong-library-banner-hidden", "true");
+                }}
+                type="button"
+              >隐藏固定栏 ↑</button>
+            </div>
           </div>
           <input
             aria-label="搜索已有文章"
@@ -2118,6 +2142,7 @@ export function ReviewComposer({
             )}
           </div>
         </div>
+        )}
         <div className="article-search-results">
           {filteredArticles.map((article, index) => {
             const month = article.publishedAt?.slice(0, 7) ?? "日期待补";
