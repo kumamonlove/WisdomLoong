@@ -1,0 +1,14 @@
+[Unit]
+Description=Repair missing WisdomLoong article abstracts
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/wisdomloong/current
+Environment=NODE_ENV=production
+Environment=PGHOST=/var/run/postgresql
+Environment=PGDATABASE=wisdomloong
+Environment=PGUSER=admin
+Environment=PDF_CACHE_DIR=/srv/wisdomloong/pdf-cache
+EnvironmentFile=/etc/wisdomloong.env
+ExecStart=/usr/bin/node /srv/wisdomloong/current/backfill-article-abstracts.mjs

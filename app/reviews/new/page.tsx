@@ -1,5 +1,4 @@
-import { ReviewComposer } from "@/app/article-workflows";
-import { KnowledgePage } from "@/app/knowledge-page";
+import { ReadingArticlePage } from "@/app/reading-article-page";
 import { requireUser } from "@/lib/auth";
 import { getArticlesForReview } from "@/lib/knowledge";
 
@@ -19,21 +18,13 @@ export default async function NewReviewPage({
     : articles[0]?.id;
 
   return (
-    <KnowledgePage
-      eyebrow="SHARE WHAT YOU LEARNED"
-      page="review"
-      title="阅读文章"
-      description="在专注阅读中截取证据、整理批注，发布读书笔记 PDF 与评论"
+    <ReadingArticlePage
+      articles={articles}
+      initialArticleId={initialArticleId}
+      initialPartnerNoteReviewId={Number.isInteger(requestedNoteId) && requestedNoteId > 0 ? requestedNoteId : undefined}
+      startFocused={hasRequestedArticle}
+      translationEnabled={Boolean(process.env.TRANSLATION_API_KEY ?? process.env.DASHSCOPE_API_KEY)}
       username={user.username}
-    >
-      <ReviewComposer
-        articles={articles}
-        username={user.username}
-        initialArticleId={initialArticleId}
-        initialPartnerNoteReviewId={Number.isInteger(requestedNoteId) && requestedNoteId > 0 ? requestedNoteId : undefined}
-        startFocused={hasRequestedArticle}
-        translationEnabled={Boolean(process.env.TRANSLATION_API_KEY ?? process.env.DASHSCOPE_API_KEY)}
-      />
-    </KnowledgePage>
+    />
   );
 }

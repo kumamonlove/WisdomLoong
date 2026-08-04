@@ -139,6 +139,10 @@ export async function POST(request: Request) {
       );
     }
     await client.query(
+      "DELETE FROM reading_annotation_drafts WHERE user_id = $1 AND article_id = $2",
+      [user.id, articleId],
+    );
+    await client.query(
       `INSERT INTO article_reads (user_id, article_id)
        VALUES ($1, $2)
        ON CONFLICT (user_id, article_id)

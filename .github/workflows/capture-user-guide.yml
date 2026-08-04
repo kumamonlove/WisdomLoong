@@ -138,22 +138,53 @@ jobs:
           }, { timeout: 45000 });
           console.log(`PDF_FIRST_PAGE_MS ${Date.now() - readerStartedAt}`);
           await page.getByRole('button', { name: '适合宽度' }).click();
-          await page.waitForFunction(() => {
-            const scroll = document.querySelector('.pdf-page-scroll');
-            const visiblePage = document.querySelector('.continuous-page');
-            return scroll instanceof HTMLElement && visiblePage instanceof HTMLElement &&
-              Math.abs(scroll.clientWidth - visiblePage.getBoundingClientRect().width) <= 6;
-          });
+          await page.waitForTimeout(1000);
           const fittedWidths = await page.evaluate(() => ({
             reader: document.querySelector('.pdf-page-scroll')?.clientWidth,
             pdf: Math.round(document.querySelector('.continuous-page')?.getBoundingClientRect().width ?? 0),
           }));
           console.log(`PDF_FIT_WIDTH reader=${fittedWidths.reader} pdf=${fittedWidths.pdf}`);
+          if (!fittedWidths.reader || Math.abs(fittedWidths.reader - fittedWidths.pdf) > 16) {
+            throw new Error(`PDF fit-to-width mismatch: reader=${fittedWidths.reader} pdf=${fittedWidths.pdf}`);
+          }
+          const pdfPageCount = await page.locator('.continuous-page').count();
+          for (const target of [5, 10, 20, 35].filter((value) => value <= pdfPageCount)) {
+            await page.locator(`.continuous-page[data-page="${target}"]`).scrollIntoViewIfNeeded();
+            await page.waitForTimeout(700);
+            const activeCanvases = await page.locator('.continuous-page canvas').evaluateAll((canvases) =>
+              canvases.filter((canvas) => canvas.width > 0 && canvas.height > 0).length
+            );
+            console.log(`PDF_ACTIVE_CANVASES page=${target} active=${activeCanvases}`);
+            if (activeCanvases > 8) throw new Error(`Too many live PDF canvases: ${activeCanvases}`);
+            if (await page.locator('.pdf-loading').count()) {
+              throw new Error(`Whole-document error overlay returned while reading page ${target}`);
+            }
+          }
+          await page.locator('.continuous-page[data-page="1"]').scrollIntoViewIfNeeded();
+          await page.locator('.bookmark-save-button').click();
+          const bookmarkLayer = page.locator('.continuous-page[data-page="1"] .pdf-annotation-layer');
+          await bookmarkLayer.click({ position: { x: 180, y: 260 } });
+          await page.waitForSelector('.continuous-page[data-page="1"] .pdf-bookmark-line');
+          if (!(await page.locator('.bookmark-jump-button').count())) {
+            throw new Error('Bookmark jump button did not appear after placement');
+          }
           await page.waitForTimeout(1000);
           await shot('06-reader-annotations');
 
           const translationTab = page.locator('.workspace-tabs button').filter({ hasText: '翻译' }).first();
           if (await translationTab.count()) await translationTab.click();
+          const translationInput = page.locator('.translation-assistant textarea');
+          if (await translationInput.count()) {
+            await translationInput.fill('The proposed method improves robustness under distribution shift while preserving computational efficiency.');
+            const translationStartedAt = Date.now();
+            await page.getByRole('button', { name: '翻译成中文' }).click();
+            await page.waitForSelector('.translation-result p', { timeout: 180000 });
+            console.log(`TRANSLATION_RESULT_MS ${Date.now() - translationStartedAt}`);
+            await page.getByRole('button', { name: '增大译文字号' }).click();
+            const translationFontSize = await page.locator('.translation-result p').evaluate((element) => getComputedStyle(element).fontSize);
+            if (translationFontSize !== '16px') throw new Error(`Unexpected translation font size: ${translationFontSize}`);
+            console.log(`TRANSLATION_FONT_SIZE ${translationFontSize}`);
+          }
           await shot('07-translation');
 
           const publishTab = page.locator('.workspace-tabs button').filter({ hasText: '发布' }).first();

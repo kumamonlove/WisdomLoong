@@ -69,6 +69,15 @@ export type ReaderArticle = {
   publishedAt: string | null;
   sourceUrl: string;
   lastReadPage: number | null;
+  lastReadPositionY: number | null;
+  isRead: boolean;
+  savedAnnotations: {
+    page: number;
+    quote: string;
+    translation: string;
+    content: string;
+    rect?: { x: number; y: number; width: number; height: number } | null;
+  }[];
   ownReview: {
     id: number;
     rating: number;
@@ -361,6 +370,13 @@ export async function getArticlesForReview(userId: number) {
             articles.published_at::text AS "publishedAt",
             articles.source_url AS "sourceUrl",
             reading_progress.page_number AS "lastReadPage",
+            reading_progress.position_y AS "lastReadPositionY",
+            EXISTS (
+              SELECT 1 FROM article_reads
+              WHERE article_reads.user_id = $1
+                AND article_reads.article_id = articles.id
+            ) AS "isRead",
+            COALESCE(reading_annotation_drafts.annotations, own_annotations.items::jsonb, '[]'::jsonb) AS "savedAnnotations",
             CASE WHEN own_review.id IS NULL THEN NULL ELSE JSON_BUILD_OBJECT(
               'id', own_review.id,
               'rating', own_review.rating,
@@ -375,6 +391,9 @@ export async function getArticlesForReview(userId: number) {
      LEFT JOIN reading_progress
        ON reading_progress.article_id = articles.id
       AND reading_progress.user_id = $1
+     LEFT JOIN reading_annotation_drafts
+       ON reading_annotation_drafts.article_id = articles.id
+      AND reading_annotation_drafts.user_id = $1
      LEFT JOIN reviews own_review
        ON own_review.article_id = articles.id
       AND own_review.user_id = $1

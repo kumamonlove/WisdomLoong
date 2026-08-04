@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically repair missing WisdomLoong article abstracts
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=60
+Unit=wisdomloong-abstract-repair.service
+
+[Install]
+WantedBy=timers.target

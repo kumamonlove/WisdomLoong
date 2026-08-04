@@ -63,27 +63,33 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const upstreamBody = JSON.stringify({
+      model,
+      temperature: 0,
+      stream: true,
+      max_tokens: Math.min(6_000, Math.max(256, Math.ceil(text.length * 1.25))),
+      messages: [
+        {
+          role: "system",
+          content: academicTranslationSystemPrompt,
+        },
+        { role: "user", content: text },
+      ],
+    });
+    const requestTranslation = () => fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        stream: true,
-        max_tokens: Math.min(6_000, Math.max(256, Math.ceil(text.length * 1.25))),
-        messages: [
-          {
-            role: "system",
-            content: academicTranslationSystemPrompt,
-          },
-          { role: "user", content: text },
-        ],
-      }),
-      signal: AbortSignal.timeout(60_000),
+      body: upstreamBody,
+      signal: AbortSignal.timeout(150_000),
     });
+    let response = await requestTranslation();
+    if ([408, 429, 500, 502, 503, 504].includes(response.status)) {
+      await response.body?.cancel().catch(() => undefined);
+      response = await requestTranslation();
+    }
     if (!response.ok) {
       const data = (await response.json().catch(() => ({}))) as TranslationResponse;
       console.error("Translation gateway failed", response.status, data.error?.message);

@@ -373,6 +373,57 @@ main {
   color: var(--muted);
 }
 
+.heading-add-article {
+  min-width: 122px;
+  padding: 8px 14px 8px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.heading-add-article > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: var(--white);
+  border-radius: 50%;
+  background: var(--ink);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+  transition: transform 180ms ease;
+}
+
+.heading-add-article > strong {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.heading-add-article:hover,
+.heading-add-article.is-open {
+  color: var(--white);
+  background: var(--ink);
+  transform: translateY(-1px);
+}
+
+.heading-add-article:hover > span,
+.heading-add-article.is-open > span {
+  color: var(--ink);
+  background: var(--white);
+}
+
+.heading-add-article.is-open > span {
+  transform: rotate(45deg);
+}
+
 .filter-form {
   display: flex;
   align-items: center;
@@ -1159,6 +1210,48 @@ select {
   font-size: 13px;
 }
 
+.reading-page-import {
+  animation: import-panel-reveal 180ms ease-out;
+}
+
+.reading-page-import-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.reading-page-import-heading > div > span {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.reading-page-import-heading > button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.reading-page-import-heading > button:hover {
+  color: var(--white);
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+@keyframes import-panel-reveal {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .visually-hidden {
   position: absolute !important;
   width: 1px !important;
@@ -1711,6 +1804,33 @@ select {
   font-size: 9px;
 }
 
+.library-read-filter {
+  margin-top: 10px;
+  padding: 3px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.library-read-filter button {
+  padding: 6px 4px;
+  color: var(--muted);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.library-read-filter button.selected {
+  color: var(--white);
+  background: var(--ink);
+}
+
 .library-tag-filter {
   margin: 9px -2px 0;
   padding: 2px;
@@ -1753,6 +1873,40 @@ select {
 .article-search-results > button.selected {
   border-color: var(--line);
   background: var(--white);
+}
+
+.library-result-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.library-result-meta > span {
+  min-width: 0;
+}
+
+.article-search-results .library-result-meta > em {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.article-search-results .library-result-meta > em.is-unread {
+  color: #9e422e;
+  border-color: rgba(214, 95, 64, 0.18);
+  background: rgba(214, 95, 64, 0.08);
+}
+
+.article-search-results .library-result-meta > em.is-read {
+  color: #65706a;
+  border-color: rgba(93, 116, 104, 0.2);
+  background: rgba(93, 116, 104, 0.08);
 }
 
 .article-search-results > button.selected {
@@ -1887,6 +2041,19 @@ select {
   flex: 0 0 auto;
   color: var(--ink);
   font-size: 11px;
+}
+
+.reader-title-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reader-title-actions .mark-read-button {
+  padding: 7px 10px;
+  font-size: 9px;
 }
 
 .reader-metadata-summary {
@@ -2114,6 +2281,32 @@ select {
   background: rgba(42, 140, 107, .1);
 }
 
+.reader-toolbar .bookmark-save-button {
+  min-width: 92px;
+  color: #fff9df;
+  border-color: #8b6400;
+  background: linear-gradient(135deg, #9b7100, #c39416);
+  box-shadow: 0 3px 9px rgba(155, 113, 0, .2);
+}
+
+.reader-toolbar .bookmark-save-button.is-placing {
+  color: #5d4300;
+  border-color: #d2a62f;
+  background: #ffe89b;
+  box-shadow: 0 0 0 3px rgba(211, 166, 47, .18);
+}
+
+.reader-toolbar .bookmark-jump-button {
+  color: #704f00;
+  border-color: #d7b44b;
+  background: #fffdf3;
+}
+
+.reader-toolbar .reader-bookmark-tools {
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
 .reader-toolbar .reader-document-switch {
   max-width: min(48%, 520px);
   padding: 3px;
@@ -2305,6 +2498,18 @@ select {
   touch-action: none;
 }
 
+.pdf-annotation-layer.is-bookmarking {
+  z-index: 70;
+  cursor: crosshair;
+  pointer-events: auto;
+  background: linear-gradient(rgba(255, 221, 103, .035), rgba(255, 221, 103, .08));
+  touch-action: none;
+}
+
+.pdf-annotation-layer.is-bookmarking .pdf-annotation-box {
+  pointer-events: none;
+}
+
 .pdf-annotation-layer > strong {
   position: absolute;
   top: 18px;
@@ -2316,6 +2521,57 @@ select {
   box-shadow: 0 5px 18px rgba(24, 24, 22, 0.18);
   font-size: 10px;
   transform: translateX(-50%);
+}
+
+.pdf-bookmark-line {
+  position: absolute;
+  z-index: 55;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: repeating-linear-gradient(90deg, #b87f00 0 18px, #ffd75f 18px 28px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .95), 0 2px 5px rgba(127, 88, 0, .2);
+}
+
+.pdf-page-error {
+  position: absolute;
+  z-index: 65;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: #6e2e22;
+  background: rgba(248, 246, 239, .94);
+}
+
+.pdf-page-error strong {
+  font-size: 12px;
+}
+
+.pdf-page-error button {
+  padding: 8px 12px;
+  color: var(--white);
+  border: 0;
+  border-radius: 7px;
+  background: var(--ink);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.pdf-bookmark-line > i {
+  position: absolute;
+  top: -12px;
+  right: -1px;
+  padding: 3px 7px;
+  color: #5d4300;
+  border-radius: 6px 0 0 6px;
+  background: #ffd866;
+  box-shadow: 0 2px 7px rgba(24, 24, 22, .18);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .pdf-annotation-box {
@@ -3097,12 +3353,34 @@ select {
   display: block !important;
 }
 
+.translation-result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.translation-font-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.translation-font-controls button {
+  min-width: 30px;
+  padding: 4px 6px;
+}
+
+.translation-font-controls button:nth-child(2) {
+  min-width: 42px;
+  color: var(--muted);
+}
+
 .translation-result p {
   margin: 5px 0 0;
   padding: 8px;
   border-radius: 6px;
   background: var(--white);
-  font-size: 10px;
   line-height: 1.6;
   white-space: pre-wrap;
 }
@@ -3325,6 +3603,26 @@ select {
   margin-top: 14px;
   display: grid;
   gap: 5px;
+}
+
+.annotation-save-status {
+  margin: 0;
+  padding: 7px 9px;
+  color: #276348;
+  border-radius: 6px;
+  background: rgba(42, 140, 107, .08);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.annotation-save-status.is-saving {
+  color: #705600;
+  background: rgba(215, 180, 75, .13);
+}
+
+.annotation-save-status.is-error {
+  color: #9a3c2b;
+  background: rgba(214, 95, 64, .1);
 }
 
 .saved-notes > h3 {
@@ -4589,12 +4887,14 @@ select {
   }
 
   .reader-toolbar .reader-document-switch,
+  .reader-toolbar .reader-bookmark-tools,
   .reader-toolbar .reader-annotation-tools {
     width: 100%;
     max-width: none;
   }
 
   .reader-toolbar .reader-document-switch button,
+  .reader-toolbar .reader-bookmark-tools button,
   .reader-toolbar .reader-annotation-tools button {
     min-width: 0;
     flex: 1;
@@ -4602,6 +4902,12 @@ select {
 
   .reader-toolbar .reader-zoom-tools {
     padding-left: 0;
+    border-left: 0;
+  }
+
+  .reader-toolbar .reader-bookmark-tools {
+    padding: 8px 0 0;
+    border-top: 1px solid var(--line);
     border-left: 0;
   }
 

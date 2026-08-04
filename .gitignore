@@ -10,3 +10,4 @@ dist
 .open-next
 .vinext
 *.tsbuildinfo
+/public/pdfjs/

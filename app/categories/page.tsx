@@ -95,7 +95,7 @@ export default async function CategoriesPage({
         <ArticleGrid
           articles={articles}
           emptyTitle="没有符合条件的文章"
-          emptyDescription="可前往“待读列表”推荐文章，或调整当前筛选条件。"
+          emptyDescription="可在“阅读文章”标题右侧点击加号推荐文章，或调整当前筛选条件。"
         />
       </section>
     </KnowledgePage>

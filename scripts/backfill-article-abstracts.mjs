@@ -102,24 +102,72 @@ async function psql(command, variables = {}) {
 async function missingArticles() {
   const json = await psql(`SELECT COALESCE(JSON_AGG(ROW_TO_JSON(item)), '[]'::json)
     FROM (
-      SELECT id, title, abstract
+      SELECT id, title, abstract, abstract_zh
       FROM articles
-      WHERE abstract = '' OR abstract_zh = ''
+      WHERE abstract = ''
+         OR (
+           abstract_zh = ''
+           AND (
+             abstract_translation_next_attempt_at IS NULL
+             OR abstract_translation_next_attempt_at <= NOW()
+           )
+         )
       ORDER BY id
     ) item`);
   return JSON.parse(json || "[]");
 }
 
-async function saveArticle(articleId, abstract, abstractZh) {
+async function saveAbstract(articleId, abstract) {
   await psql(
     `UPDATE articles
-     SET abstract = CASE WHEN abstract = '' THEN CONVERT_FROM(DECODE(:'abstract_b64', 'base64'), 'UTF8') ELSE abstract END,
-         abstract_zh = CASE WHEN abstract_zh = '' THEN CONVERT_FROM(DECODE(:'abstract_zh_b64', 'base64'), 'UTF8') ELSE abstract_zh END
+     SET abstract = CASE
+       WHEN abstract = '' THEN CONVERT_FROM(DECODE(:'abstract_b64', 'base64'), 'UTF8')
+       ELSE abstract
+     END
      WHERE id = :'article_id'::integer`,
     {
       article_id: String(articleId),
       abstract_b64: Buffer.from(abstract).toString("base64"),
+    },
+  );
+}
+
+async function saveTranslation(articleId, abstractZh) {
+  await psql(
+    `UPDATE articles
+     SET abstract_zh = CASE
+           WHEN abstract_zh = '' THEN CONVERT_FROM(DECODE(:'abstract_zh_b64', 'base64'), 'UTF8')
+           ELSE abstract_zh
+         END,
+         abstract_translation_attempts = 0,
+         abstract_translation_next_attempt_at = NULL,
+         abstract_translation_last_error = ''
+     WHERE id = :'article_id'::integer`,
+    {
+      article_id: String(articleId),
       abstract_zh_b64: Buffer.from(abstractZh).toString("base64"),
+    },
+  );
+}
+
+async function markTranslationFailure(articleId, error) {
+  const message = error instanceof Error ? error.message : String(error);
+  await psql(
+    `UPDATE articles
+     SET abstract_translation_attempts = abstract_translation_attempts + 1,
+         abstract_translation_next_attempt_at = NOW() + CASE abstract_translation_attempts
+           WHEN 0 THEN INTERVAL '15 minutes'
+           WHEN 1 THEN INTERVAL '30 minutes'
+           WHEN 2 THEN INTERVAL '60 minutes'
+           WHEN 3 THEN INTERVAL '120 minutes'
+           ELSE INTERVAL '360 minutes'
+         END,
+         abstract_translation_last_error = CONVERT_FROM(DECODE(:'error_b64', 'base64'), 'UTF8')
+     WHERE id = :'article_id'::integer
+       AND abstract_zh = ''`,
+    {
+      article_id: String(articleId),
+      error_b64: Buffer.from(message.slice(0, 1_000)).toString("base64"),
     },
   );
 }
@@ -136,6 +184,7 @@ async function main() {
   console.log(`Abstract backfill candidates: ${articles.length}`);
   for (const article of articles) {
     let abstract = String(article.abstract || "").trim();
+    const abstractZh = String(article.abstract_zh || "").trim();
     try {
       if (!abstract) {
         const pdfPath = `${cacheDirectory}/${article.id}.pdf`;
@@ -145,12 +194,25 @@ async function main() {
           console.warn(`Abstract not found: article ${article.id} (${article.title})`);
           continue;
         }
+        await saveAbstract(article.id, abstract);
+        console.log(`English abstract backfilled: article ${article.id} (${article.title})`);
       }
-      const abstractZh = await translate(abstract);
-      await saveArticle(article.id, abstract, abstractZh);
-      console.log(`Abstract backfilled: article ${article.id} (${article.title})`);
     } catch (error) {
-      console.warn(`Abstract backfill skipped: article ${article.id} (${article.title}): ${error instanceof Error ? error.message : error}`);
+      console.warn(`Abstract extraction skipped: article ${article.id} (${article.title}): ${error instanceof Error ? error.message : error}`);
+      continue;
+    }
+
+    if (abstractZh) continue;
+
+    try {
+      const translatedAbstract = await translate(abstract);
+      await saveTranslation(article.id, translatedAbstract);
+      console.log(`Chinese abstract backfilled: article ${article.id} (${article.title})`);
+    } catch (error) {
+      await markTranslationFailure(article.id, error).catch((markError) => {
+        console.warn(`Translation failure could not be recorded: article ${article.id}: ${markError instanceof Error ? markError.message : markError}`);
+      });
+      console.warn(`Abstract translation deferred: article ${article.id} (${article.title}): ${error instanceof Error ? error.message : error}`);
     }
   }
 }

@@ -55,6 +55,9 @@ CREATE INDEX IF NOT EXISTS articles_published_at_idx ON articles(published_at DE
 
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS abstract_zh TEXT NOT NULL DEFAULT '';
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS abstract_translation_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS abstract_translation_next_attempt_at TIMESTAMPTZ;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS abstract_translation_last_error TEXT NOT NULL DEFAULT '';
 ALTER TABLE articles ALTER COLUMN publisher SET DEFAULT '机构待补充';
 ALTER TABLE articles ALTER COLUMN imported_by DROP NOT NULL;
 ALTER TABLE articles DROP CONSTRAINT IF EXISTS articles_imported_by_fkey;
@@ -95,12 +98,27 @@ CREATE TABLE IF NOT EXISTS reading_progress (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
   page_number INTEGER NOT NULL CHECK (page_number > 0),
+  position_y REAL NOT NULL DEFAULT 0 CHECK (position_y >= 0 AND position_y <= 100),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, article_id)
 );
 
+ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS position_y REAL NOT NULL DEFAULT 0;
+
 CREATE INDEX IF NOT EXISTS reading_progress_user_updated_idx
   ON reading_progress(user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS reading_annotation_drafts (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  annotations JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, article_id),
+  CONSTRAINT reading_annotation_drafts_array_check CHECK (JSONB_TYPEOF(annotations) = 'array')
+);
+
+CREATE INDEX IF NOT EXISTS reading_annotation_drafts_updated_idx
+  ON reading_annotation_drafts(user_id, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS reviews (
   id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

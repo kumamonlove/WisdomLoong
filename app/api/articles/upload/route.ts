@@ -63,6 +63,7 @@ export async function POST(request: Request) {
 
   let abstract = "";
   let abstractZh = "";
+  let abstractTranslationError = "";
   try {
     const frontMatter = await extractPdfFrontMatter(buffer);
     abstract = frontMatter.abstract;
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
     try {
       abstractZh = await translateAcademicText(abstract);
     } catch (error) {
+      abstractTranslationError = error instanceof Error ? error.message : String(error);
       console.warn("Imported PDF abstract translation failed", error);
     }
   }
@@ -117,6 +119,9 @@ export async function POST(request: Request) {
              category = $3,
              abstract = CASE WHEN $7 <> '' THEN $7 ELSE abstract END,
              abstract_zh = CASE WHEN $8 <> '' THEN $8 ELSE abstract_zh END,
+             abstract_translation_attempts = CASE WHEN $8 <> '' THEN 0 ELSE abstract_translation_attempts END,
+             abstract_translation_next_attempt_at = CASE WHEN $8 <> '' THEN NULL ELSE abstract_translation_next_attempt_at END,
+             abstract_translation_last_error = CASE WHEN $8 <> '' THEN '' ELSE abstract_translation_last_error END,
              tags = (
                SELECT ARRAY(
                  SELECT DISTINCT tag
@@ -128,6 +133,24 @@ export async function POST(request: Request) {
              publisher = CASE WHEN $6 <> '机构待补充' THEN $6 ELSE publisher END
          WHERE id = $1`,
         [articleId, title, category, tags, publishedAt, publisher, abstract, abstractZh],
+      );
+    }
+
+    if (abstract && !abstractZh) {
+      await client.query(
+        `UPDATE articles
+         SET abstract_translation_attempts = abstract_translation_attempts + 1,
+             abstract_translation_next_attempt_at = NOW() + CASE abstract_translation_attempts
+               WHEN 0 THEN INTERVAL '15 minutes'
+               WHEN 1 THEN INTERVAL '30 minutes'
+               WHEN 2 THEN INTERVAL '60 minutes'
+               WHEN 3 THEN INTERVAL '120 minutes'
+               ELSE INTERVAL '360 minutes'
+             END,
+             abstract_translation_last_error = $2
+         WHERE id = $1
+           AND abstract_zh = ''`,
+        [articleId, abstractTranslationError.slice(0, 1_000)],
       );
     }
 
@@ -150,6 +173,8 @@ export async function POST(request: Request) {
       articleId,
       abstractExtracted: Boolean(abstract),
       abstractTranslated: Boolean(abstractZh),
+      abstract,
+      abstractZh,
       publishedAt,
       publishedAtExtracted: !submittedPublishedAt && Boolean(publishedAt),
     });

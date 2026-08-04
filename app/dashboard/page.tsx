@@ -20,11 +20,11 @@ export default async function DashboardPage() {
        users.username,
        users.created_at::text AS "createdAt",
        COUNT(DISTINCT reviews.id)::int AS "reviewCount",
-       COUNT(DISTINCT reading_list.article_id)::int AS "readingCount",
+       COUNT(DISTINCT article_reads.article_id)::int AS "readingCount",
        GREATEST(MAX(reviews.updated_at), MAX(sessions.created_at))::text AS "lastActiveAt"
      FROM users
      LEFT JOIN reviews ON reviews.user_id = users.id
-     LEFT JOIN reading_list ON reading_list.user_id = users.id
+     LEFT JOIN article_reads ON article_reads.user_id = users.id
      LEFT JOIN sessions ON sessions.user_id = users.id
      GROUP BY users.id
      ORDER BY users.created_at DESC`,
@@ -48,7 +48,7 @@ export default async function DashboardPage() {
         </section>
         <section className="admin-user-table">
           <div className="admin-table-row heading-row">
-            <span>用户</span><span>注册时间</span><span>评论</span><span>待读</span><span>最后活跃</span><span>管理</span>
+            <span>用户</span><span>注册时间</span><span>评论</span><span>已读</span><span>最后活跃</span><span>管理</span>
           </div>
           {result.rows.map((user) => (
             <div className="admin-table-row" key={user.id}>

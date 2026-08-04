@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-export type PageName = "recommended" | "categories" | "reading" | "review" | "profile";
+export type PageName = "recommended" | "categories" | "review" | "profile";
 
 function BrandW() {
   return <span className="brand-w">W</span>;
@@ -62,9 +62,6 @@ export function SiteHeader({
               href="/categories"
             >
               知识分类
-            </a>
-            <a className={page === "reading" ? "active" : ""} href="/reading-list">
-              待读列表
             </a>
           </nav>
 
