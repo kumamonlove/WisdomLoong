@@ -1,6 +1,6 @@
 {
   "name": "wisdomloong-knowledge-hub",
-  "version": "1.14.32",
+  "version": "1.14.33",
   "private": true,
   "scripts": {
     "predev": "node scripts/prepare-pdfjs-assets.mjs",

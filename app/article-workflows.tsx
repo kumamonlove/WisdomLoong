@@ -1077,6 +1077,8 @@ export function ReviewComposer({
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
   const [articleReadFilter, setArticleReadFilter] = useState<"all" | "unread" | "read">("all");
+  const [articlePage, setArticlePage] = useState(1);
+  const [showAllArticleTags, setShowAllArticleTags] = useState(false);
   const [rating, setRating] = useState<number | null>(startingReview?.rating ?? null);
   const [mustRead, setMustRead] = useState(startingReview?.mustRead ?? false);
   const [content, setContent] = useState(startingReview?.content ?? "");
@@ -1178,6 +1180,19 @@ export function ReviewComposer({
   }, [articleReadFilter, articleSearch, articleTag, availableArticles]);
   const unreadArticleCount = availableArticles.filter((article) => !article.isRead).length;
   const readArticleCount = availableArticles.length - unreadArticleCount;
+  const articlePageSize = 5;
+  const articlePageCount = Math.max(1, Math.ceil(filteredArticles.length / articlePageSize));
+  const visibleArticlePage = Math.min(articlePage, articlePageCount);
+  const paginatedArticles = filteredArticles.slice(
+    (visibleArticlePage - 1) * articlePageSize,
+    visibleArticlePage * articlePageSize,
+  );
+  const visibleSearchableTags = showAllArticleTags
+    ? searchableTags
+    : [
+        ...searchableTags.slice(0, 6),
+        ...(articleTag !== "全部" && !searchableTags.slice(0, 6).includes(articleTag) ? [articleTag] : []),
+      ];
   const incompleteAbstractIds = useMemo(
     () => availableArticles
       .filter((article) => !article.abstract || !article.abstractZh)
@@ -1344,6 +1359,14 @@ export function ReviewComposer({
       current.find((item) => item.id === article.id) ?? article
     ));
   }, [articles]);
+
+  useEffect(() => {
+    setArticlePage(1);
+  }, [articleReadFilter, articleSearch, articleTag]);
+
+  useEffect(() => {
+    if (articlePage > articlePageCount) setArticlePage(articlePageCount);
+  }, [articlePage, articlePageCount]);
 
   useEffect(() => {
     if (!incompleteAbstractIds) return;
@@ -2060,7 +2083,7 @@ export function ReviewComposer({
             >已读 {readArticleCount}</button>
           </div>
           <div className="library-tag-filter">
-            {searchableTags.map((tag) => (
+            {visibleSearchableTags.map((tag) => (
               <button
                 className={articleTag === tag ? "selected" : ""}
                 key={tag}
@@ -2070,10 +2093,17 @@ export function ReviewComposer({
                 {tag}
               </button>
             ))}
+            {searchableTags.length > 6 && (
+              <button
+                className="library-tag-more"
+                onClick={() => setShowAllArticleTags((current) => !current)}
+                type="button"
+              >{showAllArticleTags ? "收起" : `更多 +${searchableTags.length - 6}`}</button>
+            )}
           </div>
         </div>
         <div className="article-search-results">
-          {filteredArticles.map((article) => (
+          {paginatedArticles.map((article) => (
             <button
               className={article.id === articleId ? "selected" : ""}
               key={article.id}
@@ -2096,6 +2126,21 @@ export function ReviewComposer({
           ))}
           {filteredArticles.length === 0 && <p>没有匹配文章</p>}
         </div>
+        {filteredArticles.length > articlePageSize && (
+          <nav className="article-library-pagination" aria-label="文章库分页">
+            <button
+              disabled={visibleArticlePage === 1}
+              onClick={() => setArticlePage((current) => Math.max(1, current - 1))}
+              type="button"
+            >上一页</button>
+            <span>{visibleArticlePage} / {articlePageCount}</span>
+            <button
+              disabled={visibleArticlePage === articlePageCount}
+              onClick={() => setArticlePage((current) => Math.min(articlePageCount, current + 1))}
+              type="button"
+            >下一页</button>
+          </nav>
+        )}
       </aside>
 
       <section className="paper-reader">
