@@ -2725,42 +2725,73 @@ select {
   backdrop-filter: blur(12px);
 }
 
-.library-banner-restore {
-  position: sticky;
-  z-index: 6;
-  top: 72px;
-  width: fit-content;
-  margin: 10px 0 0 12px;
-  padding: 8px 12px 8px 9px;
+.library-tools-toggle {
+  min-height: 32px;
+  padding: 5px 10px 5px 7px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
-  color: var(--ink);
-  border: 1px solid rgba(24, 24, 22, .15);
+  color: var(--muted);
+  border: 1px solid rgba(24, 24, 22, .14);
   border-radius: 999px;
-  background: rgba(255, 255, 255, .9);
-  box-shadow: 0 8px 22px rgba(24, 24, 22, .1);
+  background: rgba(255, 255, 255, .72);
   cursor: pointer;
   font-size: 9px;
   font-weight: 780;
-  backdrop-filter: blur(12px);
+  letter-spacing: 0;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
-.library-banner-restore:hover {
-  border-color: rgba(214, 95, 64, .42);
-  box-shadow: 0 10px 26px rgba(214, 95, 64, .12);
+.library-tools-toggle:hover {
+  color: var(--ink);
+  border-color: rgba(214, 95, 64, .34);
+  background: var(--white);
+  box-shadow: 0 7px 18px rgba(24, 24, 22, .08);
+  transform: translateY(-1px);
 }
 
-.library-banner-restore i {
+.library-tools-toggle:focus-visible {
+  outline: 3px solid rgba(214, 95, 64, .2);
+  outline-offset: 2px;
+}
+
+.library-tools-toggle i {
   width: 20px;
   height: 20px;
   display: grid;
+  flex: 0 0 20px;
   place-items: center;
   color: var(--white);
   border-radius: 50%;
   background: var(--accent);
   font-size: 12px;
   font-style: normal;
+  line-height: 1;
+}
+
+.library-tools-toggle.is-expanded i {
+  color: var(--accent);
+  background: rgba(214, 95, 64, .12);
+}
+
+.library-banner-restore {
+  position: sticky;
+  z-index: 6;
+  top: 72px;
+  width: fit-content;
+  margin: 10px 0 0 12px;
+  min-height: 38px;
+  padding: 8px 13px 8px 9px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 8px 22px rgba(24, 24, 22, .1);
+  backdrop-filter: blur(12px);
+}
+
+.library-banner-restore:hover {
+  border-color: rgba(214, 95, 64, .42);
+  box-shadow: 0 10px 26px rgba(214, 95, 64, .12);
 }
 
 .library-heading,
@@ -2781,15 +2812,7 @@ select {
 }
 
 .library-heading > div > button {
-  padding: 5px 8px;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .56);
-  cursor: pointer;
-  font-size: 8px;
-  font-weight: 750;
-  letter-spacing: 0;
+  flex: 0 0 auto;
 }
 
 .library-heading > div > button:hover {

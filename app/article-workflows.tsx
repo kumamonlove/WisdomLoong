@@ -745,22 +745,35 @@ async function downloadPdfData(
         return data;
       }
 
+      if (total > 100 * 1024 * 1024) throw new Error("PDF is larger than 100 MB");
       const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];
+      const allocated = total > 0 ? new Uint8Array(total) : null;
       let loaded = 0;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        chunks.push(value);
+        if (allocated && loaded + value.byteLength <= allocated.byteLength) {
+          allocated.set(value, loaded);
+        } else {
+          chunks.push(value);
+        }
         loaded += value.byteLength;
         if (loaded > 100 * 1024 * 1024) throw new Error("PDF is larger than 100 MB");
         onProgress(loaded, total);
       }
-      const data = new Uint8Array(loaded);
-      let offset = 0;
-      for (const chunk of chunks) {
-        data.set(chunk, offset);
-        offset += chunk.byteLength;
+      let data: Uint8Array;
+      if (allocated && loaded === allocated.byteLength && chunks.length === 0) {
+        data = allocated;
+      } else {
+        data = new Uint8Array(loaded);
+        const chunkBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+        let offset = allocated ? Math.min(loaded - chunkBytes, allocated.byteLength) : 0;
+        if (allocated) data.set(allocated.subarray(0, offset));
+        for (const chunk of chunks) {
+          data.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
       }
       if (new TextDecoder("ascii").decode(data.subarray(0, 5)) !== "%PDF-") {
         throw new Error("Downloaded file is not a PDF");
@@ -988,10 +1001,12 @@ function PdfContinuousCanvas({
     setPdfDocument(null);
     void (async () => {
       try {
-        const data = await downloadPdfData(url, onProgress, controller.signal);
+        const [data, pdfjs] = await Promise.all([
+          downloadPdfData(url, onProgress, controller.signal),
+          import("pdfjs-dist"),
+        ]);
         window.clearTimeout(timeout);
         if (cancelled) return;
-        const pdfjs = await import("pdfjs-dist");
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
         pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.30`;
         loadingTask = pdfjs.getDocument({
@@ -1232,7 +1247,10 @@ export function ReviewComposer({
   }, [fitPdfToWidth]);
   const handlePdfDocumentReady = useCallback((pageCount: number) => {
     setPdfPageCount(pageCount);
-  }, []);
+    if (partnerNoteReviewId === null) {
+      setLocalCache({ status: "ready", progress: 100 });
+    }
+  }, [partnerNoteReviewId]);
   const handlePdfProgress = useCallback((loaded: number, total: number) => {
     if (partnerNoteReviewId !== null) return;
     const progress = total > 0
@@ -2081,7 +2099,8 @@ export function ReviewComposer({
       <aside className={`article-library${libraryBannerHidden ? " banner-hidden" : ""}`}>
         {libraryBannerHidden ? (
           <button
-            className="library-banner-restore"
+            aria-expanded="false"
+            className="library-tools-toggle library-banner-restore"
             onClick={() => {
               setLibraryBannerHidden(false);
               window.localStorage.setItem("wisdomloong-library-banner-hidden", "false");
@@ -2095,12 +2114,15 @@ export function ReviewComposer({
             <div>
               <strong>{availableArticles.length} 篇文章</strong>
               <button
+                aria-expanded="true"
+                aria-label="隐藏文章库工具"
+                className="library-tools-toggle is-expanded"
                 onClick={() => {
                   setLibraryBannerHidden(true);
                   window.localStorage.setItem("wisdomloong-library-banner-hidden", "true");
                 }}
                 type="button"
-              >隐藏固定栏 ↑</button>
+              ><i aria-hidden="true">⌃</i><span>隐藏工具</span></button>
             </div>
           </div>
           <input
@@ -2471,7 +2493,7 @@ export function ReviewComposer({
                             ? "下载超时"
                           : localCache.status === "error"
                             ? "论文暂时无法加载"
-                          : "正在打开本地论文"}
+                          : "正在解析并打开论文"}
                       </strong>
                       {!viewingPartnerNote && localCache.status === "loading" && (
                         <div
