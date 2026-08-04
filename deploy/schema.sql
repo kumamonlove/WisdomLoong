@@ -70,6 +70,31 @@ UPDATE articles SET publisher = 'Physical Intelligence'
   WHERE LOWER(title) LIKE '%pi0.5%' OR title LIKE '%π0.5%';
 CREATE INDEX IF NOT EXISTS articles_tags_idx ON articles USING GIN(tags);
 
+CREATE TABLE IF NOT EXISTS knowledge_graph_domains (
+  domain TEXT PRIMARY KEY,
+  narrative TEXT NOT NULL DEFAULT '',
+  status VARCHAR(12) NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'ready', 'error')),
+  article_count INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_graph_nodes (
+  domain TEXT NOT NULL REFERENCES knowledge_graph_domains(domain) ON DELETE CASCADE,
+  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  contribution TEXT NOT NULL DEFAULT '',
+  lineage_reason TEXT NOT NULL DEFAULT '',
+  parent_article_ids INTEGER[] NOT NULL DEFAULT '{}',
+  analysis_source VARCHAR(16) NOT NULL DEFAULT 'title'
+    CHECK (analysis_source IN ('title', 'abstract', 'fulltext')),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (domain, article_id)
+);
+
+CREATE INDEX IF NOT EXISTS knowledge_graph_nodes_article_idx
+  ON knowledge_graph_nodes(article_id);
+
 CREATE TABLE IF NOT EXISTS reading_list (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
@@ -117,6 +142,8 @@ CREATE TABLE IF NOT EXISTS article_recent_views (
 
 CREATE INDEX IF NOT EXISTS article_recent_views_user_viewed_idx
   ON article_recent_views(user_id, viewed_at DESC);
+CREATE INDEX IF NOT EXISTS article_recent_views_article_viewed_idx
+  ON article_recent_views(article_id, viewed_at DESC);
 
 CREATE TABLE IF NOT EXISTS reading_annotation_drafts (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

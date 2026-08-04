@@ -71,6 +71,9 @@ export type ReaderArticle = {
   lastReadPage: number | null;
   lastReadPositionY: number | null;
   isRead: boolean;
+  rating?: number | null;
+  readCount?: number;
+  readingNowCount?: number;
   savedAnnotations: {
     page: number;
     quote: string;
@@ -360,6 +363,22 @@ export async function getArticlesForReview(userId: number) {
               WHERE article_reads.user_id = $1
                 AND article_reads.article_id = articles.id
             ) AS "isRead",
+            (
+              SELECT ROUND(AVG(reviews.rating)::numeric, 1)::float
+              FROM reviews
+              WHERE reviews.article_id = articles.id
+            ) AS rating,
+            (
+              SELECT COUNT(*)::int
+              FROM article_reads
+              WHERE article_reads.article_id = articles.id
+            ) AS "readCount",
+            (
+              SELECT COUNT(*)::int
+              FROM article_recent_views
+              WHERE article_recent_views.article_id = articles.id
+                AND article_recent_views.viewed_at >= NOW() - INTERVAL '5 minutes'
+            ) AS "readingNowCount",
             COALESCE(reading_annotation_drafts.annotations, own_annotations.items::jsonb, '[]'::jsonb) AS "savedAnnotations",
             CASE WHEN own_review.id IS NULL THEN NULL ELSE JSON_BUILD_OBJECT(
               'id', own_review.id,
@@ -405,7 +424,7 @@ export async function getArticlesForReview(userId: number) {
          AND review_annotations.rect_width IS NOT NULL
          AND review_annotations.rect_height IS NOT NULL
      ) own_annotations ON TRUE
-     ORDER BY articles.created_at DESC`,
+     ORDER BY articles.published_at DESC NULLS LAST, articles.created_at DESC`,
     [userId],
   );
   return result.rows;

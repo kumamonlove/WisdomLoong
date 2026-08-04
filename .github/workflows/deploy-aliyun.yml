@@ -90,6 +90,7 @@ jobs:
             /tmp/wisdomloong.env \
             deploy/nginx.conf \
             deploy/backfill-abstracts.sh \
+            deploy/backfill-knowledge-graph.sh \
             deploy/prepare-database.sh \
             deploy/prewarm-pdfs.sh \
             deploy/schema.sql \
@@ -134,6 +135,8 @@ jobs:
             sudo systemctl daemon-reload
             sudo systemctl restart wisdomloong
             sudo systemctl is-active --quiet wisdomloong
+            chmod +x /tmp/backfill-knowledge-graph.sh
+            sudo /tmp/backfill-knowledge-graph.sh
             sudo systemctl enable --now wisdomloong-abstract-repair.timer
             sudo systemctl is-active --quiet wisdomloong-abstract-repair.timer
             sudo systemctl reload nginx

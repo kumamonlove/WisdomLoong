@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { translateAcademicText } from "@/lib/academic-translation";
 import { database } from "@/lib/db";
+import { refreshKnowledgeGraphForArticle } from "@/lib/knowledge-graph";
 import { articleCategories, normalizeTags } from "@/lib/knowledge-types";
 import { warmPdfCache } from "@/lib/pdf-cache";
 
@@ -161,6 +162,9 @@ export async function POST(request: Request) {
     await client.query("COMMIT");
     void warmPdfCache(articleId, parsedUrl.toString()).catch((error) =>
       console.error("Imported PDF prewarm failed", error),
+    );
+    void refreshKnowledgeGraphForArticle(articleId).catch((error) =>
+      console.error("Imported article graph placement failed", error),
     );
     return NextResponse.json({
       ok: true,

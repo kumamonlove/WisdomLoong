@@ -1,103 +1,38 @@
-import { ArticleGrid, KnowledgePage } from "@/app/knowledge-page";
+import { KnowledgeGraphExplorer } from "@/app/knowledge-graph-explorer";
+import { KnowledgePage } from "@/app/knowledge-page";
 import { requireUser } from "@/lib/auth";
-import {
-  getCategoryArticles,
-  getCategoryCounts,
-  parseCategory,
-  parseReviewFilter,
-  parseSort,
-  type Category,
-  type ReviewFilter,
-  type SortOrder,
-} from "@/lib/knowledge";
+import { getKnowledgeGraph, getKnowledgeGraphDomains } from "@/lib/knowledge-graph";
 
-type CategoriesPageProps = {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
-
-function categoryHref(
-  category: Category,
-  reviewFilter: ReviewFilter,
-  sort: SortOrder,
-) {
-  const params = new URLSearchParams();
-  if (category !== "全部") params.set("category", category);
-  if (reviewFilter !== "all") params.set("review", reviewFilter);
-  if (sort !== "newest") params.set("sort", sort);
-  const query = params.toString();
-  return query ? `/categories?${query}` : "/categories";
-}
-
-export default async function CategoriesPage({
+export default async function KnowledgeGraphPage({
   searchParams,
-}: CategoriesPageProps) {
-  const [params, user] = await Promise.all([searchParams, requireUser()]);
-  const requestedCategory = parseCategory(params.category);
-  const reviewFilter = parseReviewFilter(params.review);
-  const sort = parseSort(params.sort);
-  const counts = await getCategoryCounts();
-  const categories: Category[] = ["全部", ...[...counts.keys()].filter((item) => item !== "全部")];
-  const category = requestedCategory === "全部" || counts.has(requestedCategory)
-    ? requestedCategory
-    : "全部";
-  const articles = await getCategoryArticles({ userId: user.id, category, reviewFilter, sort });
-  const total = counts.get("全部") ?? 0;
+}: {
+  searchParams: Promise<{ domain?: string | string[] }>;
+}) {
+  const [user, params, domains] = await Promise.all([
+    requireUser(),
+    searchParams,
+    getKnowledgeGraphDomains(),
+  ]);
+  const requested = Array.isArray(params.domain) ? params.domain[0] : params.domain;
+  const selectedDomain = domains.some((item) => item.domain === requested)
+    ? requested!
+    : domains[0]?.domain ?? "VLA";
+  const graph = await getKnowledgeGraph(selectedDomain);
 
   return (
     <KnowledgePage
       page="categories"
-      title="知识分类"
-      description="按研究方向整理团队导入并评论过的文章"
+      title="知识图谱"
+      description="沿时间与思想继承关系，理解各研究领域的技术演进"
       username={user.username}
     >
-      <section className="categories">
-        {categories.map((item) => (
-          <a
-            className={category === item ? "selected" : ""}
-            href={categoryHref(item, reviewFilter, sort)}
-            key={item}
-          >
-            <span>{item === "全部" ? "ALL" : item}</span>
-            <small>{item === "全部" ? total : (counts.get(item) ?? 0)} 篇</small>
-          </a>
-        ))}
-      </section>
-
-      <section className="list">
-        <div className="list-toolbar">
-          <div className="list-title">
-            <h2>{category === "全部" ? "全部文章" : category}</h2>
-            <span>{articles.length} 篇</span>
-          </div>
-          <form className="filter-form" method="get">
-            {category !== "全部" && (
-              <input name="category" type="hidden" value={category} />
-            )}
-            <label>
-              评论
-              <select defaultValue={reviewFilter} name="review">
-                <option value="all">全部</option>
-                <option value="reviewed">我已评论</option>
-                <option value="unreviewed">我未评论</option>
-              </select>
-            </label>
-            <label>
-              排序
-              <select defaultValue={sort} name="sort">
-                <option value="newest">时间从新到旧</option>
-                <option value="oldest">时间从旧到新</option>
-                <option value="rating">评分从高到低</option>
-              </select>
-            </label>
-            <button type="submit">筛选</button>
-          </form>
-        </div>
-        <ArticleGrid
-          articles={articles}
-          emptyTitle="没有符合条件的文章"
-          emptyDescription="可在“阅读文章”标题右侧点击加号推荐文章，或调整当前筛选条件。"
-        />
-      </section>
+      {domains.length > 0 ? (
+        <KnowledgeGraphExplorer domains={domains} graph={graph} />
+      ) : (
+        <section className="empty graph-empty">
+          <span>01</span><h3>知识图谱等待第一篇文章</h3><p>添加带领域标签的文章后，AI 会自动建立发展树。</p>
+        </section>
+      )}
     </KnowledgePage>
   );
 }

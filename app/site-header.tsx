@@ -61,7 +61,7 @@ export function SiteHeader({
               className={page === "categories" ? "active" : ""}
               href="/categories"
             >
-              知识分类
+              知识图谱
             </a>
           </nav>
 

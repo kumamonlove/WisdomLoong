@@ -171,7 +171,7 @@ function ArxivLookup({
         </label>
       </form>
       <div className="tag-editor">
-        <span>文章标签（至少 1 个；新标签会自动出现在知识分类中）</span>
+        <span>文章标签（至少 1 个；新标签会自动进入知识图谱）</span>
         {existingTags.some((tag) => !tags.includes(tag)) && (
           <div className="existing-tag-picker">
             <small>点击添加已有标签</small>
@@ -473,7 +473,7 @@ function PdfDropImporter({
       </div>
 
       <div className="tag-editor">
-        <span>文章标签（至少 1 个；新标签会自动出现在知识分类中）</span>
+        <span>文章标签（至少 1 个；新标签会自动进入知识图谱）</span>
         {existingTags.some((tag) => !tags.includes(tag)) && (
           <div className="existing-tag-picker">
             <small>点击添加已有标签</small>
@@ -1073,8 +1073,11 @@ export function ReviewComposer({
   const startingReview = startingArticle?.ownReview;
   const [availableArticles, setAvailableArticles] = useState(articles);
   const [articleId, setArticleId] = useState(startingArticleId);
+  const [expandedArticleId, setExpandedArticleId] = useState<number | null>(startingArticleId || null);
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
+  const [articleMonthIndex, setArticleMonthIndex] = useState<number | null>(null);
+  const [articleFocusRevision, setArticleFocusRevision] = useState(0);
   const [showAllArticleTags, setShowAllArticleTags] = useState(false);
   const [rating, setRating] = useState<number | null>(startingReview?.rating ?? null);
   const [mustRead, setMustRead] = useState(startingReview?.mustRead ?? false);
@@ -1143,6 +1146,7 @@ export function ReviewComposer({
   const articlePageBeforeNote = useRef(page);
   const pdfFrameRef = useRef<HTMLDivElement>(null);
   const currentArticleIdRef = useRef(articleId);
+  const articleFocusRequest = useRef<number | null>(null);
   const annotationSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const annotationSaveRevisions = useRef(new Map<number, number>());
   currentArticleIdRef.current = articleId;
@@ -1163,16 +1167,25 @@ export function ReviewComposer({
     () => ["全部", ...new Set(availableArticles.flatMap((article) => article.tags))],
     [availableArticles],
   );
+  const articleMonths = useMemo(() => [...new Set(
+    availableArticles
+      .map((article) => article.publishedAt?.slice(0, 7) ?? "")
+      .filter(Boolean),
+  )].sort(), [availableArticles]);
+  const selectedArticleMonth = articleMonthIndex === null
+    ? null
+    : articleMonths[Math.min(articleMonthIndex, Math.max(0, articleMonths.length - 1))] ?? null;
   const filteredArticles = useMemo(() => {
     const terms = articleSearch.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
     return availableArticles.filter((article) => {
       if (articleTag !== "全部" && !article.tags.includes(articleTag)) return false;
+      if (selectedArticleMonth && article.publishedAt?.slice(0, 7) !== selectedArticleMonth) return false;
       const haystack = [article.title, article.publisher, article.authors.join(" "), article.tags.join(" ")]
         .join(" ")
         .toLocaleLowerCase();
       return terms.every((term) => haystack.includes(term));
     });
-  }, [articleSearch, articleTag, availableArticles]);
+  }, [articleSearch, articleTag, availableArticles, selectedArticleMonth]);
   const visibleSearchableTags = showAllArticleTags
     ? searchableTags
     : [
@@ -1398,11 +1411,24 @@ export function ReviewComposer({
 
   useEffect(() => {
     if (!articleId || !focusMode) return;
-    void fetch(`/api/articles/${articleId}/recent`, {
-      method: "POST",
-      keepalive: true,
+    const recordPresence = () => void fetch(`/api/articles/${articleId}/recent`, {
+      method: "POST", keepalive: true,
     }).catch(() => undefined);
+    recordPresence();
+    const timer = window.setInterval(recordPresence, 60_000);
+    return () => window.clearInterval(timer);
   }, [articleId, focusMode]);
+
+  useEffect(() => {
+    if (focusMode || expandedArticleId !== articleId || articleFocusRequest.current !== articleId) return;
+    const timer = window.setTimeout(() => {
+      const card = document.querySelector<HTMLElement>(`[data-article-library-id="${articleId}"]`);
+      card?.scrollIntoView({ behavior: "smooth", block: "start" });
+      card?.focus({ preventScroll: true });
+      articleFocusRequest.current = null;
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [articleFocusRevision, articleId, expandedArticleId, focusMode]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("wisdomloong-annotations-enabled");
@@ -1521,6 +1547,9 @@ export function ReviewComposer({
   function selectArticle(id: number) {
     const article = availableArticles.find((item) => item.id === id);
     setArticleId(id);
+    setExpandedArticleId(id);
+    articleFocusRequest.current = id;
+    setArticleFocusRevision((value) => value + 1);
     setPdfLoading(true);
     setArticlePdfReady(false);
     setPage(article?.lastReadPage ?? 1);
@@ -1553,6 +1582,18 @@ export function ReviewComposer({
       ? { status: "ready", progress: 100 }
       : { status: "loading", progress: 1 });
     setFocusMode(false);
+  }
+
+  function selectArticleMonth(index: number) {
+    const month = articleMonths[index];
+    setArticleMonthIndex(index);
+    const firstInMonth = availableArticles.find((article) => article.publishedAt?.slice(0, 7) === month);
+    if (firstInMonth && firstInMonth.id !== articleId) selectArticle(firstInMonth.id);
+    else if (firstInMonth) {
+      setExpandedArticleId(firstInMonth.id);
+      articleFocusRequest.current = firstInMonth.id;
+      setArticleFocusRevision((value) => value + 1);
+    }
   }
 
   function beginReading() {
@@ -2061,6 +2102,30 @@ export function ReviewComposer({
             <span>找到 {filteredArticles.length} 篇</span>
             {articleSearch && <button onClick={() => setArticleSearch("")} type="button">清空</button>}
           </div>
+          {articleMonths.length > 0 && (
+            <div className="library-time-axis">
+              <div>
+                <span>论文时间轴</span>
+                <strong>{selectedArticleMonth ?? "全部时间"}</strong>
+                {selectedArticleMonth && (
+                  <button onClick={() => setArticleMonthIndex(null)} type="button">查看全部</button>
+                )}
+              </div>
+              <input
+                aria-label="按论文年月筛选"
+                max={Math.max(0, articleMonths.length - 1)}
+                min="0"
+                onChange={(event) => selectArticleMonth(Number(event.target.value))}
+                step="1"
+                type="range"
+                value={articleMonthIndex ?? Math.max(0, articleMonths.length - 1)}
+              />
+              <div>
+                <small>{articleMonths[0]}</small>
+                <small>{articleMonths.at(-1)}</small>
+              </div>
+            </div>
+          )}
           <div className="library-tag-filter">
             {visibleSearchableTags.map((tag) => (
               <button
@@ -2084,17 +2149,20 @@ export function ReviewComposer({
         <div className="article-search-results">
           {filteredArticles.map((article) => (
             <article
-              aria-expanded={article.id === articleId}
-              className={article.id === articleId ? "selected" : ""}
+              aria-expanded={article.id === expandedArticleId}
+              className={article.id === expandedArticleId ? "selected" : ""}
+              data-article-library-id={article.id}
               key={article.id}
               onClick={(event) => {
                 if ((event.target as HTMLElement).closest("button, a, input, textarea, select, details, summary, form")) return;
-                if (article.id !== articleId) selectArticle(article.id);
+                if (article.id === expandedArticleId) setExpandedArticleId(null);
+                else selectArticle(article.id);
               }}
               onKeyDown={(event) => {
                 if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
                 event.preventDefault();
-                if (article.id !== articleId) selectArticle(article.id);
+                if (article.id === expandedArticleId) setExpandedArticleId(null);
+                else selectArticle(article.id);
               }}
               tabIndex={0}
             >
@@ -2113,7 +2181,14 @@ export function ReviewComposer({
                   <span key={tag}>{tag}</span>
                 ))}
               </div>
-              {article.id !== articleId ? (
+              <div className="library-card-signals" aria-label="文章阅读数据">
+                <span><i aria-hidden="true">★</i>{article.rating ?? "暂无评分"}</span>
+                <span><i aria-hidden="true">✓</i>{article.readCount ?? 0} 人读过</span>
+                <span className={(article.readingNowCount ?? 0) > 0 ? "is-live" : ""}>
+                  <i aria-hidden="true">●</i>{article.readingNowCount ?? 0} 人正在读
+                </span>
+              </div>
+              {article.id !== expandedArticleId ? (
                 <p className="library-card-abstract">
                   {article.abstractZh || article.abstract || "摘要正在识别补齐。"}
                 </p>
@@ -2125,7 +2200,11 @@ export function ReviewComposer({
                 >
                   <header>
                     <div>
-                      <span>{article.authors.join(" · ") || "作者信息暂无"}</span>
+                      <span>
+                        {article.publisher !== "机构待补充" && article.publisher.toLocaleLowerCase() !== "arxiv"
+                          ? article.publisher
+                          : ""}
+                      </span>
                       <small>{article.publishedAt ?? "日期暂无"}</small>
                     </div>
                     <button
