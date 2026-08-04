@@ -18,6 +18,21 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+service_ready=false
+for attempt in $(seq 1 30); do
+  if curl --silent --show-error --output /dev/null --max-time 3 \
+    http://127.0.0.1:3000/login; then
+    service_ready=true
+    break
+  fi
+  sleep 2
+done
+
+if [ "$service_ready" != true ]; then
+  echo "Knowledge graph backfill failed: application did not become ready" >&2
+  exit 1
+fi
+
 sudo -u postgres psql --dbname="$database_name" --set=ON_ERROR_STOP=1 \
   --command="INSERT INTO sessions (token_hash, user_id, expires_at)
     VALUES ('$session_hash', $user_id, NOW() + INTERVAL '2 hours')
@@ -59,15 +74,30 @@ while IFS= read -r domain; do
   [ -n "$domain" ] || continue
   payload="$(DOMAIN_VALUE="$domain" node -e \
     'process.stdout.write(JSON.stringify({domain: process.env.DOMAIN_VALUE}))')"
-  if curl --fail --silent --show-error --max-time 210 \
-    --cookie "wisdomloong_session=$session_token" \
-    --header 'Content-Type: application/json' \
-    --data "$payload" \
-    http://127.0.0.1:3000/api/knowledge-graph >/dev/null; then
-    echo "Knowledge graph updated: $domain"
-  else
-    echo "Knowledge graph deferred: $domain" >&2
+  updated=false
+  for attempt in 1 2 3; do
+    if curl --fail --silent --show-error --max-time 210 \
+      --cookie "wisdomloong_session=$session_token" \
+      --header 'Content-Type: application/json' \
+      --data "$payload" \
+      http://127.0.0.1:3000/api/knowledge-graph >/dev/null; then
+      updated=true
+      echo "Knowledge graph updated: $domain"
+      break
+    fi
+    echo "Knowledge graph retry $attempt/3: $domain" >&2
+    sleep $((attempt * 2))
+  done
+  if [ "$updated" != true ]; then
+    echo "Knowledge graph deferred after retries: $domain" >&2
   fi
 done <<EOF
 $domains
 EOF
+
+sudo -u postgres psql --dbname="$database_name" --tuples-only --no-align --command="
+  SELECT 'Knowledge graph result: domains=' || COUNT(*) ||
+         ' ready=' || COUNT(*) FILTER (WHERE status = 'ready') ||
+         ' nodes=' || (SELECT COUNT(*) FROM knowledge_graph_nodes)
+  FROM knowledge_graph_domains
+"

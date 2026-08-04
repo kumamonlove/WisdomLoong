@@ -107,47 +107,58 @@ async function requestGraphAnalysis(domain: string, articles: GraphArticle[], pr
       : article.publisher,
     ...(await articleEvidence(article)),
   })));
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.1,
-      stream: false,
-      max_tokens: Math.min(10_000, Math.max(1_200, articles.length * 280)),
-      messages: [
-        {
-          role: "system",
-          content: [
-            "你是机器人学研究史与技术谱系编辑。请为指定领域维护一棵严格基于证据的论文发展树。",
-            "父节点必须比子节点更早，且只有存在明确方法、问题定义、训练范式或思想继承时才能连接；没有可靠前驱就作为根节点。",
-            "每篇贡献用简洁中文写 25–70 字，说明它相对前序工作的新增价值，不能只改写标题。",
-            "lineageReason 用 20–60 字解释继承关系；根节点说明它开启或汇合了什么方向。",
-            "narrative 用 150–500 字维护该领域从早到晚的内部发展叙事，点出主要分支、汇合和仍未解决的问题。",
-            "只返回 JSON：{narrative:string,nodes:[{articleId:number,contribution:string,lineageReason:string,parentArticleIds:number[]}]}。",
-          ].join("\n"),
-        },
-        {
-          role: "user",
-          content: JSON.stringify({ domain, previousNarrative, articles: evidence }),
-        },
-      ],
-    }),
-    signal: AbortSignal.timeout(150_000),
+  const requestBody = JSON.stringify({
+    model,
+    temperature: 0.1,
+    stream: false,
+    max_tokens: Math.min(10_000, Math.max(1_200, articles.length * 280)),
+    messages: [
+      {
+        role: "system",
+        content: [
+          "你是机器人学研究史与技术谱系编辑。请为指定领域维护一棵严格基于证据的论文发展树。",
+          "父节点必须比子节点更早，且只有存在明确方法、问题定义、训练范式或思想继承时才能连接；没有可靠前驱就作为根节点。",
+          "每篇贡献用简洁中文写 25–70 字，说明它相对前序工作的新增价值，不能只改写标题。",
+          "lineageReason 用 20–60 字解释继承关系；根节点说明它开启或汇合了什么方向。",
+          "narrative 用 150–500 字维护该领域从早到晚的内部发展叙事，点出主要分支、汇合和仍未解决的问题。",
+          "只返回 JSON：{narrative:string,nodes:[{articleId:number,contribution:string,lineageReason:string,parentArticleIds:number[]}]}。",
+        ].join("\n"),
+      },
+      {
+        role: "user",
+        content: JSON.stringify({ domain, previousNarrative, articles: evidence }),
+      },
+    ],
   });
-  const data = await response.json().catch(() => ({})) as {
-    choices?: { message?: { content?: string } }[];
-    error?: { message?: string };
-  };
-  if (!response.ok) {
-    throw new Error(`knowledge graph AI failed (${response.status}): ${data.error?.message ?? "unknown error"}`);
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: requestBody,
+        signal: AbortSignal.timeout(150_000),
+      });
+      const data = await response.json().catch(() => ({})) as {
+        choices?: { message?: { content?: string } }[];
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(`knowledge graph AI failed (${response.status}): ${data.error?.message ?? "unknown error"}`);
+      }
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) throw new Error("knowledge graph AI returned empty content");
+      return { graph: parseJsonObject(content), evidence };
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1_500));
+    }
   }
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("knowledge graph AI returned empty content");
-  return { graph: parseJsonObject(content), evidence };
+  throw lastError instanceof Error ? lastError : new Error("knowledge graph AI request failed");
 }
 
 export async function getKnowledgeGraphDomains() {
