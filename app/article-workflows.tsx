@@ -31,9 +31,9 @@ type ArxivResult = {
 };
 
 async function responseJson(response: Response) {
-  const data = (await response.json()) as { error?: string; [key: string]: unknown };
+  const data = await response.json().catch(() => ({})) as { error?: string; [key: string]: unknown };
   if (!response.ok) {
-    throw new Error(data.error ?? "操作失败，请稍后重试");
+    throw new Error(data.error ?? `服务器请求失败（${response.status}）`);
   }
   return data;
 }
@@ -1144,6 +1144,9 @@ export function ReviewComposer({
     (startingArticle?.savedAnnotations ?? startingReview?.annotations ?? []).filter((note) => note.rect),
   );
   const [annotationSaveStatus, setAnnotationSaveStatus] = useState<"saved" | "saving" | "error">("saved");
+  const [annotationSaveError, setAnnotationSaveError] = useState("");
+  const [serverConnection, setServerConnection] = useState<"checking" | "connected" | "disconnected">("checking");
+  const [serverConnectionError, setServerConnectionError] = useState("");
   const [bookmark, setBookmark] = useState<ReadingBookmark | null>(startingArticle?.lastReadPage
     ? { page: startingArticle.lastReadPage, positionY: startingArticle.lastReadPositionY ?? 0 }
     : null);
@@ -1263,6 +1266,27 @@ export function ReviewComposer({
       : { status: "loading", progress: Math.max(current.progress, progress) });
   }, [partnerNoteReviewId]);
 
+  const checkServerConnection = useCallback(async () => {
+    if (!navigator.onLine) {
+      setServerConnection("disconnected");
+      setServerConnectionError("设备当前处于离线状态");
+      return;
+    }
+    setServerConnection("checking");
+    try {
+      const response = await fetch("/api/connection", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      });
+      await responseJson(response);
+      setServerConnection("connected");
+      setServerConnectionError("");
+    } catch (error) {
+      setServerConnection("disconnected");
+      setServerConnectionError(error instanceof Error ? error.message : "无法连接应用服务器");
+    }
+  }, []);
+
   function setAnnotationVisibility(enabled: boolean) {
     setAnnotationsEnabled(enabled);
     window.localStorage.setItem("wisdomloong-annotations-enabled", String(enabled));
@@ -1283,7 +1307,10 @@ export function ReviewComposer({
     } catch {
       // The server save below remains authoritative if browser storage is full.
     }
-    if (currentArticleIdRef.current === targetArticleId) setAnnotationSaveStatus("saving");
+    if (currentArticleIdRef.current === targetArticleId) {
+      setAnnotationSaveStatus("saving");
+      setAnnotationSaveError("");
+    }
 
     annotationSaveQueue.current = annotationSaveQueue.current
       .catch(() => undefined)
@@ -1303,14 +1330,20 @@ export function ReviewComposer({
           annotationSaveRevisions.current.get(targetArticleId) === revision
         ) {
           setAnnotationSaveStatus("saved");
+          setAnnotationSaveError("");
+          setServerConnection("connected");
+          setServerConnectionError("");
         }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (
           currentArticleIdRef.current === targetArticleId &&
           annotationSaveRevisions.current.get(targetArticleId) === revision
         ) {
           setAnnotationSaveStatus("error");
+          setAnnotationSaveError(error instanceof Error ? error.message : "批注保存请求失败");
+          setServerConnection("disconnected");
+          setServerConnectionError(error instanceof Error ? error.message : "批注保存请求失败");
         }
       });
   }, []);
@@ -1458,6 +1491,30 @@ export function ReviewComposer({
       setDrawingAnnotation(false);
     }
   }, []);
+
+  useEffect(() => {
+    const handleOnline = () => void checkServerConnection();
+    const handleOffline = () => {
+      setServerConnection("disconnected");
+      setServerConnectionError("设备当前处于离线状态");
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void checkServerConnection();
+    };
+    void checkServerConnection();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void checkServerConnection();
+    }, 30_000);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [checkServerConnection]);
 
   useEffect(() => {
     setLibraryBannerHidden(window.localStorage.getItem("wisdomloong-library-banner-hidden") === "true");
@@ -2640,7 +2697,16 @@ export function ReviewComposer({
       <aside className="reader-notebook">
         <div className="notebook-heading">
           <div><span>阅读工作台</span><small>阅读、理解、整理、发布</small></div>
-          {viewingPartnerNote && <em>{activeNoteAuthor}的笔记</em>}
+          <div className="notebook-heading-status">
+            {viewingPartnerNote && <em>{activeNoteAuthor}的笔记</em>}
+            <button
+              aria-label="检查服务器连接"
+              className={`server-connection is-${serverConnection}`}
+              onClick={() => void checkServerConnection()}
+              title={serverConnectionError || "应用服务器和数据库连接正常"}
+              type="button"
+            ><i aria-hidden="true" />{serverConnection === "checking" ? "正在检查" : serverConnection === "connected" ? "已连接" : "连接异常"}</button>
+          </div>
         </div>
         <nav className="workspace-tabs" aria-label="阅读工作台功能">
           <button className={contextTab === "annotations" ? "selected" : ""} onClick={() => { setContextTab("annotations"); setMessage(""); }} type="button">
@@ -2716,13 +2782,14 @@ export function ReviewComposer({
               </section>
             )}
             <div className="saved-notes">
-              <p className={`annotation-save-status is-${annotationSaveStatus}`} role="status">
-                {annotationSaveStatus === "saving"
+              <div className={`annotation-save-status is-${annotationSaveStatus}`} role="status">
+                <span>{annotationSaveStatus === "saving"
                   ? "正在实时保存…"
                   : annotationSaveStatus === "error"
-                    ? "网络保存失败，已保留在本机，下次打开会自动重试。"
-                    : "批注已实时保存"}
-              </p>
+                    ? `保存失败：${annotationSaveError || "无法连接服务器"}。内容已保留在本机。`
+                    : "批注已实时保存"}</span>
+                {annotationSaveStatus === "error" && <button onClick={() => persistAnnotationDrafts(articleId, notes)} type="button">重新保存</button>}
+              </div>
               {notes.map((note, index) => (
                 <div className={editingAnnotationIndex === index ? "is-editing" : ""} key={`${note.page}-${index}`}>
                   {editingAnnotationIndex === index ? (

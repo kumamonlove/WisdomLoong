@@ -49,21 +49,29 @@ export async function PUT(
     return NextResponse.json({ error: "文章不存在" }, { status: 404 });
   }
 
-  const body = (await request.json()) as { annotations?: unknown };
-  const annotations = normalizeAnnotations(body.annotations);
-  const result = await database.query(
-    `INSERT INTO reading_annotation_drafts (user_id, article_id, annotations)
-     SELECT $1, articles.id, $3::jsonb
-     FROM articles
-     WHERE articles.id = $2
-     ON CONFLICT (user_id, article_id)
-     DO UPDATE SET annotations = EXCLUDED.annotations, updated_at = NOW()
-     RETURNING article_id`,
-    [user.id, articleId, JSON.stringify(annotations)],
-  );
-  if (result.rowCount === 0) {
-    return NextResponse.json({ error: "文章不存在" }, { status: 404 });
-  }
+  try {
+    const body = (await request.json()) as { annotations?: unknown };
+    const annotations = normalizeAnnotations(body.annotations);
+    const result = await database.query(
+      `INSERT INTO reading_annotation_drafts (user_id, article_id, annotations)
+       SELECT $1, articles.id, $3::jsonb
+       FROM articles
+       WHERE articles.id = $2
+       ON CONFLICT (user_id, article_id)
+       DO UPDATE SET annotations = EXCLUDED.annotations, updated_at = NOW()
+       RETURNING article_id`,
+      [user.id, articleId, JSON.stringify(annotations)],
+    );
+    if (result.rowCount === 0) {
+      return NextResponse.json({ error: "文章不存在或已被移除" }, { status: 404 });
+    }
 
-  return NextResponse.json({ ok: true, annotations });
+    return NextResponse.json({ ok: true, annotations });
+  } catch (error) {
+    console.error("Annotation draft save failed", error);
+    return NextResponse.json(
+      { error: "服务器暂时无法保存批注，请点击重新保存" },
+      { status: 500 },
+    );
+  }
 }
