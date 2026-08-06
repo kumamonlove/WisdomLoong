@@ -1176,6 +1176,7 @@ export function ReviewComposer({
   const notePdfPreviewRef = useRef("");
   const sessionPdfUrls = useRef(new Map<number, string>());
   const articlePageBeforeNote = useRef(page);
+  const pendingAnnotationNavigation = useRef<ReadingBookmark | null>(null);
   const pdfFrameRef = useRef<HTMLDivElement>(null);
   const currentArticleIdRef = useRef(articleId);
   const articleFocusRequest = useRef<number | null>(null);
@@ -1382,8 +1383,18 @@ export function ReviewComposer({
     });
   }
 
-  function navigateToPage(nextPage: number) {
-    navigateToPosition({ page: nextPage, positionY: 0 });
+  function navigateToAnnotation(note: Pick<ReadingNote, "page" | "rect">) {
+    const target = {
+      page: note.page,
+      positionY: note.rect?.y ?? 0,
+    };
+    articlePageBeforeNote.current = target.page;
+    if (viewingPartnerNote) {
+      pendingAnnotationNavigation.current = target;
+      returnToArticle();
+      return;
+    }
+    navigateToPosition(target);
   }
 
   async function saveBookmarkAt(pageNumber: number, positionY: number) {
@@ -1596,6 +1607,13 @@ export function ReviewComposer({
       });
     return () => { cancelled = true; };
   }, [articleId, articlePdfReady, viewingPartnerNote]);
+
+  useEffect(() => {
+    if (!articlePdfReady || viewingPartnerNote || !pendingAnnotationNavigation.current) return;
+    const target = pendingAnnotationNavigation.current;
+    pendingAnnotationNavigation.current = null;
+    navigateToPosition(target);
+  }, [articlePdfReady, viewingPartnerNote]);
 
   useEffect(() => {
     setPdfPageCount(0);
@@ -2834,11 +2852,7 @@ export function ReviewComposer({
                     <>
                       <button
                         className="saved-note-jump"
-                        onClick={() => {
-                          articlePageBeforeNote.current = note.page;
-                          if (viewingPartnerNote) returnToArticle();
-                          else navigateToPage(note.page);
-                        }}
+                        onClick={() => navigateToAnnotation(note)}
                         type="button"
                       ><strong>批注 {index + 1}</strong><span>▣ {note.content}</span></button>
                       <button aria-label={`编辑批注 ${index + 1}`} className="saved-note-edit" onClick={() => startEditingAnnotation(index)} type="button">编辑</button>
