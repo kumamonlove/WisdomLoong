@@ -4086,6 +4086,18 @@ select {
   touch-action: none;
 }
 
+.pdf-annotation-layer.is-highlighting {
+  pointer-events: none;
+}
+
+.continuous-page:has(.pdf-annotation-layer.is-highlighting) .pdf-text-layer {
+  cursor: text;
+}
+
+.continuous-page:has(.pdf-annotation-layer.is-highlighting) .pdf-text-layer ::selection {
+  background: rgba(255, 216, 72, .62);
+}
+
 .pdf-annotation-layer.is-bookmarking {
   z-index: 70;
   cursor: crosshair;

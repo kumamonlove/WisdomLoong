@@ -816,7 +816,7 @@ function ContinuousPdfPage({
   zoom: number;
   onLoad: () => void;
   onVisible: (page: number) => void;
-  onTextSelect: (text: string, page: number) => void;
+  onTextSelect: (text: string, page: number, rect: AnnotationRect | null) => void;
   children: ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -946,7 +946,27 @@ function ContinuousPdfPage({
         onPointerUp={() => {
           const selection = window.getSelection();
           const text = selection?.toString().trim() ?? "";
-          if (text) onTextSelect(text, page);
+          const pageElement = containerRef.current;
+          let rect: AnnotationRect | null = null;
+          if (text && selection?.rangeCount && pageElement) {
+            const selectionBounds = selection.getRangeAt(0).getBoundingClientRect();
+            const pageBounds = pageElement.getBoundingClientRect();
+            if (pageBounds.width > 0 && pageBounds.height > 0) {
+              const left = Math.max(pageBounds.left, selectionBounds.left);
+              const top = Math.max(pageBounds.top, selectionBounds.top);
+              const right = Math.min(pageBounds.right, selectionBounds.right);
+              const bottom = Math.min(pageBounds.bottom, selectionBounds.bottom);
+              if (right > left && bottom > top) {
+                rect = {
+                  x: (left - pageBounds.left) / pageBounds.width * 100,
+                  y: (top - pageBounds.top) / pageBounds.height * 100,
+                  width: (right - left) / pageBounds.width * 100,
+                  height: (bottom - top) / pageBounds.height * 100,
+                };
+              }
+            }
+          }
+          if (text) onTextSelect(text, page, rect);
         }}
         ref={textLayerRef}
       />
@@ -984,7 +1004,7 @@ function PdfContinuousCanvas({
   onVisiblePage: (page: number) => void;
   onDocumentReady: (pageCount: number) => void;
   onProgress: (loaded: number, total: number) => void;
-  onTextSelect: (text: string, page: number) => void;
+  onTextSelect: (text: string, page: number, rect: AnnotationRect | null) => void;
   onZoom: (delta: number) => void;
   children: (page: number) => ReactNode;
 }) {
@@ -1958,7 +1978,7 @@ export function ReviewComposer({
     window.localStorage.setItem("wisdomloong-translation-font-size", "14");
   }
 
-  function useSelectedPdfText(text: string, pageNumber: number) {
+  function useSelectedPdfText(text: string, pageNumber: number, rect: AnnotationRect | null) {
     const normalized = text
       .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
       .replace(/\s+/g, " ")
@@ -1968,6 +1988,22 @@ export function ReviewComposer({
     setPage(pageNumber);
     setQuoteDraft(normalized);
     setTranslation("");
+    if (drawingAnnotation && annotationKind === "highlight" && rect) {
+      const x = Math.min(99, Math.max(0, rect.x));
+      const y = Math.min(99, Math.max(0, rect.y));
+      setAnnotationRect({
+        x,
+        y,
+        width: Math.min(100 - x, Math.max(1, rect.width)),
+        height: Math.min(100 - y, Math.max(1, rect.height)),
+      });
+      setAnnotationPage(pageNumber);
+      setDrawingAnnotation(false);
+      setContextTab("annotations");
+      setMessage(`已高亮第 ${pageNumber} 页所选文字，请在右侧填写批注并加入。`);
+      window.getSelection()?.removeAllRanges();
+      return;
+    }
     setContextTab("translate");
     setMessage(translationEnabled
       ? `已选中第 ${pageNumber} 页原文，点击右侧“翻译成中文”。`
@@ -2093,7 +2129,7 @@ export function ReviewComposer({
           : drawingAnnotation
             ? `在 PDF 第 ${pageNumber} 页拖动${annotationKind === "highlight" ? "高亮" : "画框"}`
             : `PDF 第 ${pageNumber} 页批注层`}
-        className={`pdf-annotation-layer${drawingAnnotation ? " is-drawing" : ""}${placingBookmark ? " is-bookmarking" : ""}`}
+        className={`pdf-annotation-layer${drawingAnnotation && annotationKind === "frame" ? " is-drawing" : ""}${drawingAnnotation && annotationKind === "highlight" ? " is-highlighting" : ""}${placingBookmark ? " is-bookmarking" : ""}`}
         onPointerDown={(event) => {
           if (placingBookmark) {
             event.preventDefault();
@@ -2103,7 +2139,7 @@ export function ReviewComposer({
             void saveBookmarkAt(pageNumber, point.y);
             return;
           }
-          if (!drawingAnnotation) return;
+          if (!drawingAnnotation || annotationKind === "highlight") return;
           setPage(pageNumber);
           setAnnotationPage(pageNumber);
           event.currentTarget.setPointerCapture(event.pointerId);
@@ -2204,7 +2240,7 @@ export function ReviewComposer({
           ><span>新</span></span>
         )}
         {placingBookmark && <strong>点击你当前读到的那一行</strong>}
-        {drawingAnnotation && !annotationStart && <strong>{annotationKind === "highlight" ? "拖动鼠标高亮论文内容" : "拖动鼠标框选论文中的图片或段落"}</strong>}
+        {drawingAnnotation && annotationKind === "frame" && !annotationStart && <strong>拖动鼠标框选论文中的图片或段落</strong>}
       </div>
     );
   }
