@@ -8,6 +8,7 @@ type AnnotationInput = {
   translation?: string;
   content?: string;
   annotationKind?: "frame" | "highlight";
+  highlightRects?: { x?: number; y?: number; width?: number; height?: number }[];
   rect?: { x?: number; y?: number; width?: number; height?: number } | null;
 };
 
@@ -38,6 +39,14 @@ function normalizeAnnotations(value: unknown) {
         translation: sanitizeAnnotationText(annotation.translation, 12_000),
         content: sanitizeAnnotationText(annotation.content, 4_000),
         annotationKind: annotation.annotationKind === "highlight" ? "highlight" : "frame",
+        highlightRects: annotation.annotationKind === "highlight"
+          ? (Array.isArray(annotation.highlightRects) ? annotation.highlightRects : []).slice(0, 100).map((item) => ({
+              x: Math.max(0, Math.min(100, Number(item.x) || 0)),
+              y: Math.max(0, Math.min(100, Number(item.y) || 0)),
+              width: Math.max(0, Math.min(100, Number(item.width) || 0)),
+              height: Math.max(0, Math.min(100, Number(item.height) || 0)),
+            })).filter((item) => item.width > 0 && item.height > 0)
+          : [],
         rect: normalizedRect && normalizedRect.width >= 1 && normalizedRect.height >= 1
           ? normalizedRect
           : null,

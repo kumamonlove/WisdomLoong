@@ -265,6 +265,7 @@ CREATE TABLE IF NOT EXISTS review_annotations (
   rect_width REAL,
   rect_height REAL,
   annotation_kind TEXT NOT NULL DEFAULT 'frame' CHECK (annotation_kind IN ('frame', 'highlight')),
+  highlight_rects JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -273,6 +274,7 @@ ALTER TABLE review_annotations ADD COLUMN IF NOT EXISTS rect_y REAL;
 ALTER TABLE review_annotations ADD COLUMN IF NOT EXISTS rect_width REAL;
 ALTER TABLE review_annotations ADD COLUMN IF NOT EXISTS rect_height REAL;
 ALTER TABLE review_annotations ADD COLUMN IF NOT EXISTS annotation_kind TEXT NOT NULL DEFAULT 'frame';
+ALTER TABLE review_annotations ADD COLUMN IF NOT EXISTS highlight_rects JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE INDEX IF NOT EXISTS review_annotations_review_idx
   ON review_annotations(review_id, page_number, id);

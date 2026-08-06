@@ -545,6 +545,7 @@ type ReadingNote = {
   translation: string;
   content: string;
   annotationKind?: "frame" | "highlight";
+  highlightRects?: AnnotationRect[];
   rect?: AnnotationRect | null;
 };
 type ReadingBookmark = { page: number; positionY: number };
@@ -614,7 +615,7 @@ async function generateReadingNotePdf({
   notes: ReadingNote[];
 }) {
   const framedNotes = notes.filter((note) => note.rect);
-  if (!pdfUrl || framedNotes.length === 0) throw new Error("请先为至少一条批注画截图框");
+  if (!pdfUrl || framedNotes.length === 0) throw new Error("请先添加至少一条画框或高亮批注");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
   pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.30`;
@@ -630,6 +631,58 @@ async function generateReadingNotePdf({
 
   try {
     for (const [index, note] of framedNotes.entries()) {
+      if (note.annotationKind === "highlight") {
+        const sections = [
+          { label: "高亮原文", text: note.quote },
+          { label: "翻译", text: note.translation },
+          { label: "批注", text: note.content },
+        ].filter((section) => section.text.trim());
+        let sectionIndex = 0;
+        let remainingLines: string[] = [];
+        let continuation = false;
+        while (sectionIndex < sections.length || remainingLines.length > 0) {
+          const pageCanvas = window.document.createElement("canvas");
+          pageCanvas.width = 1240;
+          pageCanvas.height = 1754;
+          const context = pageCanvas.getContext("2d");
+          if (!context) throw new Error("无法排版高亮批注");
+          context.fillStyle = "#f8f6ef";
+          context.fillRect(0, 0, 1240, 1754);
+          context.fillStyle = "#e1b72f";
+          context.fillRect(0, 0, 24, 1754);
+          context.fillStyle = "#181816";
+          context.font = "700 40px sans-serif";
+          const titleLines = canvasLines(context, title, 1080).slice(0, 3);
+          titleLines.forEach((line, lineIndex) => context.fillText(line, 80, 105 + lineIndex * 52));
+          let y = 105 + titleLines.length * 52 + 28;
+          context.fillStyle = "#766f62";
+          context.font = "24px sans-serif";
+          context.fillText(`${author} · 高亮 ${index + 1} · 原文第 ${note.page} 页${continuation ? "（续）" : ""}`, 80, y);
+          y += 58;
+
+          while (y < 1620 && (sectionIndex < sections.length || remainingLines.length > 0)) {
+            const section = sections[sectionIndex];
+            if (remainingLines.length === 0) {
+              context.fillStyle = "#9a7100";
+              context.font = "700 22px sans-serif";
+              context.fillText(section.label, 80, y);
+              y += 42;
+              context.fillStyle = "#181816";
+              context.font = "28px sans-serif";
+              remainingLines = canvasLines(context, section.text, 1080);
+            }
+            const capacity = Math.max(1, Math.floor((1660 - y) / 43));
+            const chunk = remainingLines.slice(0, capacity);
+            chunk.forEach((line, lineIndex) => context.fillText(line, 80, y + lineIndex * 43));
+            y += chunk.length * 43 + 34;
+            remainingLines = remainingLines.slice(chunk.length);
+            if (remainingLines.length === 0) sectionIndex += 1;
+          }
+          addCanvas(pageCanvas);
+          continuation = true;
+        }
+        continue;
+      }
       const pdfPage = await pdfDocument.getPage(note.page);
       const viewport = pdfPage.getViewport({ scale: 2 });
       const source = window.document.createElement("canvas");
@@ -816,7 +869,7 @@ function ContinuousPdfPage({
   zoom: number;
   onLoad: () => void;
   onVisible: (page: number) => void;
-  onTextSelect: (text: string, page: number, rect: AnnotationRect | null) => void;
+  onTextSelect: (text: string, page: number, rects: AnnotationRect[]) => void;
   children: ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -947,26 +1000,25 @@ function ContinuousPdfPage({
           const selection = window.getSelection();
           const text = selection?.toString().trim() ?? "";
           const pageElement = containerRef.current;
-          let rect: AnnotationRect | null = null;
+          let rects: AnnotationRect[] = [];
           if (text && selection?.rangeCount && pageElement) {
-            const selectionBounds = selection.getRangeAt(0).getBoundingClientRect();
             const pageBounds = pageElement.getBoundingClientRect();
             if (pageBounds.width > 0 && pageBounds.height > 0) {
-              const left = Math.max(pageBounds.left, selectionBounds.left);
-              const top = Math.max(pageBounds.top, selectionBounds.top);
-              const right = Math.min(pageBounds.right, selectionBounds.right);
-              const bottom = Math.min(pageBounds.bottom, selectionBounds.bottom);
-              if (right > left && bottom > top) {
-                rect = {
+              rects = Array.from(selection.getRangeAt(0).getClientRects()).map((bounds) => {
+                const left = Math.max(pageBounds.left, bounds.left);
+                const top = Math.max(pageBounds.top, bounds.top);
+                const right = Math.min(pageBounds.right, bounds.right);
+                const bottom = Math.min(pageBounds.bottom, bounds.bottom);
+                return {
                   x: (left - pageBounds.left) / pageBounds.width * 100,
                   y: (top - pageBounds.top) / pageBounds.height * 100,
                   width: (right - left) / pageBounds.width * 100,
                   height: (bottom - top) / pageBounds.height * 100,
                 };
-              }
+              }).filter((rect) => rect.width > 0 && rect.height > 0);
             }
           }
-          if (text) onTextSelect(text, page, rect);
+          if (text) onTextSelect(text, page, rects);
         }}
         ref={textLayerRef}
       />
@@ -1004,7 +1056,7 @@ function PdfContinuousCanvas({
   onVisiblePage: (page: number) => void;
   onDocumentReady: (pageCount: number) => void;
   onProgress: (loaded: number, total: number) => void;
-  onTextSelect: (text: string, page: number, rect: AnnotationRect | null) => void;
+  onTextSelect: (text: string, page: number, rects: AnnotationRect[]) => void;
   onZoom: (delta: number) => void;
   children: (page: number) => ReactNode;
 }) {
@@ -1187,6 +1239,7 @@ export function ReviewComposer({
   const [annotationKind, setAnnotationKind] = useState<"frame" | "highlight">("frame");
   const [annotationStart, setAnnotationStart] = useState<{ x: number; y: number } | null>(null);
   const [annotationRect, setAnnotationRect] = useState<AnnotationRect | null>(null);
+  const [highlightRects, setHighlightRects] = useState<AnnotationRect[]>([]);
   const [annotationPage, setAnnotationPage] = useState(page);
   const [busy, setBusy] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(true);
@@ -1844,6 +1897,7 @@ export function ReviewComposer({
     setDrawingAnnotation(true);
     setAnnotationKind(kind);
     setAnnotationRect(null);
+    setHighlightRects([]);
     setAnnotationPage(page);
     setContextTab("annotations");
     setMessage(kind === "highlight"
@@ -1859,6 +1913,7 @@ export function ReviewComposer({
       translation: translation.trim(),
       content: noteDraft.trim(),
       annotationKind,
+      highlightRects: annotationKind === "highlight" ? highlightRects : undefined,
       rect: annotationRect,
     }];
     setNotes(nextNotes);
@@ -1867,6 +1922,7 @@ export function ReviewComposer({
     setQuoteDraft("");
     setTranslation("");
     setAnnotationRect(null);
+    setHighlightRects([]);
   }
 
   function deleteAnnotation(index: number) {
@@ -1909,6 +1965,7 @@ export function ReviewComposer({
     setAnnotationKind(annotation.annotationKind ?? "frame");
     setAnnotationStart(null);
     setAnnotationRect({ ...annotation.rect });
+    setHighlightRects(annotation.highlightRects ?? []);
     setAnnotationPage(annotation.page);
     setContextTab("annotations");
     setMessage(`已复用 ${annotation.author} 在第 ${annotation.page} 页的批注位置，请填写你的批注。`);
@@ -1978,7 +2035,7 @@ export function ReviewComposer({
     window.localStorage.setItem("wisdomloong-translation-font-size", "14");
   }
 
-  function useSelectedPdfText(text: string, pageNumber: number, rect: AnnotationRect | null) {
+  function useSelectedPdfText(text: string, pageNumber: number, rects: AnnotationRect[]) {
     const normalized = text
       .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
       .replace(/\s+/g, " ")
@@ -1988,15 +2045,18 @@ export function ReviewComposer({
     setPage(pageNumber);
     setQuoteDraft(normalized);
     setTranslation("");
-    if (drawingAnnotation && annotationKind === "highlight" && rect) {
-      const x = Math.min(99, Math.max(0, rect.x));
-      const y = Math.min(99, Math.max(0, rect.y));
+    if (drawingAnnotation && annotationKind === "highlight" && rects.length > 0) {
+      const x = Math.min(...rects.map((rect) => rect.x));
+      const y = Math.min(...rects.map((rect) => rect.y));
+      const right = Math.max(...rects.map((rect) => rect.x + rect.width));
+      const bottom = Math.max(...rects.map((rect) => rect.y + rect.height));
       setAnnotationRect({
         x,
         y,
-        width: Math.min(100 - x, Math.max(1, rect.width)),
-        height: Math.min(100 - y, Math.max(1, rect.height)),
+        width: Math.max(1, right - x),
+        height: Math.max(1, bottom - y),
       });
+      setHighlightRects(rects);
       setAnnotationPage(pageNumber);
       setDrawingAnnotation(false);
       setContextTab("annotations");
@@ -2177,7 +2237,7 @@ export function ReviewComposer({
             style={{ top: `${bookmark.positionY}%` }}
           ><i>书签</i></span>
         )}
-        {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.rect).map(({ annotation, number, overlapIndex }) => (
+        {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.rect && annotation.annotationKind !== "highlight").map(({ annotation, number, overlapIndex }) => (
           <button
             aria-label={`批注 ${number}，${annotation.author}：${annotation.content}。点击在相同位置添加我的批注`}
             className={`pdf-annotation-box is-community is-${annotation.annotationKind ?? "frame"}${activeAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
@@ -2205,7 +2265,23 @@ export function ReviewComposer({
             <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}<small>点击在相同位置添加我的批注</small></strong>
           </button>
         ))}
-        {pageNotes.map((item, index) => {
+        {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.annotationKind === "highlight").flatMap(({ annotation, number }) =>
+          (annotation.highlightRects?.length ? annotation.highlightRects : annotation.rect ? [annotation.rect] : []).map((rect, rectIndex) => (
+            <button
+              aria-label={`高亮 ${number}，${annotation.author}：${annotation.content}`}
+              className={`pdf-text-highlight is-community${activeAnnotationId === annotation.id ? " is-active" : ""}`}
+              key={`community-highlight-${annotation.id}-${rectIndex}`}
+              onClick={(event) => { event.stopPropagation(); reuseCommunityAnnotationPosition(annotation); }}
+              onFocus={() => setActiveAnnotationId(annotation.id)}
+              onMouseEnter={() => setActiveAnnotationId(annotation.id)}
+              onMouseLeave={() => setActiveAnnotationId(null)}
+              style={{ left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
+              title={`${annotation.author}：${annotation.quote || annotation.content}`}
+              type="button"
+            />
+          ))
+        )}
+        {pageNotes.filter((item) => item.annotationKind !== "highlight").map((item, index) => {
           const overlapIndex = pageAnnotations.filter((annotation) =>
             annotation.rect && rectanglesOverlap(item.rect!, annotation.rect)
           ).length + pageNotes.slice(0, index).filter((note) =>
@@ -2227,7 +2303,17 @@ export function ReviewComposer({
             ><span>我{index + 1}</span></span>
           );
         })}
-        {annotationRect && annotationPage === pageNumber && (
+        {pageNotes.filter((item) => item.annotationKind === "highlight").flatMap((item, index) =>
+          (item.highlightRects?.length ? item.highlightRects : item.rect ? [item.rect] : []).map((rect, rectIndex) => (
+            <span
+              className="pdf-text-highlight is-own"
+              key={`own-highlight-${index}-${rectIndex}`}
+              style={{ left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
+              title={item.quote || item.content}
+            />
+          ))
+        )}
+        {annotationRect && annotationKind !== "highlight" && annotationPage === pageNumber && (
           <span
             className={`pdf-annotation-box is-pending is-${annotationKind}`}
             style={{
@@ -2239,6 +2325,13 @@ export function ReviewComposer({
             }}
           ><span>新</span></span>
         )}
+        {annotationKind === "highlight" && annotationPage === pageNumber && highlightRects.map((rect, index) => (
+          <span
+            className="pdf-text-highlight is-pending"
+            key={`pending-highlight-${index}`}
+            style={{ left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
+          />
+        ))}
         {placingBookmark && <strong>点击你当前读到的那一行</strong>}
         {drawingAnnotation && annotationKind === "frame" && !annotationStart && <strong>拖动鼠标框选论文中的图片或段落</strong>}
       </div>
@@ -2845,7 +2938,15 @@ export function ReviewComposer({
             <header className="workbench-section-heading"><div><strong>我的位置批注</strong><small>画框和高亮批注可生成读书笔记 PDF</small></div><span>{notes.length}</span></header>
             {annotationRect ? (
               <section className="note-composer">
-                <header><span>新批注</span><div><strong>填写这个{annotationKind === "highlight" ? "高亮" : "画框"}的批注</strong><small>截图、位置和文字会一起保存</small></div></header>
+                <header><span>新批注</span><div><strong>填写这个{annotationKind === "highlight" ? "高亮" : "画框"}的批注</strong><small>{annotationKind === "highlight" ? "原文、翻译和批注会一起保存" : "截图、位置和文字会一起保存"}</small></div></header>
+                {annotationKind === "highlight" && (
+                  <div className="highlight-text-preview">
+                    <strong>高亮原文</strong>
+                    <blockquote>{quoteDraft}</blockquote>
+                    {translation && <p><strong>翻译</strong>{translation}</p>}
+                    <button onClick={() => setContextTab("translate")} type="button">{translation ? "查看或修改翻译" : "翻译所选文字"}</button>
+                  </div>
+                )}
                 <textarea onChange={(event) => setNoteDraft(event.target.value)} placeholder={`写下你对这个${annotationKind === "highlight" ? "高亮" : "画框"}区域的理解…`} rows={5} value={noteDraft} />
                 <footer>
                   <span>伙伴框也可以直接复用</span>

@@ -4290,6 +4290,40 @@ select {
   mix-blend-mode: normal;
 }
 
+.pdf-text-highlight {
+  position: absolute;
+  z-index: 18;
+  box-sizing: border-box;
+  padding: 0;
+  color: #5d4300;
+  border: 0;
+  border-radius: 1px;
+  background: rgba(255, 216, 72, .48);
+  box-shadow: none;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.pdf-text-highlight.is-community {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.pdf-text-highlight.is-community:hover,
+.pdf-text-highlight.is-community:focus-visible,
+.pdf-text-highlight.is-community.is-active {
+  outline: 2px solid rgba(178, 123, 0, .42);
+  outline-offset: 1px;
+}
+
+.pdf-text-highlight.is-pending {
+  z-index: 60;
+  background: rgba(255, 216, 72, .62);
+}
+
 .pdf-annotation-box.is-pending {
   z-index: 60;
   border-style: dashed;
@@ -4831,6 +4865,44 @@ select {
 .annotation-start-actions > button:disabled {
   cursor: default;
   opacity: .42;
+}
+
+.highlight-text-preview {
+  padding: 10px;
+  display: grid;
+  gap: 7px;
+  border-radius: 7px;
+  background: rgba(255, 227, 122, .34);
+}
+
+.highlight-text-preview > strong,
+.highlight-text-preview p > strong {
+  color: #7b5800;
+  font-size: 9px;
+}
+
+.highlight-text-preview blockquote,
+.highlight-text-preview p {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.highlight-text-preview p {
+  display: grid;
+  gap: 4px;
+}
+
+.highlight-text-preview button {
+  width: fit-content;
+  padding: 6px 8px;
+  color: #5d4300;
+  border: 1px solid rgba(178, 123, 0, .35);
+  border-radius: 6px;
+  background: #ffe37a;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 750;
 }
 
 .context-empty {

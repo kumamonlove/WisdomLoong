@@ -25,6 +25,7 @@ type DiscussionAnnotation = {
   translation: string;
   content: string;
   annotationKind: "frame" | "highlight";
+  highlightRects: { x: number; y: number; width: number; height: number }[];
   rect: { x: number; y: number; width: number; height: number } | null;
 };
 
@@ -51,6 +52,7 @@ export async function GET(
            review_annotations.translation,
            review_annotations.content,
            review_annotations.annotation_kind AS "annotationKind",
+           review_annotations.highlight_rects AS "highlightRects",
            JSON_BUILD_OBJECT(
              'x', review_annotations.rect_x,
              'y', review_annotations.rect_y,

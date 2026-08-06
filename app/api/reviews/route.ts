@@ -14,6 +14,7 @@ type ReviewBody = {
     translation?: string;
     content?: string;
     annotationKind?: "frame" | "highlight";
+    highlightRects?: { x?: number; y?: number; width?: number; height?: number }[];
     rect?: { x?: number; y?: number; width?: number; height?: number } | null;
   }[];
 };
@@ -68,6 +69,14 @@ export async function POST(request: Request) {
         translation: annotation.translation?.trim().slice(0, 12_000) ?? "",
         content: annotation.content?.trim().slice(0, 4_000) ?? "",
         annotationKind: annotation.annotationKind === "highlight" ? "highlight" : "frame",
+        highlightRects: annotation.annotationKind === "highlight"
+          ? (Array.isArray(annotation.highlightRects) ? annotation.highlightRects : []).slice(0, 100).map((item) => ({
+              x: Math.max(0, Math.min(100, Number(item.x) || 0)),
+              y: Math.max(0, Math.min(100, Number(item.y) || 0)),
+              width: Math.max(0, Math.min(100, Number(item.width) || 0)),
+              height: Math.max(0, Math.min(100, Number(item.height) || 0)),
+            })).filter((item) => item.width > 0 && item.height > 0)
+          : [],
         rect: normalizedRect && normalizedRect.width >= 1 && normalizedRect.height >= 1
           ? normalizedRect
           : null,
@@ -125,8 +134,8 @@ export async function POST(request: Request) {
       await client.query(
         `INSERT INTO review_annotations
            (review_id, page_number, quote, translation, content,
-            rect_x, rect_y, rect_width, rect_height, annotation_kind)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            rect_x, rect_y, rect_width, rect_height, annotation_kind, highlight_rects)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)`,
         [
           reviewId,
           annotation.page,
@@ -138,6 +147,7 @@ export async function POST(request: Request) {
           annotation.rect?.width ?? null,
           annotation.rect?.height ?? null,
           annotation.annotationKind,
+          JSON.stringify(annotation.highlightRects),
         ],
       );
     }
