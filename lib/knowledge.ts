@@ -174,7 +174,17 @@ export async function getTeamReadingArticles() {
        latest_reviewer.username AS "reviewAuthor",
        latest_reviews.content AS "reviewContent",
        latest_reviews.id AS "reviewId",
-       (SELECT COUNT(*)::int FROM review_annotations WHERE review_annotations.review_id = latest_reviews.id) AS "reviewAnnotationCount",
+       CASE WHEN EXISTS (
+         SELECT 1 FROM published_annotations
+         WHERE published_annotations.user_id = latest_reviews.user_id
+           AND published_annotations.article_id = latest_reviews.article_id
+       ) THEN (
+         SELECT COUNT(*)::int FROM published_annotations
+         WHERE published_annotations.user_id = latest_reviews.user_id
+           AND published_annotations.article_id = latest_reviews.article_id
+       ) ELSE (
+         SELECT COUNT(*)::int FROM review_annotations WHERE review_annotations.review_id = latest_reviews.id
+       ) END AS "reviewAnnotationCount",
        review_stats.average_rating AS rating,
        review_stats.must_read AS "mustRead",
        JSON_BUILD_OBJECT(

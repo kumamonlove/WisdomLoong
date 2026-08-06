@@ -193,6 +193,30 @@ CREATE TABLE IF NOT EXISTS reading_annotation_drafts (
 CREATE INDEX IF NOT EXISTS reading_annotation_drafts_updated_idx
   ON reading_annotation_drafts(user_id, updated_at DESC);
 
+CREATE TABLE IF NOT EXISTS published_annotations (
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  page_number INTEGER NOT NULL CHECK (page_number > 0),
+  quote TEXT NOT NULL DEFAULT '',
+  translation TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL CHECK (CHAR_LENGTH(TRIM(content)) > 0),
+  annotation_kind TEXT NOT NULL DEFAULT 'frame' CHECK (annotation_kind IN ('frame', 'highlight')),
+  rect_x REAL NOT NULL,
+  rect_y REAL NOT NULL,
+  rect_width REAL NOT NULL,
+  rect_height REAL NOT NULL,
+  highlight_rects JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS published_annotations_article_idx
+  ON published_annotations(article_id, page_number, id);
+
+CREATE INDEX IF NOT EXISTS published_annotations_user_article_idx
+  ON published_annotations(user_id, article_id);
+
 CREATE TABLE IF NOT EXISTS reviews (
   id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -1231,6 +1231,7 @@ export function ReviewComposer({
   );
   const [annotationSaveStatus, setAnnotationSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const [annotationSaveError, setAnnotationSaveError] = useState("");
+  const [annotationPublishing, setAnnotationPublishing] = useState(false);
   const [serverConnection, setServerConnection] = useState<"checking" | "connected" | "disconnected">("checking");
   const [serverConnectionError, setServerConnectionError] = useState("");
   const [bookmark, setBookmark] = useState<ReadingBookmark | null>(startingArticle?.lastReadPage
@@ -1260,6 +1261,7 @@ export function ReviewComposer({
   const articleFocusRequest = useRef<number | null>(null);
   const annotationSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const annotationSaveRevisions = useRef(new Map<number, number>());
+  const annotationHoverTimer = useRef<number | null>(null);
   currentArticleIdRef.current = articleId;
 
   const selectedArticle = availableArticles.find((item) => item.id === articleId);
@@ -1440,6 +1442,54 @@ export function ReviewComposer({
         }
       });
   }, []);
+
+  async function publishAnnotations() {
+    if (!articleId || notes.length === 0 || annotationPublishing) return;
+    setAnnotationPublishing(true);
+    setMessage("");
+    try {
+      await annotationSaveQueue.current.catch(() => undefined);
+      const response = await fetch(`/api/articles/${articleId}/annotations/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ annotations: notes }),
+      });
+      const data = await responseJson(response);
+      setMessage(`已提交 ${Number(data.count) || notes.length} 条批注，其他成员现在可以看到。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "批注提交失败");
+    } finally {
+      setAnnotationPublishing(false);
+    }
+  }
+
+  function showAnnotationAfterDelay(annotationId: number) {
+    if (annotationHoverTimer.current !== null) window.clearTimeout(annotationHoverTimer.current);
+    annotationHoverTimer.current = window.setTimeout(() => {
+      setActiveAnnotationId(annotationId);
+      annotationHoverTimer.current = null;
+    }, 2_000);
+  }
+
+  function cancelAnnotationPreview(annotationId: number) {
+    if (annotationHoverTimer.current !== null) {
+      window.clearTimeout(annotationHoverTimer.current);
+      annotationHoverTimer.current = null;
+    }
+    setActiveAnnotationId((current) => current === annotationId ? null : current);
+  }
+
+  function focusAnnotationInSidebar(annotationId: number) {
+    if (annotationHoverTimer.current !== null) window.clearTimeout(annotationHoverTimer.current);
+    annotationHoverTimer.current = null;
+    setContextTab("annotations");
+    setActiveAnnotationId(annotationId);
+    window.requestAnimationFrame(() => {
+      const card = document.querySelector<HTMLElement>(`[data-community-annotation-id="${annotationId}"]`);
+      card?.scrollIntoView({ behavior: "smooth", block: "center" });
+      card?.focus({ preventScroll: true });
+    });
+  }
 
   function navigateToPosition(target: ReadingBookmark, behavior: ScrollBehavior = "smooth") {
     const normalizedPage = Math.min(
@@ -2241,18 +2291,21 @@ export function ReviewComposer({
           ><i>书签</i></span>
         )}
         {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.rect && annotation.annotationKind !== "highlight").map(({ annotation, number, overlapIndex }) => (
-          <button
+          <div
             aria-label={`批注 ${number}，${annotation.author}：${annotation.content}。点击在相同位置添加我的批注`}
             className={`pdf-annotation-box is-community is-${annotation.annotationKind ?? "frame"}${activeAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
             key={`community-${annotation.id}`}
-            onBlur={() => setActiveAnnotationId(null)}
             onClick={(event) => {
               event.stopPropagation();
               reuseCommunityAnnotationPosition(annotation);
             }}
-            onFocus={() => setActiveAnnotationId(annotation.id)}
-            onMouseEnter={() => setActiveAnnotationId(annotation.id)}
-            onMouseLeave={() => setActiveAnnotationId(null)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              reuseCommunityAnnotationPosition(annotation);
+            }}
+            onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
+            role="button"
             style={{
               left: `${annotation.rect!.x}%`,
               top: `${annotation.rect!.y}%`,
@@ -2262,11 +2315,19 @@ export function ReviewComposer({
               zIndex: activeAnnotationId === annotation.id ? 50 : 10 + overlapIndex,
               "--annotation-color": annotationColor(annotation.author),
             } as CSSProperties}
-            type="button"
+            tabIndex={0}
           >
-            <span>{number}</span>
-            <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}<small>点击在相同位置添加我的批注</small></strong>
-          </button>
+            <button
+              aria-label={`在右侧查看批注 ${number}`}
+              className="pdf-annotation-number"
+              onClick={(event) => { event.stopPropagation(); focusAnnotationInSidebar(annotation.id); }}
+              onFocus={() => showAnnotationAfterDelay(annotation.id)}
+              onMouseEnter={() => showAnnotationAfterDelay(annotation.id)}
+              onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
+              type="button"
+            >{number}</button>
+            <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}<small>点击数字在右侧查看</small></strong>
+          </div>
         ))}
         {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.annotationKind === "highlight").flatMap(({ annotation, number }) =>
           (annotation.highlightRects?.length ? annotation.highlightRects : annotation.rect ? [annotation.rect] : []).map((rect, rectIndex) => (
@@ -2930,13 +2991,13 @@ export function ReviewComposer({
               {activePartnerNote && activePartnerNote.annotationCount > 0 && (
                 <div className="note-linked-annotations">
                   <header><strong>这份笔记的批注</strong><span>{activePartnerNote.annotationCount} 条</span></header>
-                  {(activePartnerNote.isOwn ? notes : communityAnnotations.filter((annotation) => annotation.reviewId === activePartnerNote.id)).map((annotation, index) => (
+                  {(activePartnerNote.isOwn ? notes : communityAnnotations.filter((annotation) => annotation.reviewId === activePartnerNote.id || (annotation.reviewId === 0 && annotation.author === activePartnerNote.author))).map((annotation, index) => (
                     <button key={`${annotation.page}-${index}`} onClick={() => navigateToAnnotation(annotation)} type="button">
                       <strong>第 {annotation.page} 页 · {annotation.annotationKind === "highlight" ? "高亮" : "画框"}</strong>
                       <span>{annotation.content}</span>
                     </button>
                   ))}
-                  {!activePartnerNote.isOwn && communityAnnotations.filter((annotation) => annotation.reviewId === activePartnerNote.id).length === 0 && <small>正在加载批注…</small>}
+                  {!activePartnerNote.isOwn && communityAnnotations.filter((annotation) => annotation.reviewId === activePartnerNote.id || (annotation.reviewId === 0 && annotation.author === activePartnerNote.author)).length === 0 && <small>正在加载批注…</small>}
                 </div>
               )}
               <button onClick={returnToArticle} type="button">返回论文</button>
@@ -2950,6 +3011,7 @@ export function ReviewComposer({
               {currentAnnotationLayout.map(({ annotation, number }) => (
                 <article
                   className={activeAnnotationId === annotation.id ? "is-active" : ""}
+                  data-community-annotation-id={annotation.id}
                   key={annotation.id}
                   onBlur={() => setActiveAnnotationId(null)}
                   onFocus={() => setActiveAnnotationId(annotation.id)}
@@ -3001,6 +3063,12 @@ export function ReviewComposer({
               </section>
             )}
             <div className="saved-notes">
+              <div className="annotation-publish-bar">
+                <div><strong>提交给团队</strong><small>草稿仅自己可见；提交后其他成员即可看到，不需要发布读书笔记。</small></div>
+                <button disabled={notes.length === 0 || annotationPublishing || annotationSaveStatus === "saving"} onClick={() => void publishAnnotations()} type="button">
+                  {annotationPublishing ? "正在提交…" : `提交批注${notes.length > 0 ? `（${notes.length}）` : ""}`}
+                </button>
+              </div>
               <div className={`annotation-save-status is-${annotationSaveStatus}`} role="status">
                 <span>{annotationSaveStatus === "saving"
                   ? "正在实时保存…"
@@ -3100,7 +3168,7 @@ export function ReviewComposer({
                   {review.annotationCount > 0 && (
                     <div className="review-linked-annotations">
                       <header><strong>位置批注</strong><span>{review.annotationCount} 条</span></header>
-                      {(review.isOwn ? notes : communityAnnotations.filter((annotation) => annotation.reviewId === review.id)).map((annotation, index) => (
+                      {(review.isOwn ? notes : communityAnnotations.filter((annotation) => annotation.reviewId === review.id || (annotation.reviewId === 0 && annotation.author === review.author))).map((annotation, index) => (
                         <button key={`${annotation.page}-${index}`} onClick={() => navigateToAnnotation(annotation)} type="button">
                           <strong>第 {annotation.page} 页</strong><span>{annotation.content}</span><i aria-hidden="true">→</i>
                         </button>

@@ -46,31 +46,54 @@ export async function GET(
 
   const annotationsQuery = includeAnnotations
     ? database.query<DiscussionAnnotation>(
-        `SELECT
-           review_annotations.id,
-           reviews.id AS "reviewId",
-           users.username AS author,
-           review_annotations.page_number AS page,
-           review_annotations.quote,
-           review_annotations.translation,
-           review_annotations.content,
-           review_annotations.annotation_kind AS "annotationKind",
-           review_annotations.highlight_rects AS "highlightRects",
-           JSON_BUILD_OBJECT(
-             'x', review_annotations.rect_x,
-             'y', review_annotations.rect_y,
-             'width', review_annotations.rect_width,
-             'height', review_annotations.rect_height
-           ) AS rect
-         FROM review_annotations
-         INNER JOIN reviews ON reviews.id = review_annotations.review_id
-         INNER JOIN users ON users.id = reviews.user_id
-         WHERE reviews.article_id = $1 AND reviews.user_id <> $2
-           AND review_annotations.rect_x IS NOT NULL
-           AND review_annotations.rect_y IS NOT NULL
-           AND review_annotations.rect_width IS NOT NULL
-           AND review_annotations.rect_height IS NOT NULL
-         ORDER BY review_annotations.page_number, review_annotations.id`,
+        `SELECT * FROM (
+           SELECT
+             review_annotations.id,
+             reviews.id AS "reviewId",
+             users.username AS author,
+             review_annotations.page_number AS page,
+             review_annotations.quote,
+             review_annotations.translation,
+             review_annotations.content,
+             review_annotations.annotation_kind AS "annotationKind",
+             review_annotations.highlight_rects AS "highlightRects",
+             JSON_BUILD_OBJECT(
+               'x', review_annotations.rect_x, 'y', review_annotations.rect_y,
+               'width', review_annotations.rect_width, 'height', review_annotations.rect_height
+             ) AS rect
+           FROM review_annotations
+           INNER JOIN reviews ON reviews.id = review_annotations.review_id
+           INNER JOIN users ON users.id = reviews.user_id
+           WHERE reviews.article_id = $1 AND reviews.user_id <> $2
+             AND review_annotations.rect_x IS NOT NULL
+             AND review_annotations.rect_y IS NOT NULL
+             AND review_annotations.rect_width IS NOT NULL
+             AND review_annotations.rect_height IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM published_annotations
+               WHERE published_annotations.article_id = reviews.article_id
+                 AND published_annotations.user_id = reviews.user_id
+             )
+           UNION ALL
+           SELECT
+             -published_annotations.id AS id,
+             0 AS "reviewId",
+             users.username AS author,
+             published_annotations.page_number AS page,
+             published_annotations.quote,
+             published_annotations.translation,
+             published_annotations.content,
+             published_annotations.annotation_kind AS "annotationKind",
+             published_annotations.highlight_rects AS "highlightRects",
+             JSON_BUILD_OBJECT(
+               'x', published_annotations.rect_x, 'y', published_annotations.rect_y,
+               'width', published_annotations.rect_width, 'height', published_annotations.rect_height
+             ) AS rect
+           FROM published_annotations
+           INNER JOIN users ON users.id = published_annotations.user_id
+           WHERE published_annotations.article_id = $1 AND published_annotations.user_id <> $2
+         ) annotations
+         ORDER BY page, id`,
         [articleId, user.id],
       )
     : Promise.resolve({ rows: [] as DiscussionAnnotation[] });
@@ -88,7 +111,17 @@ export async function GET(
          BOOL_OR(review_likes.user_id = $2) AS "likedByViewer",
          reviews.user_id = $2 AS "isOwn",
          (SELECT COUNT(*)::int FROM reading_note_reads WHERE reading_note_reads.review_id = reviews.id) AS "readCount",
-         (SELECT COUNT(*)::int FROM review_annotations WHERE review_annotations.review_id = reviews.id) AS "annotationCount",
+         CASE WHEN EXISTS (
+           SELECT 1 FROM published_annotations
+           WHERE published_annotations.user_id = reviews.user_id
+             AND published_annotations.article_id = reviews.article_id
+         ) THEN (
+           SELECT COUNT(*)::int FROM published_annotations
+           WHERE published_annotations.user_id = reviews.user_id
+             AND published_annotations.article_id = reviews.article_id
+         ) ELSE (
+           SELECT COUNT(*)::int FROM review_annotations WHERE review_annotations.review_id = reviews.id
+         ) END AS "annotationCount",
          reading_note_pdfs.file_name AS "noteFileName",
          reading_note_pdfs.source AS "noteSource",
          reviews.updated_at::text AS "updatedAt"
