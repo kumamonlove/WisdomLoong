@@ -1849,6 +1849,17 @@ select {
   border-top: 1px solid rgba(121, 113, 99, .16);
 }
 
+.review-preview-annotations {
+  margin-top: 12px;
+  padding: 7px 9px;
+  display: inline-flex;
+  color: #486355;
+  border-radius: 999px;
+  background: rgba(76, 104, 91, .1);
+  font-size: 9px;
+  font-weight: 800;
+}
+
 .review-collection {
   margin-top: 24px;
   border-top: 1px solid var(--line);
@@ -4039,6 +4050,70 @@ select {
 
 .own-note-read-count small,
 .own-note-inline-reads {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.note-linked-annotations,
+.review-linked-annotations {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.note-linked-annotations > header,
+.review-linked-annotations > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.note-linked-annotations > button,
+.review-linked-annotations > button {
+  width: 100%;
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  border: 1px solid rgba(76, 104, 91, .2);
+  border-radius: 7px;
+  background: rgba(76, 104, 91, .06);
+  cursor: pointer;
+  text-align: left;
+}
+
+.note-linked-annotations > button:hover,
+.review-linked-annotations > button:hover {
+  border-color: rgba(214, 95, 64, .38);
+  background: rgba(214, 95, 64, .06);
+}
+
+.note-linked-annotations > button strong,
+.review-linked-annotations > button strong {
+  color: #486355;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.note-linked-annotations > button span,
+.review-linked-annotations > button span {
+  overflow: hidden;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-linked-annotations > button i,
+.review-linked-annotations > button i {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.note-linked-annotations > small {
   color: var(--muted);
   font-size: 9px;
 }

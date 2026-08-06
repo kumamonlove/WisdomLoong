@@ -27,6 +27,7 @@ export type ArticleCardData = {
   reviewAuthor: string | null;
   reviewContent: string | null;
   reviewId?: number | null;
+  reviewAnnotationCount?: number;
   rating: number | null;
   mustRead?: boolean;
   reviews?: {
@@ -173,6 +174,7 @@ export async function getTeamReadingArticles() {
        latest_reviewer.username AS "reviewAuthor",
        latest_reviews.content AS "reviewContent",
        latest_reviews.id AS "reviewId",
+       (SELECT COUNT(*)::int FROM review_annotations WHERE review_annotations.review_id = latest_reviews.id) AS "reviewAnnotationCount",
        review_stats.average_rating AS rating,
        review_stats.must_read AS "mustRead",
        JSON_BUILD_OBJECT(

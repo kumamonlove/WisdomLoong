@@ -171,6 +171,9 @@ export function ArticleGrid({
                 <strong>{article.reviewAuthor}</strong> 的读书笔记
               </p>
               {article.reviewContent && <blockquote>{article.reviewContent}</blockquote>}
+              {(article.reviewAnnotationCount ?? 0) > 0 && (
+                <span className="review-preview-annotations">▣ 同时包含 {article.reviewAnnotationCount} 条位置批注</span>
+              )}
               <span className="review-preview-open">在阅读器中打开读书笔记 <i aria-hidden="true">↗</i></span>
             </a>
           ) : null}

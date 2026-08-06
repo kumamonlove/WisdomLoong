@@ -13,6 +13,7 @@ type DiscussionReview = {
   likedByViewer: boolean;
   isOwn: boolean;
   readCount: number;
+  annotationCount: number;
   noteFileName: string | null;
   noteSource: "generated" | "uploaded" | null;
   updatedAt: string;
@@ -87,6 +88,7 @@ export async function GET(
          BOOL_OR(review_likes.user_id = $2) AS "likedByViewer",
          reviews.user_id = $2 AS "isOwn",
          (SELECT COUNT(*)::int FROM reading_note_reads WHERE reading_note_reads.review_id = reviews.id) AS "readCount",
+         (SELECT COUNT(*)::int FROM review_annotations WHERE review_annotations.review_id = reviews.id) AS "annotationCount",
          reading_note_pdfs.file_name AS "noteFileName",
          reading_note_pdfs.source AS "noteSource",
          reviews.updated_at::text AS "updatedAt"

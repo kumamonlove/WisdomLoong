@@ -565,6 +565,7 @@ type CommunityReview = {
   likedByViewer: boolean;
   isOwn: boolean;
   readCount: number;
+  annotationCount: number;
   noteFileName: string | null;
   noteSource: "generated" | "uploaded" | null;
   attachments: { id: number; reviewId: number; note: string }[];
@@ -1668,7 +1669,7 @@ export function ReviewComposer({
   }, [articleId]);
 
   useEffect(() => {
-    if (!articleId || !articlePdfReady || viewingPartnerNote) return;
+    if (!articleId || (viewingPartnerNote ? pdfLoading : !articlePdfReady)) return;
     let cancelled = false;
     setAnnotationsLoading(true);
     fetch(`/api/articles/${articleId}/discussion?includeAnnotations=1`)
@@ -1683,7 +1684,7 @@ export function ReviewComposer({
         if (!cancelled) setAnnotationsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [articleId, articlePdfReady, viewingPartnerNote]);
+  }, [articleId, articlePdfReady, pdfLoading, viewingPartnerNote]);
 
   useEffect(() => {
     if (!articlePdfReady || viewingPartnerNote || !pendingAnnotationNavigation.current) return;
@@ -2925,7 +2926,19 @@ export function ReviewComposer({
           {viewingPartnerNote ? (
             <div className="current-page-discussion note-reading-notice">
               <h3>{activeNoteAuthor}的读书笔记</h3>
-              <p className="context-empty">当前正在查看笔记 PDF，返回论文后继续处理画框批注。</p>
+              <p className="context-empty">读书笔记与论文位置批注同时保留。</p>
+              {activePartnerNote && activePartnerNote.annotationCount > 0 && (
+                <div className="note-linked-annotations">
+                  <header><strong>这份笔记的批注</strong><span>{activePartnerNote.annotationCount} 条</span></header>
+                  {(activePartnerNote.isOwn ? notes : communityAnnotations.filter((annotation) => annotation.reviewId === activePartnerNote.id)).map((annotation, index) => (
+                    <button key={`${annotation.page}-${index}`} onClick={() => navigateToAnnotation(annotation)} type="button">
+                      <strong>第 {annotation.page} 页 · {annotation.annotationKind === "highlight" ? "高亮" : "画框"}</strong>
+                      <span>{annotation.content}</span>
+                    </button>
+                  ))}
+                  {!activePartnerNote.isOwn && communityAnnotations.filter((annotation) => annotation.reviewId === activePartnerNote.id).length === 0 && <small>正在加载批注…</small>}
+                </div>
+              )}
               <button onClick={returnToArticle} type="button">返回论文</button>
             </div>
           ) : !articlePdfReady ? (
@@ -3084,6 +3097,16 @@ export function ReviewComposer({
                       ? <span className="own-note-inline-reads">{review.readCount} 人读过</span>
                       : <ReadingNoteLikeButton initialCount={review.likeCount} initiallyLiked={review.likedByViewer} reviewId={review.id} />}
                   </div>}
+                  {review.annotationCount > 0 && (
+                    <div className="review-linked-annotations">
+                      <header><strong>位置批注</strong><span>{review.annotationCount} 条</span></header>
+                      {(review.isOwn ? notes : communityAnnotations.filter((annotation) => annotation.reviewId === review.id)).map((annotation, index) => (
+                        <button key={`${annotation.page}-${index}`} onClick={() => navigateToAnnotation(annotation)} type="button">
+                          <strong>第 {annotation.page} 页</strong><span>{annotation.content}</span><i aria-hidden="true">→</i>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </details>
               ))}
               {communityReviews.length === 0 && <p className="context-empty">还没有伙伴发布评论或读书笔记。</p>}
