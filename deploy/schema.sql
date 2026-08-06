@@ -160,11 +160,13 @@ CREATE TABLE IF NOT EXISTS reading_progress (
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
   page_number INTEGER NOT NULL CHECK (page_number > 0),
   position_y REAL NOT NULL DEFAULT 0 CHECK (position_y >= 0 AND position_y <= 100),
+  position_x REAL NOT NULL DEFAULT 0 CHECK (position_x >= 0 AND position_x <= 100),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, article_id)
 );
 
 ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS position_y REAL NOT NULL DEFAULT 0;
+ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS position_x REAL NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS reading_progress_user_updated_idx
   ON reading_progress(user_id, updated_at DESC);

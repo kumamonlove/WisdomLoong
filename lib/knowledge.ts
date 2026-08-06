@@ -74,6 +74,7 @@ export type ReaderArticle = {
   sourceUrl: string;
   lastReadPage: number | null;
   lastReadPositionY: number | null;
+  lastReadPositionX: number | null;
   isRead: boolean;
   rating?: number | null;
   readCount?: number;
@@ -378,6 +379,7 @@ export async function getArticlesForReview(userId: number) {
             articles.source_url AS "sourceUrl",
             reading_progress.page_number AS "lastReadPage",
             reading_progress.position_y AS "lastReadPositionY",
+            reading_progress.position_x AS "lastReadPositionX",
             EXISTS (
               SELECT 1 FROM article_reads
               WHERE article_reads.user_id = $1

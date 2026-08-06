@@ -3928,7 +3928,7 @@ select {
   background: rgba(42, 140, 107, .1);
 }
 
-.reader-toolbar .highlight-button {
+.reader-toolbar .text-annotation-button {
   color: #5d4300;
   border-color: #d4a72c;
   background: #ffe37a;
@@ -4552,38 +4552,54 @@ select {
   mix-blend-mode: normal;
 }
 
-.pdf-text-highlight {
+.pdf-text-annotation {
   position: absolute;
   z-index: 18;
   box-sizing: border-box;
   padding: 0;
   color: #5d4300;
   border: 0;
+  border-right: 1.5px solid rgba(180, 73, 48, .88);
+  border-left: 1.5px solid rgba(180, 73, 48, .88);
   border-radius: 1px;
-  background: rgba(255, 216, 72, .48);
+  background: rgba(214, 95, 64, .035);
   box-shadow: none;
   font-size: 8px;
   font-weight: 800;
   line-height: 1;
-  mix-blend-mode: multiply;
   pointer-events: none;
 }
 
-.pdf-text-highlight.is-community {
+.pdf-text-annotation.is-first {
+  border-top: 1.5px solid rgba(180, 73, 48, .88);
+  border-radius: 4px 4px 0 0;
+}
+
+.pdf-text-annotation.is-last {
+  border-bottom: 1.5px solid rgba(180, 73, 48, .88);
+  border-radius: 0 0 4px 4px;
+}
+
+.pdf-text-annotation.is-first.is-last {
+  border-radius: 4px;
+}
+
+.pdf-text-annotation.is-community {
   cursor: pointer;
   pointer-events: auto;
 }
 
-.pdf-text-highlight.is-community:hover,
-.pdf-text-highlight.is-community:focus-visible,
-.pdf-text-highlight.is-community.is-active {
-  outline: 2px solid rgba(178, 123, 0, .42);
+.pdf-text-annotation.is-community:hover,
+.pdf-text-annotation.is-community:focus-visible,
+.pdf-text-annotation.is-community.is-active {
+  outline: 2px solid rgba(214, 95, 64, .35);
   outline-offset: 1px;
 }
 
-.pdf-text-highlight.is-pending {
+.pdf-text-annotation.is-pending {
   z-index: 60;
-  background: rgba(255, 216, 72, .62);
+  border-style: dashed;
+  background: rgba(214, 95, 64, .06);
 }
 
 .pdf-annotation-box.is-pending {

@@ -143,6 +143,7 @@ function ArxivLookup({
         sourceUrl: article.sourceUrl,
         lastReadPage: null,
         lastReadPositionY: null,
+        lastReadPositionX: null,
         isRead: false,
         savedAnnotations: [],
         ownReview: null,
@@ -399,6 +400,7 @@ function PdfDropImporter({
         sourceUrl: `/api/articles/${Number(data.articleId)}/pdf`,
         lastReadPage: null,
         lastReadPositionY: null,
+        lastReadPositionX: null,
         isRead: false,
         savedAnnotations: [],
         ownReview: null,
@@ -548,7 +550,7 @@ type ReadingNote = {
   highlightRects?: AnnotationRect[];
   rect?: AnnotationRect | null;
 };
-type ReadingBookmark = { page: number; positionY: number };
+type ReadingBookmark = { page: number; positionY: number; positionX?: number };
 type CommunityAnnotation = ReadingNote & {
   id: number;
   reviewId: number;
@@ -618,7 +620,7 @@ async function generateReadingNotePdf({
   notes: ReadingNote[];
 }) {
   const framedNotes = notes.filter((note) => note.rect);
-  if (!pdfUrl || framedNotes.length === 0) throw new Error("请先添加至少一条画框或高亮批注");
+  if (!pdfUrl || framedNotes.length === 0) throw new Error("请先添加至少一条图片或文字批注");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
   pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.30`;
@@ -636,7 +638,7 @@ async function generateReadingNotePdf({
     for (const [index, note] of framedNotes.entries()) {
       if (note.annotationKind === "highlight") {
         const sections = [
-          { label: "高亮原文", text: note.quote },
+          { label: "文字原文", text: note.quote },
           { label: "翻译", text: note.translation },
           { label: "批注", text: note.content },
         ].filter((section) => section.text.trim());
@@ -648,7 +650,7 @@ async function generateReadingNotePdf({
           pageCanvas.width = 1240;
           pageCanvas.height = 1754;
           const context = pageCanvas.getContext("2d");
-          if (!context) throw new Error("无法排版高亮批注");
+          if (!context) throw new Error("无法排版文字批注");
           context.fillStyle = "#f8f6ef";
           context.fillRect(0, 0, 1240, 1754);
           context.fillStyle = "#e1b72f";
@@ -660,7 +662,7 @@ async function generateReadingNotePdf({
           let y = 105 + titleLines.length * 52 + 28;
           context.fillStyle = "#766f62";
           context.font = "24px sans-serif";
-          context.fillText(`${author} · 高亮 ${index + 1} · 原文第 ${note.page} 页${continuation ? "（续）" : ""}`, 80, y);
+          context.fillText(`${author} · 文字批注 ${index + 1} · 原文第 ${note.page} 页${continuation ? "（续）" : ""}`, 80, y);
           y += 58;
 
           while (y < 1620 && (sectionIndex < sections.length || remainingLines.length > 0)) {
@@ -1235,7 +1237,7 @@ export function ReviewComposer({
   const [serverConnection, setServerConnection] = useState<"checking" | "connected" | "disconnected">("checking");
   const [serverConnectionError, setServerConnectionError] = useState("");
   const [bookmark, setBookmark] = useState<ReadingBookmark | null>(startingArticle?.lastReadPage
-    ? { page: startingArticle.lastReadPage, positionY: startingArticle.lastReadPositionY ?? 0 }
+    ? { page: startingArticle.lastReadPage, positionY: startingArticle.lastReadPositionY ?? 0, positionX: startingArticle.lastReadPositionX ?? 0 }
     : null);
   const [bookmarkSaving, setBookmarkSaving] = useState(false);
   const [placingBookmark, setPlacingBookmark] = useState(false);
@@ -1525,12 +1527,13 @@ export function ReviewComposer({
     navigateToPosition(target);
   }
 
-  async function saveBookmarkAt(pageNumber: number, positionY: number) {
+  async function saveBookmarkAt(pageNumber: number, positionY: number, positionX: number) {
     if (!articleId || viewingPartnerNote) return;
     const previousBookmark = bookmark;
     const nextBookmark = {
       page: Math.max(1, Math.floor(pageNumber)),
       positionY: Math.max(0, Math.min(100, positionY)),
+      positionX: Math.max(0, Math.min(100, positionX)),
     };
     setBookmark(nextBookmark);
     setPlacingBookmark(false);
@@ -1548,9 +1551,10 @@ export function ReviewComposer({
             ...article,
             lastReadPage: nextBookmark.page,
             lastReadPositionY: nextBookmark.positionY,
+            lastReadPositionX: nextBookmark.positionX ?? 0,
           }
         : article));
-      setMessage(`书签已保存：第 ${nextBookmark.page} 页，页内 ${Math.round(nextBookmark.positionY)}% 位置。`);
+      setMessage(`书签已保存：第 ${nextBookmark.page} 页${(nextBookmark.positionX ?? 0) < 50 ? "左侧" : "右侧"}，页内 ${Math.round(nextBookmark.positionY)}% 位置。`);
     } catch (error) {
       setBookmark(previousBookmark);
       setPlacingBookmark(true);
@@ -1570,7 +1574,7 @@ export function ReviewComposer({
       const response = await fetch(`/api/articles/${articleId}/progress`, { method: "DELETE" });
       await responseJson(response);
       setAvailableArticles((current) => current.map((article) => article.id === articleId
-        ? { ...article, lastReadPage: null, lastReadPositionY: null }
+        ? { ...article, lastReadPage: null, lastReadPositionY: null, lastReadPositionX: null }
         : article));
       setMessage("书签已删除。");
     } catch (error) {
@@ -1803,7 +1807,7 @@ export function ReviewComposer({
     setEditingAnnotationContent("");
     setAnnotationSaveStatus("saved");
     setBookmark(article?.lastReadPage
-      ? { page: article.lastReadPage, positionY: article.lastReadPositionY ?? 0 }
+      ? { page: article.lastReadPage, positionY: article.lastReadPositionY ?? 0, positionX: article.lastReadPositionX ?? 0 }
       : null);
     setPlacingBookmark(false);
     setDrawingAnnotation(false);
@@ -1954,8 +1958,8 @@ export function ReviewComposer({
     setAnnotationPage(page);
     setContextTab("annotations");
     setMessage(kind === "highlight"
-      ? "请在当前 PDF 页面上拖动选择要高亮的内容。"
-      : "请在当前 PDF 页面上拖动画框；位置会随页码一起保存并分享给伙伴。");
+      ? "请在当前 PDF 页面上拖选要批注的文字。"
+      : "请在当前 PDF 页面上为图片或区域拖动画框。");
   }
 
   function addCurrentAnnotation() {
@@ -2113,7 +2117,7 @@ export function ReviewComposer({
       setAnnotationPage(pageNumber);
       setDrawingAnnotation(false);
       setContextTab("annotations");
-      setMessage(`已高亮第 ${pageNumber} 页所选文字，请在右侧填写批注并加入。`);
+      setMessage(`已选中第 ${pageNumber} 页文字，请在右侧填写文字批注。`);
       window.getSelection()?.removeAllRanges();
       return;
     }
@@ -2141,16 +2145,44 @@ export function ReviewComposer({
     setMessage(source === "generated" ? "读书笔记 PDF 已生成，可预览后随评论发布。" : "已选择个人读书笔记 PDF。");
   }
 
+  async function translateForReadingNote(text: string) {
+    const response = await fetch("/api/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(data.error ?? "文字批注自动翻译失败");
+    }
+    const translated = (await response.text()).trim();
+    if (!translated) throw new Error("文字批注自动翻译没有返回内容");
+    return translated;
+  }
+
   async function buildNotePdf() {
     if (!selectedArticle) return;
     setGeneratingNotePdf(true);
     setMessage("");
     try {
+      const translatedNotes: ReadingNote[] = [];
+      for (const note of notes) {
+        if (note.annotationKind === "highlight" && note.quote.trim() && !note.translation.trim()) {
+          setMessage(`正在自动翻译第 ${note.page} 页的文字批注…`);
+          translatedNotes.push({ ...note, translation: await translateForReadingNote(note.quote) });
+        } else {
+          translatedNotes.push(note);
+        }
+      }
+      if (translatedNotes.some((note, index) => note.translation !== notes[index]?.translation)) {
+        setNotes(translatedNotes);
+        persistAnnotationDrafts(articleId, translatedNotes);
+      }
       const file = await generateReadingNotePdf({
         pdfUrl: localPdfUrl,
         title: selectedArticle.title,
         author: username,
-        notes,
+        notes: translatedNotes,
       });
       useNotePdf(file, "generated");
     } catch (error) {
@@ -2240,7 +2272,7 @@ export function ReviewComposer({
         aria-label={placingBookmark
           ? `在 PDF 第 ${pageNumber} 页点击放置书签`
           : drawingAnnotation
-            ? `在 PDF 第 ${pageNumber} 页拖动${annotationKind === "highlight" ? "高亮" : "画框"}`
+            ? `在 PDF 第 ${pageNumber} 页${annotationKind === "highlight" ? "选择文字" : "为图片画框"}`
             : `PDF 第 ${pageNumber} 页批注层`}
         className={`pdf-annotation-layer${drawingAnnotation && annotationKind === "frame" ? " is-drawing" : ""}${drawingAnnotation && annotationKind === "highlight" ? " is-highlighting" : ""}${placingBookmark ? " is-bookmarking" : ""}`}
         onPointerDown={(event) => {
@@ -2249,7 +2281,7 @@ export function ReviewComposer({
             event.stopPropagation();
             const point = annotationPoint(event);
             setPage(pageNumber);
-            void saveBookmarkAt(pageNumber, point.y);
+            void saveBookmarkAt(pageNumber, point.y, point.x);
             return;
           }
           if (!drawingAnnotation || annotationKind === "highlight") return;
@@ -2280,14 +2312,19 @@ export function ReviewComposer({
           setPage(pageNumber);
           setAnnotationRect(nextRect);
           setAnnotationPage(pageNumber);
-          setMessage(`已${annotationKind === "highlight" ? "高亮" : "框选"}第 ${pageNumber} 页，请在右侧填写批注并加入。`);
+          setMessage(`已框选第 ${pageNumber} 页图片，请在右侧填写批注并加入。`);
         }}
       >
         {bookmark?.page === pageNumber && (
           <span
             aria-label={`阅读书签，第 ${pageNumber} 页页内 ${Math.round(bookmark.positionY)}%`}
             className="pdf-bookmark-line"
-            style={{ top: `${bookmark.positionY}%` }}
+            style={{
+              left: (bookmark.positionX ?? 0) < 50 ? 0 : "50%",
+              right: "auto",
+              top: `${bookmark.positionY}%`,
+              width: "50%",
+            }}
           ><i>书签</i></span>
         )}
         {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.rect && annotation.annotationKind !== "highlight").map(({ annotation, number, overlapIndex }) => (
@@ -2332,8 +2369,8 @@ export function ReviewComposer({
         {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.annotationKind === "highlight").flatMap(({ annotation, number }) =>
           (annotation.highlightRects?.length ? annotation.highlightRects : annotation.rect ? [annotation.rect] : []).map((rect, rectIndex) => (
             <button
-              aria-label={`高亮 ${number}，${annotation.author}：${annotation.content}`}
-              className={`pdf-text-highlight is-community${activeAnnotationId === annotation.id ? " is-active" : ""}`}
+              aria-label={`文字批注 ${number}，${annotation.author}：${annotation.content}`}
+              className={`pdf-text-annotation is-community${rectIndex === 0 ? " is-first" : ""}${rectIndex === (annotation.highlightRects?.length || 1) - 1 ? " is-last" : ""}${activeAnnotationId === annotation.id ? " is-active" : ""}`}
               key={`community-highlight-${annotation.id}-${rectIndex}`}
               onClick={(event) => { event.stopPropagation(); reuseCommunityAnnotationPosition(annotation); }}
               onFocus={() => setActiveAnnotationId(annotation.id)}
@@ -2370,7 +2407,7 @@ export function ReviewComposer({
         {pageNotes.filter((item) => item.annotationKind === "highlight").flatMap((item, index) =>
           (item.highlightRects?.length ? item.highlightRects : item.rect ? [item.rect] : []).map((rect, rectIndex) => (
             <span
-              className="pdf-text-highlight is-own"
+              className={`pdf-text-annotation is-own${rectIndex === 0 ? " is-first" : ""}${rectIndex === (item.highlightRects?.length || 1) - 1 ? " is-last" : ""}`}
               key={`own-highlight-${index}-${rectIndex}`}
               style={{ left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
               title={item.quote || item.content}
@@ -2391,7 +2428,7 @@ export function ReviewComposer({
         )}
         {annotationKind === "highlight" && annotationPage === pageNumber && highlightRects.map((rect, index) => (
           <span
-            className="pdf-text-highlight is-pending"
+            className={`pdf-text-annotation is-pending${index === 0 ? " is-first" : ""}${index === highlightRects.length - 1 ? " is-last" : ""}`}
             key={`pending-highlight-${index}`}
             style={{ left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
           />
@@ -2733,7 +2770,7 @@ export function ReviewComposer({
                           <button
                             className="bookmark-jump-button"
                             onClick={() => navigateToPosition(bookmark)}
-                            title={`跳到第 ${bookmark.page} 页页内 ${Math.round(bookmark.positionY)}%`}
+                            title={`跳到第 ${bookmark.page} 页${(bookmark.positionX ?? 0) < 50 ? "左侧" : "右侧"}页内 ${Math.round(bookmark.positionY)}%`}
                             type="button"
                           >🔖 跳转到书签</button>
                           <button
@@ -2778,10 +2815,10 @@ export function ReviewComposer({
                         伙伴批注 {annotationsEnabled ? "开" : "关"}
                       </button>
                       <button className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("frame")} type="button">
-                        ▣ 画框批注
+                        ▣ 图片批注
                       </button>
-                      <button className="highlight-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("highlight")} type="button">
-                        ▨ 高亮批注
+                      <button className="text-annotation-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("highlight")} type="button">
+                        ▨ 文字批注
                       </button>
                       <button
                         className="generate-note-button"
@@ -2993,7 +3030,7 @@ export function ReviewComposer({
                   <header><strong>这份笔记的批注</strong><span>{activePartnerNote.annotationCount} 条</span></header>
                   {(activePartnerNote.isOwn ? notes : communityAnnotations.filter((annotation) => annotation.reviewId === activePartnerNote.id || (annotation.reviewId === 0 && annotation.author === activePartnerNote.author))).map((annotation, index) => (
                     <button key={`${annotation.page}-${index}`} onClick={() => navigateToAnnotation(annotation)} type="button">
-                      <strong>第 {annotation.page} 页 · {annotation.annotationKind === "highlight" ? "高亮" : "画框"}</strong>
+                      <strong>第 {annotation.page} 页 · {annotation.annotationKind === "highlight" ? "文字批注" : "图片批注"}</strong>
                       <span>{annotation.content}</span>
                     </button>
                   ))}
@@ -3033,19 +3070,19 @@ export function ReviewComposer({
           )}
 
           <section className="own-annotation-workspace">
-            <header className="workbench-section-heading"><div><strong>我的位置批注</strong><small>画框和高亮批注可生成读书笔记 PDF</small></div><span>{notes.length}</span></header>
+            <header className="workbench-section-heading"><div><strong>我的批注</strong><small>图片批注生成截图，文字批注自动翻译</small></div><span>{notes.length}</span></header>
             {annotationRect ? (
               <section className="note-composer">
-                <header><span>新批注</span><div><strong>填写这个{annotationKind === "highlight" ? "高亮" : "画框"}的批注</strong><small>{annotationKind === "highlight" ? "原文、翻译和批注会一起保存" : "截图、位置和文字会一起保存"}</small></div></header>
+                <header><span>新批注</span><div><strong>填写{annotationKind === "highlight" ? "文字" : "图片"}批注</strong><small>{annotationKind === "highlight" ? "原文、自动翻译和批注会一起保存" : "截图、位置和批注会一起保存"}</small></div></header>
                 {annotationKind === "highlight" && (
                   <div className="highlight-text-preview">
-                    <strong>高亮原文</strong>
+                    <strong>所选原文</strong>
                     <blockquote>{quoteDraft}</blockquote>
                     {translation && <p><strong>翻译</strong>{translation}</p>}
                     <button onClick={() => setContextTab("translate")} type="button">{translation ? "查看或修改翻译" : "翻译所选文字"}</button>
                   </div>
                 )}
-                <textarea onChange={(event) => setNoteDraft(event.target.value)} placeholder={`写下你对这个${annotationKind === "highlight" ? "高亮" : "画框"}区域的理解…`} rows={5} value={noteDraft} />
+                <textarea onChange={(event) => setNoteDraft(event.target.value)} placeholder={`写下你对这段${annotationKind === "highlight" ? "文字" : "图片"}的理解…`} rows={5} value={noteDraft} />
                 <footer>
                   <span>伙伴框也可以直接复用</span>
                   <button
@@ -3058,8 +3095,8 @@ export function ReviewComposer({
             ) : (
               <section className="annotation-start-card">
                 <span>▣</span><strong>选择一个批注位置</strong>
-                <p>在论文中拖动画框或高亮，也可点击伙伴已有的位置，然后填写批注。</p>
-                {!viewingPartnerNote && <div className="annotation-start-actions"><button disabled={pdfLoading} onClick={() => startDrawingAnnotation("frame")} type="button">开始画框</button><button disabled={pdfLoading} onClick={() => startDrawingAnnotation("highlight")} type="button">开始高亮</button></div>}
+                <p>图片批注通过画框创建；文字批注通过选择 PDF 文字创建。</p>
+                {!viewingPartnerNote && <div className="annotation-start-actions"><button disabled={pdfLoading} onClick={() => startDrawingAnnotation("frame")} type="button">批注图片</button><button disabled={pdfLoading} onClick={() => startDrawingAnnotation("highlight")} type="button">批注文字</button></div>}
               </section>
             )}
             <div className="saved-notes">
@@ -3105,7 +3142,7 @@ export function ReviewComposer({
                         className="saved-note-jump"
                         onClick={() => navigateToAnnotation(note)}
                         type="button"
-                      ><strong>{note.annotationKind === "highlight" ? "高亮" : "批注"} {index + 1}</strong><span>{note.annotationKind === "highlight" ? "▨" : "▣"} {note.content}</span></button>
+                      ><strong>{note.annotationKind === "highlight" ? "文字批注" : "图片批注"} {index + 1}</strong><span>{note.annotationKind === "highlight" ? "▨" : "▣"} {note.content}</span></button>
                       <button aria-label={`编辑批注 ${index + 1}`} className="saved-note-edit" onClick={() => startEditingAnnotation(index)} type="button">编辑</button>
                       <button aria-label={`删除批注 ${index + 1}`} className="saved-note-delete" onClick={() => deleteAnnotation(index)} type="button">×</button>
                     </>
