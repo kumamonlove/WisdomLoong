@@ -7,6 +7,7 @@ type AnnotationInput = {
   quote?: string;
   translation?: string;
   content?: string;
+  annotationKind?: "frame" | "highlight";
   rect?: { x?: number; y?: number; width?: number; height?: number } | null;
 };
 
@@ -36,6 +37,7 @@ function normalizeAnnotations(value: unknown) {
         quote: sanitizeAnnotationText(annotation.quote, 12_000),
         translation: sanitizeAnnotationText(annotation.translation, 12_000),
         content: sanitizeAnnotationText(annotation.content, 4_000),
+        annotationKind: annotation.annotationKind === "highlight" ? "highlight" : "frame",
         rect: normalizedRect && normalizedRect.width >= 1 && normalizedRect.height >= 1
           ? normalizedRect
           : null,

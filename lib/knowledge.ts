@@ -46,6 +46,7 @@ export type ArticleCardData = {
       quote: string;
       translation: string;
       content: string;
+      annotationKind?: "frame" | "highlight";
       rect?: { x: number; y: number; width: number; height: number } | null;
     }[];
   }[];
@@ -79,6 +80,7 @@ export type ReaderArticle = {
     quote: string;
     translation: string;
     content: string;
+    annotationKind?: "frame" | "highlight";
     rect?: { x: number; y: number; width: number; height: number } | null;
   }[];
   ownReview: {
@@ -94,6 +96,7 @@ export type ReaderArticle = {
       quote: string;
       translation: string;
       content: string;
+      annotationKind?: "frame" | "highlight";
       rect?: { x: number; y: number; width: number; height: number } | null;
     }[];
   } | null;
@@ -408,6 +411,7 @@ export async function getArticlesForReview(userId: number) {
            'quote', review_annotations.quote,
            'translation', review_annotations.translation,
            'content', review_annotations.content,
+           'annotationKind', review_annotations.annotation_kind,
            'rect', CASE WHEN review_annotations.rect_x IS NULL THEN NULL ELSE JSON_BUILD_OBJECT(
              'x', review_annotations.rect_x,
              'y', review_annotations.rect_y,

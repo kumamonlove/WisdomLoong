@@ -544,6 +544,7 @@ type ReadingNote = {
   quote: string;
   translation: string;
   content: string;
+  annotationKind?: "frame" | "highlight";
   rect?: AnnotationRect | null;
 };
 type ReadingBookmark = { page: number; positionY: number };
@@ -1163,6 +1164,7 @@ export function ReviewComposer({
   const [bookmarkSaving, setBookmarkSaving] = useState(false);
   const [placingBookmark, setPlacingBookmark] = useState(false);
   const [drawingAnnotation, setDrawingAnnotation] = useState(false);
+  const [annotationKind, setAnnotationKind] = useState<"frame" | "highlight">("frame");
   const [annotationStart, setAnnotationStart] = useState<{ x: number; y: number } | null>(null);
   const [annotationRect, setAnnotationRect] = useState<AnnotationRect | null>(null);
   const [annotationPage, setAnnotationPage] = useState(page);
@@ -1817,13 +1819,16 @@ export function ReviewComposer({
     });
   }
 
-  function startDrawingAnnotation() {
+  function startDrawingAnnotation(kind: "frame" | "highlight" = "frame") {
     setPlacingBookmark(false);
     setDrawingAnnotation(true);
+    setAnnotationKind(kind);
     setAnnotationRect(null);
     setAnnotationPage(page);
     setContextTab("annotations");
-    setMessage("请在当前 PDF 页面上拖动画框；位置会随页码一起保存并分享给伙伴。");
+    setMessage(kind === "highlight"
+      ? "请在当前 PDF 页面上拖动选择要高亮的内容。"
+      : "请在当前 PDF 页面上拖动画框；位置会随页码一起保存并分享给伙伴。");
   }
 
   function addCurrentAnnotation() {
@@ -1833,6 +1838,7 @@ export function ReviewComposer({
       quote: quoteDraft.trim(),
       translation: translation.trim(),
       content: noteDraft.trim(),
+      annotationKind,
       rect: annotationRect,
     }];
     setNotes(nextNotes);
@@ -1880,6 +1886,7 @@ export function ReviewComposer({
   function reuseCommunityAnnotationPosition(annotation: CommunityAnnotation) {
     if (!annotation.rect) return;
     setDrawingAnnotation(false);
+    setAnnotationKind(annotation.annotationKind ?? "frame");
     setAnnotationStart(null);
     setAnnotationRect({ ...annotation.rect });
     setAnnotationPage(annotation.page);
@@ -2084,7 +2091,7 @@ export function ReviewComposer({
         aria-label={placingBookmark
           ? `在 PDF 第 ${pageNumber} 页点击放置书签`
           : drawingAnnotation
-            ? `在 PDF 第 ${pageNumber} 页拖动画框`
+            ? `在 PDF 第 ${pageNumber} 页拖动${annotationKind === "highlight" ? "高亮" : "画框"}`
             : `PDF 第 ${pageNumber} 页批注层`}
         className={`pdf-annotation-layer${drawingAnnotation ? " is-drawing" : ""}${placingBookmark ? " is-bookmarking" : ""}`}
         onPointerDown={(event) => {
@@ -2124,7 +2131,7 @@ export function ReviewComposer({
           setPage(pageNumber);
           setAnnotationRect(nextRect);
           setAnnotationPage(pageNumber);
-          setMessage(`已框选第 ${pageNumber} 页，请在右侧填写批注并加入。`);
+          setMessage(`已${annotationKind === "highlight" ? "高亮" : "框选"}第 ${pageNumber} 页，请在右侧填写批注并加入。`);
         }}
       >
         {bookmark?.page === pageNumber && (
@@ -2137,7 +2144,7 @@ export function ReviewComposer({
         {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.rect).map(({ annotation, number, overlapIndex }) => (
           <button
             aria-label={`批注 ${number}，${annotation.author}：${annotation.content}。点击在相同位置添加我的批注`}
-            className={`pdf-annotation-box is-community${activeAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
+            className={`pdf-annotation-box is-community is-${annotation.annotationKind ?? "frame"}${activeAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
             key={`community-${annotation.id}`}
             onBlur={() => setActiveAnnotationId(null)}
             onClick={(event) => {
@@ -2170,7 +2177,7 @@ export function ReviewComposer({
           ).length;
           return (
             <span
-              className={`pdf-annotation-box is-own${overlapIndex ? " is-overlapping" : ""}`}
+              className={`pdf-annotation-box is-own is-${item.annotationKind ?? "frame"}${overlapIndex ? " is-overlapping" : ""}`}
               key={`own-${index}`}
               style={{
                 left: `${item.rect!.x}%`,
@@ -2186,7 +2193,7 @@ export function ReviewComposer({
         })}
         {annotationRect && annotationPage === pageNumber && (
           <span
-            className="pdf-annotation-box is-pending"
+            className={`pdf-annotation-box is-pending is-${annotationKind}`}
             style={{
               left: `${annotationRect.x}%`,
               top: `${annotationRect.y}%`,
@@ -2197,7 +2204,7 @@ export function ReviewComposer({
           ><span>新</span></span>
         )}
         {placingBookmark && <strong>点击你当前读到的那一行</strong>}
-        {drawingAnnotation && !annotationStart && <strong>拖动鼠标框选论文中的图片或段落</strong>}
+        {drawingAnnotation && !annotationStart && <strong>{annotationKind === "highlight" ? "拖动鼠标高亮论文内容" : "拖动鼠标框选论文中的图片或段落"}</strong>}
       </div>
     );
   }
@@ -2556,8 +2563,11 @@ export function ReviewComposer({
                       >
                         伙伴批注 {annotationsEnabled ? "开" : "关"}
                       </button>
-                      <button className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={startDrawingAnnotation} type="button">
+                      <button className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("frame")} type="button">
                         ▣ 画框批注
+                      </button>
+                      <button className="highlight-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("highlight")} type="button">
+                        ▨ 高亮批注
                       </button>
                       <button
                         className="generate-note-button"
@@ -2796,11 +2806,11 @@ export function ReviewComposer({
           )}
 
           <section className="own-annotation-workspace">
-            <header className="workbench-section-heading"><div><strong>我的画框批注</strong><small>批注将用于生成读书笔记 PDF</small></div><span>{notes.length}</span></header>
+            <header className="workbench-section-heading"><div><strong>我的位置批注</strong><small>画框和高亮批注可生成读书笔记 PDF</small></div><span>{notes.length}</span></header>
             {annotationRect ? (
               <section className="note-composer">
-                <header><span>新批注</span><div><strong>填写这个画框的批注</strong><small>截图、位置和文字会一起保存</small></div></header>
-                <textarea onChange={(event) => setNoteDraft(event.target.value)} placeholder="写下你对这个画框区域的理解…" rows={5} value={noteDraft} />
+                <header><span>新批注</span><div><strong>填写这个{annotationKind === "highlight" ? "高亮" : "画框"}的批注</strong><small>截图、位置和文字会一起保存</small></div></header>
+                <textarea onChange={(event) => setNoteDraft(event.target.value)} placeholder={`写下你对这个${annotationKind === "highlight" ? "高亮" : "画框"}区域的理解…`} rows={5} value={noteDraft} />
                 <footer>
                   <span>伙伴框也可以直接复用</span>
                   <button
@@ -2812,9 +2822,9 @@ export function ReviewComposer({
               </section>
             ) : (
               <section className="annotation-start-card">
-                <span>▣</span><strong>选择一个画框</strong>
-                <p>在论文中拖动画框，或点击伙伴已有的框，然后填写批注。</p>
-                {!viewingPartnerNote && <button disabled={pdfLoading} onClick={startDrawingAnnotation} type="button">开始画框</button>}
+                <span>▣</span><strong>选择一个批注位置</strong>
+                <p>在论文中拖动画框或高亮，也可点击伙伴已有的位置，然后填写批注。</p>
+                {!viewingPartnerNote && <div className="annotation-start-actions"><button disabled={pdfLoading} onClick={() => startDrawingAnnotation("frame")} type="button">开始画框</button><button disabled={pdfLoading} onClick={() => startDrawingAnnotation("highlight")} type="button">开始高亮</button></div>}
               </section>
             )}
             <div className="saved-notes">
@@ -2854,7 +2864,7 @@ export function ReviewComposer({
                         className="saved-note-jump"
                         onClick={() => navigateToAnnotation(note)}
                         type="button"
-                      ><strong>批注 {index + 1}</strong><span>▣ {note.content}</span></button>
+                      ><strong>{note.annotationKind === "highlight" ? "高亮" : "批注"} {index + 1}</strong><span>{note.annotationKind === "highlight" ? "▨" : "▣"} {note.content}</span></button>
                       <button aria-label={`编辑批注 ${index + 1}`} className="saved-note-edit" onClick={() => startEditingAnnotation(index)} type="button">编辑</button>
                       <button aria-label={`删除批注 ${index + 1}`} className="saved-note-delete" onClick={() => deleteAnnotation(index)} type="button">×</button>
                     </>

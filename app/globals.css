@@ -3807,6 +3807,12 @@ select {
   background: rgba(42, 140, 107, .1);
 }
 
+.reader-toolbar .highlight-button {
+  color: #5d4300;
+  border-color: #d4a72c;
+  background: #ffe37a;
+}
+
 .reader-toolbar .bookmark-save-button {
   min-width: 92px;
   color: #fff9df;
@@ -4253,6 +4259,23 @@ select {
 
 .pdf-annotation-box.is-own.is-overlapping {
   border-style: dashed;
+}
+
+.pdf-annotation-box.is-highlight {
+  border: 0;
+  border-radius: 2px;
+  background: rgba(255, 216, 72, .46);
+  box-shadow: 0 0 0 1px rgba(188, 140, 0, .18) inset;
+  mix-blend-mode: multiply;
+}
+
+.pdf-annotation-box.is-highlight.is-community {
+  background: rgba(255, 216, 72, .42);
+}
+
+.pdf-annotation-box.is-highlight > span {
+  --annotation-color: #b27b00;
+  mix-blend-mode: normal;
 }
 
 .pdf-annotation-box.is-pending {
@@ -4745,7 +4768,7 @@ select {
 }
 
 .note-reading-notice > button,
-.annotation-start-card > button {
+.annotation-start-actions > button {
   padding: 8px 10px;
   color: var(--white);
   border: 0;
@@ -4782,7 +4805,18 @@ select {
   line-height: 1.6;
 }
 
-.annotation-start-card > button:disabled {
+.annotation-start-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.annotation-start-actions > button:last-child {
+  color: #5d4300;
+  background: #ffe37a;
+}
+
+.annotation-start-actions > button:disabled {
   cursor: default;
   opacity: .42;
 }
