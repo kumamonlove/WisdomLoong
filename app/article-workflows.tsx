@@ -1236,7 +1236,7 @@ export function ReviewComposer({
   const [zoom, setZoom] = useState(100);
   const [fitWidthEnabled, setFitWidthEnabled] = useState(false);
   const [focusMode, setFocusMode] = useState(startFocused);
-  const [contextTab, setContextTab] = useState<"annotations" | "translate" | "publish">("annotations");
+  const [contextTab, setContextTab] = useState<"annotations" | "publish">("annotations");
   const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
   const [communityAnnotations, setCommunityAnnotations] = useState<CommunityAnnotation[]>([]);
   const [discussionLoading, setDiscussionLoading] = useState(false);
@@ -1268,7 +1268,12 @@ export function ReviewComposer({
   const [quoteDraft, setQuoteDraft] = useState("");
   const [translation, setTranslation] = useState("");
   const [translating, setTranslating] = useState(false);
-  const [translationFontSize, setTranslationFontSize] = useState(14);
+  const [translationError, setTranslationError] = useState("");
+  const [textSelection, setTextSelection] = useState<{
+    text: string;
+    page: number;
+    rects: AnnotationRect[];
+  } | null>(null);
   const [notes, setNotes] = useState<ReadingNote[]>(
     (startingArticle?.savedAnnotations ?? startingReview?.annotations ?? []).filter((note) => note.rect),
   );
@@ -1719,13 +1724,6 @@ export function ReviewComposer({
   }, []);
 
   useEffect(() => {
-    const saved = Number(window.localStorage.getItem("wisdomloong-translation-font-size"));
-    if (Number.isFinite(saved) && saved >= 12 && saved <= 22) {
-      setTranslationFontSize(saved);
-    }
-  }, []);
-
-  useEffect(() => {
     if (!articleId) return;
     const rawDraft = window.localStorage.getItem(annotationDraftStorageKey(articleId));
     if (!rawDraft) return;
@@ -1854,6 +1852,11 @@ export function ReviewComposer({
     setDrawingAnnotation(false);
     setAnnotationStart(null);
     setAnnotationRect(null);
+    setHighlightRects([]);
+    setTextSelection(null);
+    setQuoteDraft("");
+    setTranslation("");
+    setTranslationError("");
     setActiveAnnotationId(null);
     setPartnerNoteReviewId(null);
     setPartnerNoteError(false);
@@ -1996,6 +1999,9 @@ export function ReviewComposer({
     setAnnotationKind(kind);
     setAnnotationRect(null);
     setHighlightRects([]);
+    setTextSelection(null);
+    setTranslation("");
+    setTranslationError("");
     setAnnotationPage(page);
     setContextTab("annotations");
     setMessage(kind === "highlight"
@@ -2008,7 +2014,7 @@ export function ReviewComposer({
     const nextNotes = [...notes, {
       page: annotationPage,
       quote: quoteDraft.trim(),
-      translation: translation.trim(),
+      translation: "",
       content: noteDraft.trim(),
       annotationKind,
       highlightRects: annotationKind === "highlight" ? highlightRects : undefined,
@@ -2021,6 +2027,20 @@ export function ReviewComposer({
     setTranslation("");
     setAnnotationRect(null);
     setHighlightRects([]);
+  }
+
+  function cancelPendingAnnotation() {
+    setDrawingAnnotation(false);
+    setAnnotationStart(null);
+    setAnnotationRect(null);
+    setHighlightRects([]);
+    setTextSelection(null);
+    setQuoteDraft("");
+    setTranslation("");
+    setTranslationError("");
+    setNoteDraft("");
+    window.getSelection()?.removeAllRanges();
+    setMessage("已取消这次批注。");
   }
 
   function deleteAnnotation(index: number) {
@@ -2057,27 +2077,16 @@ export function ReviewComposer({
     setEditingAnnotationContent("");
   }
 
-  async function readClipboard() {
-    try {
-      const value = await navigator.clipboard.readText();
-      setQuoteDraft(value);
-      setTranslation("");
-      if (!value.trim()) setMessage("剪贴板里没有可翻译的文字。");
-    } catch {
-      setMessage("无法读取剪贴板，请直接粘贴论文原文。");
-    }
-  }
-
-  async function translateQuote() {
-    if (!quoteDraft.trim()) return;
+  async function translateSelectedText() {
+    if (!textSelection?.text.trim()) return;
     setTranslating(true);
-    setMessage("");
     setTranslation("");
+    setTranslationError("");
     try {
       const response = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: quoteDraft }),
+        body: JSON.stringify({ text: textSelection.text }),
       });
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as { error?: string };
@@ -2102,23 +2111,36 @@ export function ReviewComposer({
       if (!result.trim()) throw new Error("翻译服务没有返回内容");
       setTranslation(result.trim());
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "翻译失败");
+      setTranslationError(error instanceof Error ? error.message : "翻译失败");
     } finally {
       setTranslating(false);
     }
   }
 
-  function changeTranslationFontSize(delta: number) {
-    setTranslationFontSize((current) => {
-      const next = Math.max(12, Math.min(22, current + delta));
-      window.localStorage.setItem("wisdomloong-translation-font-size", String(next));
-      return next;
+  function beginTextAnnotation(selection: { text: string; page: number; rects: AnnotationRect[] }) {
+    if (selection.rects.length === 0) return;
+    const x = Math.min(...selection.rects.map((rect) => rect.x));
+    const y = Math.min(...selection.rects.map((rect) => rect.y));
+    const right = Math.max(...selection.rects.map((rect) => rect.x + rect.width));
+    const bottom = Math.max(...selection.rects.map((rect) => rect.y + rect.height));
+    setPage(selection.page);
+    setQuoteDraft(selection.text);
+    setTranslation("");
+    setTranslationError("");
+    setAnnotationKind("highlight");
+    setAnnotationRect({
+      x,
+      y,
+      width: Math.max(1, right - x),
+      height: Math.max(1, bottom - y),
     });
-  }
-
-  function resetTranslationFontSize() {
-    setTranslationFontSize(14);
-    window.localStorage.setItem("wisdomloong-translation-font-size", "14");
+    setHighlightRects(selection.rects);
+    setAnnotationPage(selection.page);
+    setDrawingAnnotation(false);
+    setTextSelection(null);
+    setContextTab("annotations");
+    setMessage(`已选中第 ${selection.page} 页文字，请填写批注；不需要时可以取消框选。`);
+    window.getSelection()?.removeAllRanges();
   }
 
   function useSelectedPdfText(text: string, pageNumber: number, rects: AnnotationRect[]) {
@@ -2128,32 +2150,19 @@ export function ReviewComposer({
       .trim()
       .slice(0, 12_000);
     if (!normalized) return;
+    if (annotationRect) return;
     setPage(pageNumber);
-    setQuoteDraft(normalized);
     setTranslation("");
+    setTranslationError("");
+    const selection = { text: normalized, page: pageNumber, rects };
     if (drawingAnnotation && annotationKind === "highlight" && rects.length > 0) {
-      const x = Math.min(...rects.map((rect) => rect.x));
-      const y = Math.min(...rects.map((rect) => rect.y));
-      const right = Math.max(...rects.map((rect) => rect.x + rect.width));
-      const bottom = Math.max(...rects.map((rect) => rect.y + rect.height));
-      setAnnotationRect({
-        x,
-        y,
-        width: Math.max(1, right - x),
-        height: Math.max(1, bottom - y),
-      });
-      setHighlightRects(rects);
-      setAnnotationPage(pageNumber);
-      setDrawingAnnotation(false);
-      setContextTab("annotations");
-      setMessage(`已选中第 ${pageNumber} 页文字，请在右侧填写文字批注。`);
-      window.getSelection()?.removeAllRanges();
+      beginTextAnnotation(selection);
       return;
     }
-    setContextTab("translate");
-    setMessage(translationEnabled
-      ? `已选中第 ${pageNumber} 页原文，点击右侧“翻译成中文”。`
-      : "已选中论文原文；翻译服务尚未配置 API Key。");
+    if (rects.length === 0) return;
+    setQuoteDraft(normalized);
+    setTextSelection(selection);
+    setMessage("");
   }
 
   function useNotePdf(file: File, source: "generated" | "uploaded") {
@@ -2295,6 +2304,9 @@ export function ReviewComposer({
     const pendingOverlap = annotationRect && annotationPage === pageNumber
       ? pageAnnotations.filter((annotation) => annotation.rect && rectanglesOverlap(annotationRect, annotation.rect)).length
       : 0;
+    const selectionAnchor = textSelection?.page === pageNumber
+      ? textSelection.rects[textSelection.rects.length - 1]
+      : null;
 
     return (
       <div
@@ -2466,6 +2478,32 @@ export function ReviewComposer({
           <svg aria-hidden="true" className="pdf-text-annotation-shape is-pending" preserveAspectRatio="none" viewBox="0 0 100 100">
             <polygon points={textAnnotationPolygon(highlightRects)} vectorEffect="non-scaling-stroke" />
           </svg>
+        )}
+        {textSelection && selectionAnchor && (
+          <section
+            aria-label="所选文字操作"
+            className={`pdf-selection-actions${selectionAnchor.y > 76 ? " is-above" : ""}`}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            style={{
+              left: `${Math.min(62, Math.max(2, selectionAnchor.x))}%`,
+              top: `${selectionAnchor.y > 76 ? selectionAnchor.y : selectionAnchor.y + selectionAnchor.height}%`,
+            }}
+          >
+            <div>
+              <button onClick={() => beginTextAnnotation(textSelection)} type="button">批注</button>
+              <button
+                disabled={!translationEnabled || translating}
+                onClick={() => void translateSelectedText()}
+                type="button"
+              >{translating ? "翻译中…" : "翻译"}</button>
+            </div>
+            {!translationEnabled && <small>翻译服务暂不可用</small>}
+            {translationError && <small className="is-error" role="alert">{translationError}</small>}
+            {translation && <p><strong>中文译文</strong>{translation}</p>}
+          </section>
         )}
         {placingBookmark && <strong>点击你当前读到的那一行</strong>}
         {drawingAnnotation && annotationKind === "frame" && !annotationStart && <strong>拖动鼠标框选论文中的图片或段落</strong>}
@@ -3043,9 +3081,6 @@ export function ReviewComposer({
           <button className={contextTab === "annotations" ? "selected" : ""} onClick={() => { setContextTab("annotations"); setMessage(""); }} type="button">
             <i aria-hidden="true">▣</i><strong>批注</strong>
           </button>
-          <button className={contextTab === "translate" ? "selected" : ""} onClick={() => { setContextTab("translate"); setMessage(""); }} type="button">
-            <i aria-hidden="true">译</i><strong>翻译</strong>
-          </button>
           <button className={contextTab === "publish" ? "selected" : ""} onClick={() => { setContextTab("publish"); setMessage(""); }} type="button">
             <i aria-hidden="true">↑</i><strong>发布</strong>
           </button>
@@ -3101,7 +3136,7 @@ export function ReviewComposer({
           )}
 
           <section className="own-annotation-workspace">
-            <header className="workbench-section-heading"><div><strong>我的批注</strong><small>图片批注生成截图，文字批注自动翻译</small></div><span>{notes.length}</span></header>
+            <header className="workbench-section-heading"><div><strong>我的批注</strong><small>文字批注保存原文，生成报告时自动翻译</small></div><span>{notes.length}</span></header>
             {annotationRect ? (
               <section className="note-composer">
                 <header><span>新批注</span><div><strong>填写{annotationKind === "highlight" ? "文字" : "图片"}批注</strong><small>{annotationKind === "highlight" ? "所选原文和批注会一起保存" : "截图、位置和批注会一起保存"}</small></div></header>
@@ -3113,12 +3148,8 @@ export function ReviewComposer({
                 )}
                 <textarea onChange={(event) => setNoteDraft(event.target.value)} placeholder={`写下你对这段${annotationKind === "highlight" ? "文字" : "图片"}的理解…`} rows={5} value={noteDraft} />
                 <footer>
-                  <span>伙伴框也可以直接复用</span>
-                  <button
-                    disabled={!noteDraft.trim()}
-                    onClick={addCurrentAnnotation}
-                    type="button"
-                  >加入批注</button>
+                  <button className="cancel-pending-annotation" onClick={cancelPendingAnnotation} type="button">取消框选</button>
+                  <button disabled={!noteDraft.trim()} onClick={addCurrentAnnotation} type="button">加入批注</button>
                 </footer>
               </section>
             ) : (
@@ -3179,38 +3210,6 @@ export function ReviewComposer({
               ))}
             </div>
           </section>
-        </div>
-
-        <div className="context-panel" hidden={contextTab !== "translate"}>
-          <header className="workbench-section-heading"><div><strong>学术翻译</strong><small>适合论文术语、公式与引用</small></div></header>
-          {translationEnabled ? (
-            <section className="translation-assistant">
-              <div><strong>原文 → 简体中文</strong><button onClick={readClipboard} type="button">粘贴</button></div>
-              <textarea
-                onChange={(event) => { setQuoteDraft(event.target.value); setTranslation(""); }}
-                placeholder="在左侧 PDF 中选中文字，或粘贴论文原文…"
-                rows={7}
-                value={quoteDraft}
-              />
-              <button disabled={!quoteDraft.trim() || translating} onClick={translateQuote} type="button">{translating ? "正在翻译…" : "翻译成中文"}</button>
-              {translation && (
-                <div className="translation-result">
-                  <div className="translation-result-heading">
-                    <span>中文译文</span>
-                    <div aria-label="译文字号" className="translation-font-controls">
-                      <button aria-label="减小译文字号" disabled={translationFontSize <= 12} onClick={() => changeTranslationFontSize(-2)} type="button">小</button>
-                      <button aria-label="恢复默认译文字号" onClick={resetTranslationFontSize} title="恢复默认字号" type="button">{translationFontSize}px</button>
-                      <button aria-label="增大译文字号" disabled={translationFontSize >= 22} onClick={() => changeTranslationFontSize(2)} type="button">大</button>
-                    </div>
-                  </div>
-                  <p style={{ fontSize: `${translationFontSize}px` }}>{translation}</p>
-                </div>
-              )}
-              {message && <p className="context-inline-message" role="status">{message}</p>}
-            </section>
-          ) : (
-            <section className="translation-assistant coming-soon"><div><strong>学术翻译</strong><span>暂不可用</span></div><p>翻译服务配置完成后，可直接选中 PDF 原文翻译。</p></section>
-          )}
         </div>
 
         <form className="review-form reader-review-form" hidden={contextTab !== "publish"} onSubmit={submitReview}>

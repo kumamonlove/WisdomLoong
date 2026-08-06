@@ -4845,6 +4845,91 @@ select {
   white-space: nowrap;
 }
 
+.pdf-selection-actions {
+  position: absolute;
+  z-index: 90;
+  width: min(310px, 36%);
+  min-width: 190px;
+  padding: 8px;
+  color: var(--ink);
+  border: 1px solid rgba(24, 24, 22, .16);
+  border-radius: 10px;
+  background: rgba(255, 254, 250, .98);
+  box-shadow: 0 10px 28px rgba(24, 24, 22, .2);
+  pointer-events: auto;
+  transform: translateY(8px);
+}
+
+.pdf-selection-actions.is-above {
+  transform: translateY(calc(-100% - 8px));
+}
+
+.pdf-selection-actions > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.pdf-selection-actions button {
+  min-height: 30px;
+  padding: 6px 10px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.pdf-selection-actions button:first-child {
+  color: var(--white);
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.pdf-selection-actions button:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.pdf-selection-actions button:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+.pdf-selection-actions > small {
+  margin-top: 7px;
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.pdf-selection-actions > small.is-error {
+  color: #8c3b2c;
+}
+
+.pdf-selection-actions > p {
+  max-height: 190px;
+  margin: 8px 0 0;
+  padding: 9px 10px;
+  overflow: auto;
+  color: var(--ink);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 10px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.pdf-selection-actions > p > strong {
+  margin-bottom: 4px;
+  display: block;
+  color: var(--muted);
+  font-size: 8px;
+  letter-spacing: .06em;
+}
+
 .server-connection {
   min-height: 26px;
   padding: 4px 8px;
@@ -4904,7 +4989,7 @@ select {
   margin: 0 -6px 16px;
   padding: 4px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 3px;
   border-radius: 10px;
   background: var(--surface);
@@ -5546,6 +5631,16 @@ select {
 .note-composer footer button:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+.note-composer footer .cancel-pending-annotation {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--white);
+}
+
+.note-composer footer .cancel-pending-annotation:hover {
+  border-color: var(--ink);
 }
 
 .crop-dialog {
