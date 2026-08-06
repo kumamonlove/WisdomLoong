@@ -3918,41 +3918,41 @@ select {
 
 .reader-toolbar .generate-note-button {
   color: var(--white);
-  border-color: #2a8c6b;
-  background: #2a8c6b;
+  border-color: var(--accent);
+  background: var(--accent);
 }
 
 .reader-toolbar .annotation-toggle.enabled {
-  color: #1f6b50;
-  border-color: rgba(42, 140, 107, .45);
-  background: rgba(42, 140, 107, .1);
+  color: var(--ink);
+  border-color: rgba(24, 24, 22, .34);
+  background: rgba(24, 24, 22, .07);
 }
 
 .reader-toolbar .text-annotation-button {
-  color: #5d4300;
-  border-color: #d4a72c;
-  background: #ffe37a;
+  color: var(--accent);
+  border-color: rgba(154, 69, 48, .4);
+  background: rgba(154, 69, 48, .06);
 }
 
 .reader-toolbar .bookmark-save-button {
   min-width: 92px;
-  color: #fff9df;
-  border-color: #8b6400;
-  background: linear-gradient(135deg, #9b7100, #c39416);
-  box-shadow: 0 3px 9px rgba(155, 113, 0, .2);
+  color: var(--white);
+  border-color: var(--ink);
+  background: var(--ink);
+  box-shadow: none;
 }
 
 .reader-toolbar .bookmark-save-button.is-placing {
-  color: #5d4300;
-  border-color: #d2a62f;
-  background: #ffe89b;
-  box-shadow: 0 0 0 3px rgba(211, 166, 47, .18);
+  color: var(--accent);
+  border-color: rgba(154, 69, 48, .45);
+  background: rgba(154, 69, 48, .08);
+  box-shadow: 0 0 0 3px rgba(154, 69, 48, .1);
 }
 
 .reader-toolbar .bookmark-jump-button {
-  color: #704f00;
-  border-color: #d7b44b;
-  background: #fffdf3;
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--white);
 }
 
 .reader-toolbar .bookmark-delete-button {
@@ -4152,10 +4152,10 @@ select {
   align-items: center;
   gap: 7px;
   box-sizing: border-box;
-  color: #315c49;
-  border: 1px solid rgba(42, 140, 107, .35);
+  color: var(--ink);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(42, 140, 107, .09);
+  background: var(--white);
   font-size: 11px;
   font-weight: 720;
   text-decoration: none;
@@ -4163,8 +4163,8 @@ select {
 
 .reader-file-tools a:hover {
   color: var(--white);
-  border-color: #2a8c6b;
-  background: #2a8c6b;
+  border-color: var(--ink);
+  background: var(--ink);
 }
 
 .reader-file-tools a i {
@@ -4380,8 +4380,8 @@ select {
   right: 0;
   left: 0;
   height: 3px;
-  background: repeating-linear-gradient(90deg, #b87f00 0 18px, #ffd75f 18px 28px);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, .95), 0 2px 5px rgba(127, 88, 0, .2);
+  background: repeating-linear-gradient(90deg, #9a4530 0 18px, #d7a495 18px 28px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .95), 0 2px 5px rgba(80, 45, 36, .18);
 }
 
 .pdf-page-error {
@@ -4416,9 +4416,9 @@ select {
   top: -12px;
   right: -1px;
   padding: 3px 7px;
-  color: #5d4300;
+  color: var(--white);
   border-radius: 6px 0 0 6px;
-  background: #ffd866;
+  background: #9a4530;
   box-shadow: 0 2px 7px rgba(24, 24, 22, .18);
   font-size: 8px;
   font-style: normal;
@@ -4552,54 +4552,67 @@ select {
   mix-blend-mode: normal;
 }
 
-.pdf-text-annotation {
+.pdf-text-annotation-shape {
   position: absolute;
   z-index: 18;
-  box-sizing: border-box;
-  padding: 0;
-  color: #5d4300;
-  border: 0;
-  border-right: 1.5px solid rgba(180, 73, 48, .88);
-  border-left: 1.5px solid rgba(180, 73, 48, .88);
-  border-radius: 1px;
-  background: rgba(214, 95, 64, .035);
-  box-shadow: none;
-  font-size: 8px;
-  font-weight: 800;
-  line-height: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
   pointer-events: none;
 }
 
-.pdf-text-annotation.is-first {
-  border-top: 1.5px solid rgba(180, 73, 48, .88);
-  border-radius: 4px 4px 0 0;
+.pdf-text-annotation-shape polygon {
+  fill: rgba(154, 69, 48, .035);
+  stroke: rgba(154, 69, 48, .82);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
 }
 
-.pdf-text-annotation.is-last {
-  border-bottom: 1.5px solid rgba(180, 73, 48, .88);
-  border-radius: 0 0 4px 4px;
+.pdf-text-annotation-shape.is-active polygon {
+  fill: rgba(154, 69, 48, .08);
+  stroke-width: 2.2;
 }
 
-.pdf-text-annotation.is-first.is-last {
-  border-radius: 4px;
+.pdf-text-annotation-shape.is-community polygon {
+  cursor: pointer;
+  pointer-events: stroke;
 }
 
-.pdf-text-annotation.is-community {
+.pdf-text-annotation-shape.is-pending polygon {
+  stroke-dasharray: 5 4;
+}
+
+.pdf-text-annotation-target {
+  position: absolute;
+  z-index: 32;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--white);
+  border: 2px solid var(--white);
+  border-radius: 999px;
+  background: #9a4530;
+  box-shadow: 0 2px 7px rgba(24, 24, 22, .22);
   cursor: pointer;
   pointer-events: auto;
+  transform: translate(-50%, -50%);
 }
 
-.pdf-text-annotation.is-community:hover,
-.pdf-text-annotation.is-community:focus-visible,
-.pdf-text-annotation.is-community.is-active {
-  outline: 2px solid rgba(214, 95, 64, .35);
-  outline-offset: 1px;
+.pdf-text-annotation-target > span {
+  font-size: 9px;
+  font-weight: 800;
 }
 
-.pdf-text-annotation.is-pending {
-  z-index: 60;
-  border-style: dashed;
-  background: rgba(214, 95, 64, .06);
+.pdf-text-annotation-target:hover,
+.pdf-text-annotation-target:focus-visible,
+.pdf-text-annotation-target.is-active {
+  outline: 3px solid rgba(154, 69, 48, .2);
+  outline-offset: 2px;
+}
+
+.pdf-text-annotation-target.is-active .pdf-annotation-tooltip {
+  display: block;
 }
 
 .pdf-annotation-box.is-pending {
@@ -4891,7 +4904,7 @@ select {
   margin: 0 -6px 16px;
   padding: 4px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 3px;
   border-radius: 10px;
   background: var(--surface);
@@ -5150,12 +5163,13 @@ select {
   display: grid;
   gap: 7px;
   border-radius: 7px;
-  background: rgba(255, 227, 122, .34);
+  border-left: 2px solid rgba(154, 69, 48, .42);
+  background: rgba(24, 24, 22, .035);
 }
 
 .highlight-text-preview > strong,
 .highlight-text-preview p > strong {
-  color: #7b5800;
+  color: var(--accent);
   font-size: 9px;
 }
 
@@ -5648,22 +5662,21 @@ select {
 .annotation-save-status {
   margin: 0;
   padding: 7px 9px;
-  color: #276348;
+  color: var(--muted);
   border-radius: 6px;
-  background: rgba(42, 140, 107, .08);
+  background: rgba(24, 24, 22, .045);
   font-size: 9px;
   line-height: 1.45;
 }
 
 .annotation-publish-bar {
-  padding: 11px;
+  padding: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
-  border: 1px solid rgba(42, 140, 107, .3);
-  border-radius: 8px;
-  background: rgba(42, 140, 107, .07);
+  border: 0;
+  background: transparent;
 }
 
 .annotation-publish-bar > div {
@@ -5684,12 +5697,12 @@ select {
 }
 
 .annotation-publish-bar > button {
-  padding: 9px 12px;
+  padding: 9px 14px;
   flex: 0 0 auto;
   color: var(--white);
   border: 0;
   border-radius: 7px;
-  background: #2a8c6b;
+  background: var(--ink);
   cursor: pointer;
   font-size: 9px;
   font-weight: 800;

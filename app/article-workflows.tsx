@@ -786,6 +786,47 @@ function rectanglesOverlap(first: AnnotationRect, second: AnnotationRect) {
     first.y < second.y + second.height && first.y + first.height > second.y;
 }
 
+function mergeTextLineRects(rects: AnnotationRect[]) {
+  const lines: AnnotationRect[] = [];
+  for (const rect of [...rects].sort((left, right) => left.y - right.y || left.x - right.x)) {
+    const line = lines.find((item) => Math.abs(item.y - rect.y) < Math.max(item.height, rect.height) * 0.45);
+    if (!line) {
+      lines.push({ ...rect });
+      continue;
+    }
+    const right = Math.max(line.x + line.width, rect.x + rect.width);
+    const bottom = Math.max(line.y + line.height, rect.y + rect.height);
+    line.x = Math.min(line.x, rect.x);
+    line.y = Math.min(line.y, rect.y);
+    line.width = right - line.x;
+    line.height = bottom - line.y;
+  }
+  return lines;
+}
+
+function textAnnotationPolygon(rects: AnnotationRect[]) {
+  const lines = mergeTextLineRects(rects);
+  if (lines.length === 0) return "";
+  const first = lines[0];
+  const last = lines[lines.length - 1];
+  const minLeft = Math.min(...lines.map((rect) => rect.x));
+  const maxRight = Math.max(...lines.map((rect) => rect.x + rect.width));
+  const points = lines.length === 1
+    ? [[first.x, first.y], [first.x + first.width, first.y], [first.x + first.width, first.y + first.height], [first.x, first.y + first.height]]
+    : [
+        [first.x, first.y], [maxRight, first.y], [maxRight, last.y],
+        [last.x + last.width, last.y], [last.x + last.width, last.y + last.height],
+        [minLeft, last.y + last.height], [minLeft, first.y + first.height], [first.x, first.y + first.height],
+      ];
+  const simplified = points.filter((point, index, items) => {
+    const previous = items[(index - 1 + items.length) % items.length];
+    const next = items[(index + 1) % items.length];
+    if (point[0] === previous[0] && point[1] === previous[1]) return false;
+    return !((previous[0] === point[0] && point[0] === next[0]) || (previous[1] === point[1] && point[1] === next[1]));
+  });
+  return simplified.map(([x, y]) => `${x},${y}`).join(" ");
+}
+
 function arxivPageUrl(sourceUrl: string) {
   try {
     const parsed = new URL(sourceUrl);
@@ -1009,7 +1050,7 @@ function ContinuousPdfPage({
           if (text && selection?.rangeCount && pageElement) {
             const pageBounds = pageElement.getBoundingClientRect();
             if (pageBounds.width > 0 && pageBounds.height > 0) {
-              rects = Array.from(selection.getRangeAt(0).getClientRects()).map((bounds) => {
+              rects = mergeTextLineRects(Array.from(selection.getRangeAt(0).getClientRects()).map((bounds) => {
                 const left = Math.max(pageBounds.left, bounds.left);
                 const top = Math.max(pageBounds.top, bounds.top);
                 const right = Math.min(pageBounds.right, bounds.right);
@@ -1020,7 +1061,7 @@ function ContinuousPdfPage({
                   width: (right - left) / pageBounds.width * 100,
                   height: (bottom - top) / pageBounds.height * 100,
                 };
-              }).filter((rect) => rect.width > 0 && rect.height > 0);
+              }).filter((rect) => rect.width > 0 && rect.height > 0));
             }
           }
           if (text) onTextSelect(text, page, rects);
@@ -1195,7 +1236,7 @@ export function ReviewComposer({
   const [zoom, setZoom] = useState(100);
   const [fitWidthEnabled, setFitWidthEnabled] = useState(false);
   const [focusMode, setFocusMode] = useState(startFocused);
-  const [contextTab, setContextTab] = useState<"annotations" | "translate" | "community" | "publish">("annotations");
+  const [contextTab, setContextTab] = useState<"annotations" | "translate" | "publish">("annotations");
   const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
   const [communityAnnotations, setCommunityAnnotations] = useState<CommunityAnnotation[]>([]);
   const [discussionLoading, setDiscussionLoading] = useState(false);
@@ -2016,18 +2057,6 @@ export function ReviewComposer({
     setEditingAnnotationContent("");
   }
 
-  function reuseCommunityAnnotationPosition(annotation: CommunityAnnotation) {
-    if (!annotation.rect) return;
-    setDrawingAnnotation(false);
-    setAnnotationKind(annotation.annotationKind ?? "frame");
-    setAnnotationStart(null);
-    setAnnotationRect({ ...annotation.rect });
-    setHighlightRects(annotation.highlightRects ?? []);
-    setAnnotationPage(annotation.page);
-    setContextTab("annotations");
-    setMessage(`已复用 ${annotation.author} 在第 ${annotation.page} 页的批注位置，请填写你的批注。`);
-  }
-
   async function readClipboard() {
     try {
       const value = await navigator.clipboard.readText();
@@ -2334,12 +2363,12 @@ export function ReviewComposer({
             key={`community-${annotation.id}`}
             onClick={(event) => {
               event.stopPropagation();
-              reuseCommunityAnnotationPosition(annotation);
+              focusAnnotationInSidebar(annotation.id);
             }}
             onKeyDown={(event) => {
               if (event.key !== "Enter" && event.key !== " ") return;
               event.preventDefault();
-              reuseCommunityAnnotationPosition(annotation);
+              focusAnnotationInSidebar(annotation.id);
             }}
             onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
             role="button"
@@ -2366,22 +2395,33 @@ export function ReviewComposer({
             <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}<small>点击数字在右侧查看</small></strong>
           </div>
         ))}
-        {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.annotationKind === "highlight").flatMap(({ annotation, number }) =>
-          (annotation.highlightRects?.length ? annotation.highlightRects : annotation.rect ? [annotation.rect] : []).map((rect, rectIndex) => (
+        {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.annotationKind === "highlight").map(({ annotation, number }) => {
+          const rects = annotation.highlightRects?.length ? annotation.highlightRects : annotation.rect ? [annotation.rect] : [];
+          const anchor = rects[0];
+          if (!anchor) return null;
+          return <Fragment key={`community-text-${annotation.id}`}>
+            <svg
+              aria-label={`文字批注 ${number}：${annotation.content}`}
+              className={`pdf-text-annotation-shape is-community${activeAnnotationId === annotation.id ? " is-active" : ""}`}
+              onClick={(event) => { event.stopPropagation(); focusAnnotationInSidebar(annotation.id); }}
+              preserveAspectRatio="none"
+              role="button"
+              viewBox="0 0 100 100"
+            >
+              <polygon points={textAnnotationPolygon(rects)} vectorEffect="non-scaling-stroke" />
+            </svg>
             <button
-              aria-label={`文字批注 ${number}，${annotation.author}：${annotation.content}`}
-              className={`pdf-text-annotation is-community${rectIndex === 0 ? " is-first" : ""}${rectIndex === (annotation.highlightRects?.length || 1) - 1 ? " is-last" : ""}${activeAnnotationId === annotation.id ? " is-active" : ""}`}
-              key={`community-highlight-${annotation.id}-${rectIndex}`}
-              onClick={(event) => { event.stopPropagation(); reuseCommunityAnnotationPosition(annotation); }}
+              aria-label={`显示文字批注 ${number}：${annotation.content}`}
+              className={`pdf-text-annotation-target${activeAnnotationId === annotation.id ? " is-active" : ""}`}
+              onClick={(event) => { event.stopPropagation(); focusAnnotationInSidebar(annotation.id); }}
               onFocus={() => setActiveAnnotationId(annotation.id)}
-              onMouseEnter={() => setActiveAnnotationId(annotation.id)}
-              onMouseLeave={() => setActiveAnnotationId(null)}
-              style={{ left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
-              title={`${annotation.author}：${annotation.quote || annotation.content}`}
+              onMouseEnter={() => showAnnotationAfterDelay(annotation.id)}
+              onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
+              style={{ left: `${anchor.x}%`, top: `${anchor.y}%` }}
               type="button"
-            />
-          ))
-        )}
+            ><span>{number}</span><strong className="pdf-annotation-tooltip"><b>{annotation.author} · 文字批注 {number}</b>{annotation.content}</strong></button>
+          </Fragment>;
+        })}
         {pageNotes.filter((item) => item.annotationKind !== "highlight").map((item, index) => {
           const overlapIndex = pageAnnotations.filter((annotation) =>
             annotation.rect && rectanglesOverlap(item.rect!, annotation.rect)
@@ -2404,16 +2444,12 @@ export function ReviewComposer({
             ><span>我{index + 1}</span></span>
           );
         })}
-        {pageNotes.filter((item) => item.annotationKind === "highlight").flatMap((item, index) =>
-          (item.highlightRects?.length ? item.highlightRects : item.rect ? [item.rect] : []).map((rect, rectIndex) => (
-            <span
-              className={`pdf-text-annotation is-own${rectIndex === 0 ? " is-first" : ""}${rectIndex === (item.highlightRects?.length || 1) - 1 ? " is-last" : ""}`}
-              key={`own-highlight-${index}-${rectIndex}`}
-              style={{ left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
-              title={item.quote || item.content}
-            />
-          ))
-        )}
+        {pageNotes.filter((item) => item.annotationKind === "highlight").map((item, index) => {
+          const rects = item.highlightRects?.length ? item.highlightRects : item.rect ? [item.rect] : [];
+          return rects.length > 0 ? <svg aria-label={`我的文字批注 ${index + 1}：${item.content}`} className="pdf-text-annotation-shape is-own" key={`own-text-${index}`} preserveAspectRatio="none" role="img" viewBox="0 0 100 100">
+            <polygon points={textAnnotationPolygon(rects)} vectorEffect="non-scaling-stroke" />
+          </svg> : null;
+        })}
         {annotationRect && annotationKind !== "highlight" && annotationPage === pageNumber && (
           <span
             className={`pdf-annotation-box is-pending is-${annotationKind}`}
@@ -2426,13 +2462,11 @@ export function ReviewComposer({
             }}
           ><span>新</span></span>
         )}
-        {annotationKind === "highlight" && annotationPage === pageNumber && highlightRects.map((rect, index) => (
-          <span
-            className={`pdf-text-annotation is-pending${index === 0 ? " is-first" : ""}${index === highlightRects.length - 1 ? " is-last" : ""}`}
-            key={`pending-highlight-${index}`}
-            style={{ left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
-          />
-        ))}
+        {annotationKind === "highlight" && annotationPage === pageNumber && highlightRects.length > 0 && (
+          <svg aria-hidden="true" className="pdf-text-annotation-shape is-pending" preserveAspectRatio="none" viewBox="0 0 100 100">
+            <polygon points={textAnnotationPolygon(highlightRects)} vectorEffect="non-scaling-stroke" />
+          </svg>
+        )}
         {placingBookmark && <strong>点击你当前读到的那一行</strong>}
         {drawingAnnotation && annotationKind === "frame" && !annotationStart && <strong>拖动鼠标框选论文中的图片或段落</strong>}
       </div>
@@ -3012,9 +3046,6 @@ export function ReviewComposer({
           <button className={contextTab === "translate" ? "selected" : ""} onClick={() => { setContextTab("translate"); setMessage(""); }} type="button">
             <i aria-hidden="true">译</i><strong>翻译</strong>
           </button>
-          <button className={contextTab === "community" ? "selected" : ""} onClick={() => { setContextTab("community"); setMessage(""); }} type="button">
-            <i aria-hidden="true">◎</i><strong>伙伴</strong>
-          </button>
           <button className={contextTab === "publish" ? "selected" : ""} onClick={() => { setContextTab("publish"); setMessage(""); }} type="button">
             <i aria-hidden="true">↑</i><strong>发布</strong>
           </button>
@@ -3073,13 +3104,11 @@ export function ReviewComposer({
             <header className="workbench-section-heading"><div><strong>我的批注</strong><small>图片批注生成截图，文字批注自动翻译</small></div><span>{notes.length}</span></header>
             {annotationRect ? (
               <section className="note-composer">
-                <header><span>新批注</span><div><strong>填写{annotationKind === "highlight" ? "文字" : "图片"}批注</strong><small>{annotationKind === "highlight" ? "原文、自动翻译和批注会一起保存" : "截图、位置和批注会一起保存"}</small></div></header>
+                <header><span>新批注</span><div><strong>填写{annotationKind === "highlight" ? "文字" : "图片"}批注</strong><small>{annotationKind === "highlight" ? "所选原文和批注会一起保存" : "截图、位置和批注会一起保存"}</small></div></header>
                 {annotationKind === "highlight" && (
                   <div className="highlight-text-preview">
                     <strong>所选原文</strong>
                     <blockquote>{quoteDraft}</blockquote>
-                    {translation && <p><strong>翻译</strong>{translation}</p>}
-                    <button onClick={() => setContextTab("translate")} type="button">{translation ? "查看或修改翻译" : "翻译所选文字"}</button>
                   </div>
                 )}
                 <textarea onChange={(event) => setNoteDraft(event.target.value)} placeholder={`写下你对这段${annotationKind === "highlight" ? "文字" : "图片"}的理解…`} rows={5} value={noteDraft} />
@@ -3101,9 +3130,8 @@ export function ReviewComposer({
             )}
             <div className="saved-notes">
               <div className="annotation-publish-bar">
-                <div><strong>提交给团队</strong><small>草稿仅自己可见；提交后其他成员即可看到，不需要发布读书笔记。</small></div>
                 <button disabled={notes.length === 0 || annotationPublishing || annotationSaveStatus === "saving"} onClick={() => void publishAnnotations()} type="button">
-                  {annotationPublishing ? "正在提交…" : `提交批注${notes.length > 0 ? `（${notes.length}）` : ""}`}
+                  {annotationPublishing ? "正在提交…" : "提交批注"}
                 </button>
               </div>
               <div className={`annotation-save-status is-${annotationSaveStatus}`} role="status">
@@ -3182,40 +3210,6 @@ export function ReviewComposer({
             </section>
           ) : (
             <section className="translation-assistant coming-soon"><div><strong>学术翻译</strong><span>暂不可用</span></div><p>翻译服务配置完成后，可直接选中 PDF 原文翻译。</p></section>
-          )}
-        </div>
-
-        <div className="context-panel community-panel" hidden={contextTab !== "community"}>
-          <header className="workbench-section-heading"><div><strong>伙伴观点与读书笔记</strong><small>评论、笔记 PDF 与点赞集中在这里</small></div><span>{communityReviews.length}</span></header>
-          {discussionLoading ? <p className="context-empty">正在加载伙伴观点…</p> : (
-            <div className="community-overall-reviews">
-              {communityReviews.map((review) => (
-                <details key={review.id}>
-                  <summary><span>{review.author.slice(0, 1).toUpperCase()}</span><strong>{review.isOwn ? "我的笔记" : review.author}</strong><small>{review.mustRead ? "✦ 必读" : `★ ${review.rating}`}</small></summary>
-                  <p>{review.content}</p>
-                  {review.attachments.length > 0 && <div className="community-images">{review.attachments.map((attachment) => (
-                    <figure key={attachment.id}><img alt={attachment.note || "论文图表评论"} src={`/api/review-attachments/${attachment.id}`} />{attachment.note && <figcaption>{attachment.note}</figcaption>}</figure>
-                  ))}</div>}
-                  {review.noteFileName && <div className="partner-note-actions">
-                    <button onClick={() => partnerNoteReviewId === review.id ? returnToArticle() : openPartnerNote(review)} type="button">{partnerNoteReviewId === review.id ? "返回论文" : "在阅读器打开笔记"}</button>
-                    {review.isOwn
-                      ? <span className="own-note-inline-reads">{review.readCount} 人读过</span>
-                      : <ReadingNoteLikeButton initialCount={review.likeCount} initiallyLiked={review.likedByViewer} reviewId={review.id} />}
-                  </div>}
-                  {review.annotationCount > 0 && (
-                    <div className="review-linked-annotations">
-                      <header><strong>位置批注</strong><span>{review.annotationCount} 条</span></header>
-                      {(review.isOwn ? notes : communityAnnotations.filter((annotation) => annotation.reviewId === review.id || (annotation.reviewId === 0 && annotation.author === review.author))).map((annotation, index) => (
-                        <button key={`${annotation.page}-${index}`} onClick={() => navigateToAnnotation(annotation)} type="button">
-                          <strong>第 {annotation.page} 页</strong><span>{annotation.content}</span><i aria-hidden="true">→</i>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </details>
-              ))}
-              {communityReviews.length === 0 && <p className="context-empty">还没有伙伴发布评论或读书笔记。</p>}
-            </div>
           )}
         </div>
 
