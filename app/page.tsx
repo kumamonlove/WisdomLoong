@@ -23,8 +23,8 @@ export default async function Home() {
         </div>
         <ArticleGrid
           articles={articles}
-          emptyTitle="还没有成员评论"
-          emptyDescription="成员发布第一篇文章评论后，会显示在这里。"
+          emptyTitle="还没有读书笔记"
+          emptyDescription="成员发布第一份读书笔记后，会显示在这里。"
           variant="team-reading"
         />
       </section>

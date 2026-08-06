@@ -168,10 +168,10 @@ export function ArticleGrid({
                 <span className="mini-avatar" aria-hidden="true">
                   {article.reviewAuthor.slice(0, 1).toUpperCase()}
                 </span>
-                <strong>{article.reviewAuthor}</strong> 的评论
+                <strong>{article.reviewAuthor}</strong> 的读书笔记
               </p>
               {article.reviewContent && <blockquote>{article.reviewContent}</blockquote>}
-              <span className="review-preview-open">在阅读器打开 <i aria-hidden="true">↗</i></span>
+              <span className="review-preview-open">在阅读器中打开读书笔记 <i aria-hidden="true">↗</i></span>
             </a>
           ) : null}
           <div className="article-card-actions">
