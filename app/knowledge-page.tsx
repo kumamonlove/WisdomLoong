@@ -13,11 +13,13 @@ export function ArticleGrid({
   emptyTitle,
   emptyDescription,
   showReadAction = false,
+  variant = "default",
 }: {
   articles: ArticleCardData[];
   emptyTitle: string;
   emptyDescription: string;
   showReadAction?: boolean;
+  variant?: "default" | "team-reading";
 }) {
   if (articles.length === 0) {
     return (
@@ -30,7 +32,7 @@ export function ArticleGrid({
   }
 
   return (
-    <div className="article-grid">
+    <div className={`article-grid${variant === "team-reading" ? " is-team-reading" : ""}`}>
       {articles.map((article) => (
         <article
           className={`article-card${article.mustRead || article.recommendationSignals?.mustReadCount ? " must-read-card" : ""}${showReadAction && article.isRead ? " is-read" : ""}`}
@@ -158,7 +160,10 @@ export function ArticleGrid({
               ))}
             </div>
           ) : article.reviewAuthor ? (
-            <div className="review-preview">
+            <a
+              className="review-preview"
+              href={`/reviews/new?article=${article.id}${article.reviewId ? `&note=${article.reviewId}` : ""}`}
+            >
               <p>
                 <span className="mini-avatar" aria-hidden="true">
                   {article.reviewAuthor.slice(0, 1).toUpperCase()}
@@ -166,7 +171,8 @@ export function ArticleGrid({
                 <strong>{article.reviewAuthor}</strong> 的评论
               </p>
               {article.reviewContent && <blockquote>{article.reviewContent}</blockquote>}
-            </div>
+              <span className="review-preview-open">在阅读器打开 <i aria-hidden="true">↗</i></span>
+            </a>
           ) : null}
           <div className="article-card-actions">
             <a

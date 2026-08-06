@@ -26,6 +26,7 @@ export type ArticleCardData = {
   authors: string[];
   reviewAuthor: string | null;
   reviewContent: string | null;
+  reviewId?: number | null;
   rating: number | null;
   mustRead?: boolean;
   reviews?: {
@@ -156,7 +157,7 @@ export async function getTeamReadingArticles() {
      ),
      latest_reviews AS (
        SELECT DISTINCT ON (article_id)
-         article_id, user_id, content
+         reviews.id, article_id, user_id, content
        FROM reviews
        ORDER BY article_id, updated_at DESC, id DESC
      )
@@ -171,6 +172,7 @@ export async function getTeamReadingArticles() {
        articles.authors,
        latest_reviewer.username AS "reviewAuthor",
        latest_reviews.content AS "reviewContent",
+       latest_reviews.id AS "reviewId",
        review_stats.average_rating AS rating,
        review_stats.must_read AS "mustRead",
        JSON_BUILD_OBJECT(

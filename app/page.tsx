@@ -25,6 +25,7 @@ export default async function Home() {
           articles={articles}
           emptyTitle="还没有成员评论"
           emptyDescription="成员发布第一篇文章评论后，会显示在这里。"
+          variant="team-reading"
         />
       </section>
 
