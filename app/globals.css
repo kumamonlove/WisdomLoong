@@ -3873,6 +3873,72 @@ select {
   background: var(--ink);
 }
 
+.note-reader-engagement {
+  margin-left: auto;
+  padding: 5px 7px 5px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-left: 1px solid var(--line);
+}
+
+.note-like-prompt {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.note-reader-engagement .review-like {
+  margin: 0;
+  padding: 9px 15px;
+  color: #fff;
+  border: 0;
+  background: linear-gradient(135deg, #d65f40, #a83f2c);
+  box-shadow: 0 5px 14px rgba(166, 63, 41, .28);
+  font-size: 11px;
+}
+
+.note-reader-engagement .review-like:hover,
+.note-reader-engagement .review-like.liked {
+  color: #fff;
+  border: 0;
+  background: linear-gradient(135deg, #bd4932, #8f3022);
+}
+
+.note-reader-engagement .review-like > span {
+  font-size: 17px;
+}
+
+.own-note-read-count {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: 7px;
+  color: #1f6b50;
+}
+
+.own-note-read-count > span {
+  grid-row: 1 / span 2;
+  font-size: 22px;
+}
+
+.own-note-read-count strong {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.own-note-read-count small,
+.own-note-inline-reads {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.own-note-inline-reads {
+  padding: 7px 9px;
+  border-radius: 999px;
+  background: rgba(42, 140, 107, .1);
+}
+
 .reader-toolbar .reader-zoom-tools {
   padding-left: 10px;
   border-left: 1px solid var(--line);

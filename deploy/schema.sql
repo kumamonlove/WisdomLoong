@@ -293,6 +293,17 @@ CREATE TABLE IF NOT EXISTS reading_note_pdfs (
 CREATE INDEX IF NOT EXISTS reading_note_pdfs_updated_idx
   ON reading_note_pdfs(updated_at DESC);
 
+CREATE TABLE IF NOT EXISTS reading_note_reads (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
+  first_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, review_id)
+);
+
+CREATE INDEX IF NOT EXISTS reading_note_reads_review_idx
+  ON reading_note_reads(review_id, last_read_at DESC);
+
 WITH apply_once AS (
   INSERT INTO app_migrations (migration_key)
   VALUES ('2026-08-03-remove-pre-v1.14-annotations')

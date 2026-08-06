@@ -563,6 +563,8 @@ type CommunityReview = {
   mustRead: boolean;
   likeCount: number;
   likedByViewer: boolean;
+  isOwn: boolean;
+  readCount: number;
   noteFileName: string | null;
   noteSource: "generated" | "uploaded" | null;
   attachments: { id: number; reviewId: number; note: string }[];
@@ -2620,12 +2622,33 @@ export function ReviewComposer({
                           if (partnerNoteReviewId !== review.id) openPartnerNote(review);
                         }}
                         type="button"
-                      >{review.author}的笔记</button>
+                      >{review.isOwn ? "我的笔记" : `${review.author}的笔记`}</button>
                     ))}
                     {viewingPartnerNote && !activePartnerNote && (
                       <button aria-pressed="true" className="selected" type="button">{activeNoteAuthor}的笔记</button>
                     )}
                   </div>
+                  {viewingPartnerNote && activePartnerNote && (
+                    <div className="note-reader-engagement">
+                      {activePartnerNote.isOwn ? (
+                        <div className="own-note-read-count">
+                          <span aria-hidden="true">◉</span>
+                          <strong>{activePartnerNote.readCount}</strong>
+                          <small>人读过我的笔记</small>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="note-like-prompt">读完有收获？</span>
+                          <ReadingNoteLikeButton
+                            initialCount={activePartnerNote.likeCount}
+                            initiallyLiked={activePartnerNote.likedByViewer}
+                            key={`reader-like-${activePartnerNote.id}`}
+                            reviewId={activePartnerNote.id}
+                          />
+                        </>
+                      )}
+                    </div>
+                  )}
                   {!viewingPartnerNote && (
                     <div className="reader-bookmark-tools">
                       <button
@@ -3050,14 +3073,16 @@ export function ReviewComposer({
             <div className="community-overall-reviews">
               {communityReviews.map((review) => (
                 <details key={review.id}>
-                  <summary><span>{review.author.slice(0, 1).toUpperCase()}</span><strong>{review.author}</strong><small>{review.mustRead ? "✦ 必读" : `★ ${review.rating}`}</small></summary>
+                  <summary><span>{review.author.slice(0, 1).toUpperCase()}</span><strong>{review.isOwn ? "我的笔记" : review.author}</strong><small>{review.mustRead ? "✦ 必读" : `★ ${review.rating}`}</small></summary>
                   <p>{review.content}</p>
                   {review.attachments.length > 0 && <div className="community-images">{review.attachments.map((attachment) => (
                     <figure key={attachment.id}><img alt={attachment.note || "论文图表评论"} src={`/api/review-attachments/${attachment.id}`} />{attachment.note && <figcaption>{attachment.note}</figcaption>}</figure>
                   ))}</div>}
                   {review.noteFileName && <div className="partner-note-actions">
                     <button onClick={() => partnerNoteReviewId === review.id ? returnToArticle() : openPartnerNote(review)} type="button">{partnerNoteReviewId === review.id ? "返回论文" : "在阅读器打开笔记"}</button>
-                    <ReadingNoteLikeButton initialCount={review.likeCount} initiallyLiked={review.likedByViewer} reviewId={review.id} />
+                    {review.isOwn
+                      ? <span className="own-note-inline-reads">{review.readCount} 人读过</span>
+                      : <ReadingNoteLikeButton initialCount={review.likeCount} initiallyLiked={review.likedByViewer} reviewId={review.id} />}
                   </div>}
                 </details>
               ))}
