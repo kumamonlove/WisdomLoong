@@ -22,8 +22,8 @@ export function ReadingArticlePage({
 }) {
   const [importerOpen, setImporterOpen] = useState(false);
   const [pageArticles, setPageArticles] = useState(articles);
-  const bestReading = [...pageArticles]
-    .filter((article) => (article.readingMembers?.length ?? 0) > 0 && article.readingActivityAt)
+  const recentReading = [...pageArticles]
+    .filter((article) => article.readingStatus === "reading" && article.readingActivityAt)
     .sort((left, right) => (right.readingActivityAt ?? "").localeCompare(left.readingActivityAt ?? ""))
     .slice(0, 2);
 
@@ -77,15 +77,20 @@ export function ReadingArticlePage({
         </section>
       )}
 
-      <section className="best-reading">
-        <div className="list-title"><h2>最佳在读</h2><span>最新 2 篇</span></div>
-        {bestReading.length > 0 ? (
+      <section className="best-reading recent-reading">
+        <div className="list-title"><h2>最近在读</h2><span>我的最近 2 篇</span></div>
+        {recentReading.length > 0 ? (
           <div className="best-reading-grid">
-            {bestReading.map((article) => (
+            {recentReading.map((article) => (
               <a href={`/reviews/new?article=${article.id}`} key={article.id}>
-                <span>在读 · {article.readingMembers?.length ?? 0} 人</span>
+                <span>我的在读</span>
                 <h3>{article.title}</h3>
-                <p><strong>{article.readingMembers?.join("、")}</strong> 有批注或书签</p>
+                <p>
+                  {article.lastReadPage
+                    ? `书签在第 ${article.lastReadPage} 页`
+                    : "已添加批注"}
+                  {article.savedAnnotations.length > 0 && ` · ${article.savedAnnotations.length} 条批注`}
+                </p>
               </a>
             ))}
           </div>

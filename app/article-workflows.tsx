@@ -1335,16 +1335,25 @@ export function ReviewComposer({
     () => ["全部", ...new Set(availableArticles.flatMap((article) => article.tags))],
     [availableArticles],
   );
-  const filteredArticles = useMemo(() => {
+  const readingFilterScope = useMemo(() => {
     const terms = articleSearch.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
     return availableArticles.filter((article) => {
       if (articleTag !== "全部" && !article.tags.includes(articleTag)) return false;
-      if (articleReadFilter !== "all" && article.readingStatus !== articleReadFilter) return false;
       const haystack = [article.title, article.publisher, article.authors.join(" "), article.tags.join(" ")]
         .join(" ")
         .toLocaleLowerCase();
       return terms.every((term) => haystack.includes(term));
-    }).sort((left, right) => {
+    });
+  }, [articleSearch, articleTag, availableArticles]);
+  const readingFilterCounts = useMemo(() => ({
+    all: readingFilterScope.length,
+    read: readingFilterScope.filter((article) => article.readingStatus === "read").length,
+    unread: readingFilterScope.filter((article) => article.readingStatus === "unread").length,
+    reading: readingFilterScope.filter((article) => article.readingStatus === "reading").length,
+  }), [readingFilterScope]);
+  const filteredArticles = useMemo(() => readingFilterScope
+    .filter((article) => articleReadFilter === "all" || article.readingStatus === articleReadFilter)
+    .sort((left, right) => {
       const leftDate = left.publishedAt ?? "";
       const rightDate = right.publishedAt ?? "";
       if (!leftDate) return rightDate ? 1 : right.id - left.id;
@@ -1352,8 +1361,7 @@ export function ReviewComposer({
       return articleChronology === "latest"
         ? rightDate.localeCompare(leftDate) || right.id - left.id
         : leftDate.localeCompare(rightDate) || left.id - right.id;
-    });
-  }, [articleChronology, articleReadFilter, articleSearch, articleTag, availableArticles]);
+    }), [articleChronology, articleReadFilter, readingFilterScope]);
   const visibleSearchableTags = showAllArticleTags
     ? searchableTags
     : [
@@ -2601,16 +2609,21 @@ export function ReviewComposer({
             {([
               ["all", "全部"],
               ["read", "已读"],
-              ["reading", "在读"],
               ["unread", "未读"],
+              ["reading", "在读"],
             ] as const).map(([value, label]) => (
               <button
                 className={articleReadFilter === value ? "selected" : ""}
                 key={value}
                 onClick={() => setArticleReadFilter(value)}
                 type="button"
-              >{label}</button>
+              ><strong>{label}</strong><span>{readingFilterCounts[value]}</span></button>
             ))}
+          </div>
+          <div className="library-read-filter-summary" aria-live="polite">
+            <span>当前分类</span>
+            <strong>{readingFilterCounts[articleReadFilter]}</strong>
+            <small>篇文章</small>
           </div>
           <div className="library-tag-filter">
             {visibleSearchableTags.map((tag) => (

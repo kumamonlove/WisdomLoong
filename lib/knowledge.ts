@@ -84,7 +84,6 @@ export type ReaderArticle = {
   isRead: boolean;
   readingStatus: "read" | "reading" | "unread";
   canDelete: boolean;
-  readingMembers?: string[];
   readingActivityAt?: string | null;
   rating?: number | null;
   readCount?: number;
@@ -412,8 +411,13 @@ export async function getArticlesForReview(userId: number) {
                 INNER JOIN reviews ON reviews.id = review_comments.review_id
                 WHERE reviews.article_id = articles.id
               ) AS "canDelete",
-            COALESCE(team_reading.members, ARRAY[]::text[]) AS "readingMembers",
-            team_reading.activity_at::text AS "readingActivityAt",
+            GREATEST(
+              reading_progress.updated_at,
+              CASE WHEN reading_annotation_drafts.article_id IS NOT NULL
+                AND JSONB_ARRAY_LENGTH(reading_annotation_drafts.annotations) > 0
+                THEN reading_annotation_drafts.updated_at END,
+              own_annotation_activity.updated_at
+            )::text AS "readingActivityAt",
             (
               SELECT ROUND(AVG(reviews.rating)::numeric, 1)::float
               FROM reviews
@@ -478,28 +482,11 @@ export async function getArticlesForReview(userId: number) {
          AND review_annotations.rect_height IS NOT NULL
      ) own_annotations ON TRUE
      LEFT JOIN LATERAL (
-       SELECT
-         ARRAY_AGG(activity.username ORDER BY activity.activity_at DESC) AS members,
-         MAX(activity.activity_at) AS activity_at
-       FROM (
-         SELECT users.username, MAX(published_annotations.updated_at) AS activity_at
-         FROM published_annotations
-         INNER JOIN users ON users.id = published_annotations.user_id
-         WHERE published_annotations.article_id = articles.id
-         GROUP BY users.id, users.username
-         UNION ALL
-         SELECT users.username, MAX(reading_progress.updated_at) AS activity_at
-         FROM reading_progress
-         INNER JOIN users ON users.id = reading_progress.user_id
-         WHERE reading_progress.article_id = articles.id
-           AND NOT EXISTS (
-             SELECT 1 FROM published_annotations
-             WHERE published_annotations.article_id = articles.id
-               AND published_annotations.user_id = reading_progress.user_id
-           )
-         GROUP BY users.id, users.username
-       ) activity
-     ) team_reading ON TRUE
+       SELECT MAX(published_annotations.updated_at) AS updated_at
+       FROM published_annotations
+       WHERE published_annotations.article_id = articles.id
+         AND published_annotations.user_id = $1
+     ) own_annotation_activity ON TRUE
      ORDER BY articles.published_at DESC NULLS LAST, articles.created_at DESC`,
     [userId],
   );
