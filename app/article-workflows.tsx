@@ -569,7 +569,7 @@ type CommunityReview = {
   id: number;
   author: string;
   content: string;
-  rating: number;
+  rating: number | null;
   reviewType: "long";
   mustRead: boolean;
   likeCount: number;
@@ -1236,9 +1236,9 @@ export function ReviewComposer({
   const [articleReadFilter, setArticleReadFilter] = useState<"all" | "read" | "reading" | "unread">("all");
   const [articleChronology, setArticleChronology] = useState<"latest" | "classic" | "high-rating" | "low-rating">("latest");
   const [showAllArticleTags, setShowAllArticleTags] = useState(false);
-  const [rating, setRating] = useState<number | null>(startingArticle?.ownRating ?? startingReview?.rating ?? null);
+  const [rating, setRating] = useState<number | null>(startingArticle?.ownRating ?? null);
   const [ratingSaving, setRatingSaving] = useState(false);
-  const [mustRead, setMustRead] = useState(startingReview?.mustRead ?? false);
+  const [mustRead, setMustRead] = useState(startingArticle?.ownMustRead ?? false);
   const [content, setContent] = useState(startingReview?.content ?? "");
   const [page, setPage] = useState(
     articles.find((article) => article.id === initialArticleId)?.lastReadPage ??
@@ -1672,39 +1672,87 @@ export function ReviewComposer({
     }
   }
 
-  async function saveArticleRating(value: number, clearMustRead = true) {
+  async function saveArticleRating(value: number, nextMustRead = false) {
     if (!articleId || ratingSaving) return;
     const previousRating = rating;
+    const previousMustRead = mustRead;
     setRating(value);
-    if (clearMustRead) setMustRead(false);
+    setMustRead(nextMustRead);
     setRatingSaving(true);
     setMessage("");
     try {
       const response = await fetch(`/api/articles/${articleId}/rating`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rating: value }),
+        body: JSON.stringify({ rating: value, mustRead: nextMustRead }),
       });
       const data = await responseJson(response);
       const savedRating = Number(data.rating) || value;
-      const averageRating = Number(data.averageRating) || savedRating;
+      const savedMustRead = data.mustRead === true;
+      const averageRating = data.averageRating === null ? null : Number(data.averageRating) || savedRating;
       setRating(savedRating);
+      setMustRead(savedMustRead);
       setAvailableArticles((current) => current.map((article) => article.id === articleId
-        ? { ...article, ownRating: savedRating, rating: averageRating }
+        ? {
+            ...article,
+            ownRating: savedRating,
+            ownMustRead: savedMustRead,
+            rating: averageRating,
+            ownReview: article.ownReview
+              ? { ...article.ownReview, rating: savedRating, mustRead: savedMustRead }
+              : null,
+          }
         : article));
-      setMessage(`已保存 ${savedRating} 星评分，发布区已同步。`);
+      setMessage(savedMustRead ? "已标记为必读，发布区已同步。" : `已保存 ${savedRating} 星评分，发布区已同步。`);
     } catch (error) {
       setRating(previousRating);
+      setMustRead(previousMustRead);
       setMessage(error instanceof Error ? error.message : "评分保存失败");
     } finally {
       setRatingSaving(false);
     }
   }
 
+  async function clearArticleRating() {
+    if (!articleId || ratingSaving) return;
+    const previousRating = rating;
+    const previousMustRead = mustRead;
+    setRating(null);
+    setMustRead(false);
+    setRatingSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/articles/${articleId}/rating`, { method: "DELETE" });
+      const data = await responseJson(response);
+      const averageRating = data.averageRating === null ? null : Number(data.averageRating) || null;
+      setAvailableArticles((current) => current.map((article) => article.id === articleId
+        ? {
+            ...article,
+            ownRating: null,
+            ownMustRead: false,
+            rating: averageRating,
+            ownReview: article.ownReview
+              ? { ...article.ownReview, rating: null, mustRead: false }
+              : null,
+          }
+        : article));
+      setMessage("已取消评分，发布区已同步。");
+    } catch (error) {
+      setRating(previousRating);
+      setMustRead(previousMustRead);
+      setMessage(error instanceof Error ? error.message : "取消评分失败");
+    } finally {
+      setRatingSaving(false);
+    }
+  }
+
   useEffect(() => {
-    setAvailableArticles((current) => articles.map((article) =>
-      current.find((item) => item.id === article.id) ?? article
-    ));
+    setAvailableArticles((current) => articles.map((article) => {
+      const localArticle = current.find((item) => item.id === article.id);
+      return localArticle
+        ? { ...localArticle, inReadingList: article.inReadingList, readingListAddedAt: article.readingListAddedAt }
+        : article;
+    }));
   }, [articles]);
 
   useEffect(() => {
@@ -1912,8 +1960,8 @@ export function ReviewComposer({
     setPdfLoading(true);
     setArticlePdfReady(false);
     setPage(article?.lastReadPage ?? 1);
-    setRating(article?.ownRating ?? article?.ownReview?.rating ?? null);
-    setMustRead(article?.ownReview?.mustRead ?? false);
+    setRating(article?.ownRating ?? null);
+    setMustRead(article?.ownMustRead ?? false);
     setContent(article?.ownReview?.content ?? "");
     setNotes((article?.savedAnnotations ?? article?.ownReview?.annotations ?? []).filter((note) => note.rect));
     setEditingAnnotationIndex(null);
@@ -2597,15 +2645,32 @@ export function ReviewComposer({
                 {[1, 2, 3, 4, 5].map((value) => (
                   <button
                     aria-label={`${value} 星`}
+                    aria-pressed={!mustRead && rating === value}
                     className={value <= (rating ?? 0) ? "filled" : ""}
                     disabled={ratingSaving}
                     key={value}
-                    onClick={() => void saveArticleRating(value)}
+                    onClick={() => void (!mustRead && rating === value ? clearArticleRating() : saveArticleRating(value))}
                     type="button"
                   >★</button>
                 ))}
+                <button
+                  aria-label="标记为必读"
+                  aria-pressed={mustRead}
+                  className={`focus-must-read${mustRead ? " selected" : ""}`}
+                  disabled={ratingSaving}
+                  onClick={() => void (mustRead ? clearArticleRating() : saveArticleRating(5, true))}
+                  type="button"
+                >✦ 必读</button>
               </div>
-              <em>{ratingSaving ? "保存中" : rating ? `${rating}.0` : "未评分"}</em>
+              <em>{ratingSaving ? "保存中" : mustRead ? "必读" : rating ? `${rating}.0` : "未评分"}</em>
+              {rating !== null && (
+                <button
+                  className="focus-rating-clear"
+                  disabled={ratingSaving}
+                  onClick={() => void clearArticleRating()}
+                  type="button"
+                >取消</button>
+              )}
             </div>
           )}
           <small>
@@ -3219,7 +3284,7 @@ export function ReviewComposer({
                       <article key={review.id}>
                         <span>{review.author.slice(0, 1).toUpperCase()}</span>
                         <div>
-                          <strong>{review.author} · {review.mustRead ? "✦ 必读" : `★ ${review.rating}`}</strong>
+                          <strong>{review.author} · {review.mustRead ? "✦ 必读" : review.rating === null ? "未评分" : `★ ${review.rating}`}</strong>
                           <p>{review.content}</p>
                         </div>
                       </article>
@@ -3393,22 +3458,31 @@ export function ReviewComposer({
                 {[1, 2, 3, 4, 5].map((value) => (
                   <button
                     aria-label={`${value} 星`}
+                    aria-pressed={!mustRead && rating === value}
                     className={value <= (rating ?? 0) ? "filled" : ""}
                     key={value}
                     disabled={ratingSaving}
-                    onClick={() => void saveArticleRating(value)}
+                    onClick={() => void (!mustRead && rating === value ? clearArticleRating() : saveArticleRating(value))}
                     type="button"
                   >★</button>
                 ))}
                 <strong>{mustRead ? "✦ 必读" : rating === null ? "请选择评分" : `${rating}.0`}</strong>
+                {rating !== null && (
+                  <button
+                    className="rating-clear"
+                    disabled={ratingSaving}
+                    onClick={() => void clearArticleRating()}
+                    type="button"
+                  >取消评分</button>
+                )}
               </div>
             </div>
             <label className={`must-read-toggle${mustRead ? " selected" : ""}`}>
               <input
                 checked={mustRead}
                 onChange={(event) => {
-                  setMustRead(event.target.checked);
-                  if (event.target.checked) void saveArticleRating(5, false);
+                  if (event.target.checked) void saveArticleRating(5, true);
+                  else void clearArticleRating();
                 }}
                 type="checkbox"
               />

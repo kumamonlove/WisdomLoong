@@ -1,20 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function ReadingListButton({
   articleId,
   initialSaved = false,
   onChange,
+  savedLabel = "✓ 已加入待读",
 }: {
   articleId: number;
   initialSaved?: boolean;
   onChange?: (inReadingList: boolean, createdAt: string | null) => void;
+  savedLabel?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(initialSaved);
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => setSaved(initialSaved), [initialSaved]);
 
   async function toggleReadingList() {
     setBusy(true);
@@ -42,7 +46,7 @@ export function ReadingListButton({
       onClick={toggleReadingList}
       type="button"
     >
-      {busy ? "正在更新…" : failed ? "更新失败" : saved ? "✓ 已加入待读" : "＋ 加入待读"}
+      {busy ? "正在更新…" : failed ? "更新失败" : saved ? savedLabel : "＋ 加入待读"}
     </button>
   );
 }

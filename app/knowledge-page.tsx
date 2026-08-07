@@ -140,7 +140,7 @@ export function ArticleGrid({
                     <strong>{review.author}</strong>
                     {review.mustRead
                       ? <em className="must-read-badge">✦ 必读</em>
-                      : <span>★ {review.rating}</span>}
+                      : <span>{review.rating === null ? "未评分" : `★ ${review.rating}`}</span>}
                     <small>{review.content.length} 字评论</small>
                   </summary>
                   <div>

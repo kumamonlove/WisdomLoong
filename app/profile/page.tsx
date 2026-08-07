@@ -35,7 +35,7 @@ export default async function ProfilePage() {
               <span>评论</span>
               {review.mustRead
                 ? <em className="must-read-badge">✦ 必读</em>
-                : <small>★ {review.rating}</small>}
+                : <small>{review.rating === null ? "未评分" : `★ ${review.rating}`}</small>}
             </div>
             <h3><MathTitle title={review.title} /></h3>
             <p>{review.content}</p>

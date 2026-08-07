@@ -40,7 +40,7 @@ export type ArticleCardData = {
     id: number;
     author: string;
     content: string;
-    rating: number;
+    rating: number | null;
     reviewType: "long";
     mustRead: boolean;
     likeCount: number;
@@ -85,6 +85,7 @@ export type ReaderArticle = {
   inReadingList: boolean;
   readingListAddedAt?: string | null;
   ownRating?: number | null;
+  ownMustRead?: boolean;
   readingStatus: "read" | "reading" | "unread";
   canDelete: boolean;
   readingActivityAt?: string | null;
@@ -102,7 +103,7 @@ export type ReaderArticle = {
   }[];
   ownReview: {
     id: number;
-    rating: number;
+    rating: number | null;
     content: string;
     reviewType: "long";
     mustRead: boolean;
@@ -410,6 +411,12 @@ export async function getArticlesForReview(userId: number) {
               WHERE article_ratings.user_id = $1
                 AND article_ratings.article_id = articles.id
             ) AS "ownRating",
+            COALESCE((
+              SELECT article_ratings.must_read
+              FROM article_ratings
+              WHERE article_ratings.user_id = $1
+                AND article_ratings.article_id = articles.id
+            ), FALSE) AS "ownMustRead",
             CASE
               WHEN EXISTS (
                 SELECT 1 FROM article_reads
@@ -534,7 +541,7 @@ export async function getUserReviewProfile(userId: number) {
       articleId: number;
       title: string;
       content: string;
-      rating: number;
+      rating: number | null;
       reviewType: "long";
       mustRead: boolean;
       likeCount: number;

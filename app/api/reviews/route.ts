@@ -108,11 +108,11 @@ export async function POST(request: Request) {
     }
     const reviewId = result.rows[0].id;
     await client.query(
-      `INSERT INTO article_ratings (user_id, article_id, rating)
-       VALUES ($1, $2, $3)
+      `INSERT INTO article_ratings (user_id, article_id, rating, must_read)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id, article_id) DO UPDATE SET
-         rating = EXCLUDED.rating, updated_at = NOW()`,
-      [user.id, articleId, rating],
+         rating = EXCLUDED.rating, must_read = EXCLUDED.must_read, updated_at = NOW()`,
+      [user.id, articleId, rating, mustRead],
     );
     if (!parsedNotePdf) {
       const existingNote = await client.query("SELECT 1 FROM reading_note_pdfs WHERE review_id = $1", [reviewId]);

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { KnowledgePage } from "@/app/knowledge-page";
 import { ReadingListImporter, ReviewComposer } from "@/app/article-workflows";
+import { ReadingListButton } from "@/app/reading-actions";
 import type { ReaderArticle } from "@/lib/knowledge";
 
 export function ReadingArticlePage({
@@ -108,13 +109,25 @@ export function ReadingArticlePage({
         {waitingArticles.length > 0 ? (
           <div className="waiting-reading-grid">
             {waitingArticles.map((article) => (
-              <a href={`/reviews/new?article=${article.id}`} key={article.id}>
-                <span>待读</span>
-                <h3>{article.title}</h3>
-                <p>{article.publisher !== "机构待补充" && article.publisher.toLocaleLowerCase() !== "arxiv"
-                  ? article.publisher
-                  : article.tags.slice(0, 2).join(" · ")}</p>
-              </a>
+              <article key={article.id}>
+                <a href={`/reviews/new?article=${article.id}`}>
+                  <span>待读</span>
+                  <h3>{article.title}</h3>
+                  <p>{article.publisher !== "机构待补充" && article.publisher.toLocaleLowerCase() !== "arxiv"
+                    ? article.publisher
+                    : article.tags.slice(0, 2).join(" · ")}</p>
+                </a>
+                <ReadingListButton
+                  articleId={article.id}
+                  initialSaved
+                  onChange={(inReadingList, createdAt) => {
+                    setPageArticles((current) => current.map((item) => item.id === article.id
+                      ? { ...item, inReadingList, readingListAddedAt: createdAt }
+                      : item));
+                  }}
+                  savedLabel="取消待读"
+                />
+              </article>
             ))}
           </div>
         ) : <div className="empty compact"><h3>还没有待读文章</h3><p>在文章库中点击“加入待读”，它会出现在这里。</p></div>}

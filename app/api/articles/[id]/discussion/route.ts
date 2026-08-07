@@ -6,7 +6,7 @@ type DiscussionReview = {
   id: number;
   author: string;
   content: string;
-  rating: number;
+  rating: number | null;
   reviewType: "long";
   mustRead: boolean;
   likeCount: number;

@@ -240,24 +240,33 @@ CREATE INDEX IF NOT EXISTS reviews_user_created_idx
 
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS review_type VARCHAR(8) NOT NULL DEFAULT 'long';
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS must_read BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE reviews ALTER COLUMN rating DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS article_ratings (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
   rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  must_read BOOLEAN NOT NULL DEFAULT FALSE,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, article_id)
 );
 
+ALTER TABLE article_ratings ADD COLUMN IF NOT EXISTS must_read BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE INDEX IF NOT EXISTS article_ratings_article_idx
   ON article_ratings(article_id, rating DESC, updated_at DESC);
 
-INSERT INTO article_ratings (user_id, article_id, rating, updated_at)
-SELECT user_id, article_id, rating, updated_at FROM reviews
+INSERT INTO article_ratings (user_id, article_id, rating, must_read, updated_at)
+SELECT user_id, article_id, rating, must_read, updated_at FROM reviews
+WHERE rating IS NOT NULL
 ON CONFLICT (user_id, article_id) DO UPDATE SET
   rating = CASE
     WHEN EXCLUDED.updated_at >= article_ratings.updated_at THEN EXCLUDED.rating
     ELSE article_ratings.rating
+  END,
+  must_read = CASE
+    WHEN EXCLUDED.updated_at >= article_ratings.updated_at THEN EXCLUDED.must_read
+    ELSE article_ratings.must_read
   END,
   updated_at = GREATEST(article_ratings.updated_at, EXCLUDED.updated_at);
 
