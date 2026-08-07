@@ -82,12 +82,17 @@ export function ArticleGrid({
             </div>
           )}
           {article.activityAuthors && article.activityAuthors.length > 0 && (
-            <div className="reading-members">
-              <span aria-hidden="true">批</span>
-              <p>
-                <strong>{article.activityAuthors.join("、")}</strong>
-                {article.activityAuthors.length} 位成员批注过这篇文章
-              </p>
+            <div className="reading-people" aria-label={`${article.activityAuthors.join("、")}正在读`}>
+              <p><i aria-hidden="true" />此刻谁在读</p>
+              <div>
+                {article.activityAuthors.map((author) => (
+                  <span key={author}>
+                    <i aria-hidden="true">{author.slice(0, 1).toUpperCase()}</i>
+                    <strong>{author}</strong>
+                    <em>在读</em>
+                  </span>
+                ))}
+              </div>
             </div>
           )}
           <dl className="article-meta">

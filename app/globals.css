@@ -1929,31 +1929,70 @@ select {
   background: linear-gradient(145deg, rgba(248, 246, 239, .86), rgba(248, 232, 226, .62));
 }
 
-.reading-members {
+.reading-people {
   margin: 0 0 18px;
-  padding: 13px 14px;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  border-left: 3px solid var(--accent);
-  background: rgba(214, 95, 64, .07);
+  display: grid;
+  gap: 9px;
 }
 
-.reading-members > span {
-  width: 28px;
-  height: 28px;
+.reading-people > p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.reading-people > p i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(214, 95, 64, .12);
+  animation: graph-live-pulse 1.8s ease-in-out infinite;
+}
+
+.reading-people > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.reading-people > div > span {
+  padding: 6px 10px 6px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  border: 1px solid rgba(24, 24, 22, .12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 5px 14px rgba(24, 24, 22, .06);
+  transform: rotate(-1deg);
+}
+
+.reading-people > div > span:nth-child(even) { transform: rotate(1.5deg) translateY(2px); }
+.reading-people > div > span:nth-child(3n) { transform: rotate(-2deg) translateY(-1px); }
+
+.reading-people > div > span > i {
+  width: 25px;
+  height: 25px;
   display: grid;
-  flex: 0 0 28px;
   place-items: center;
   color: var(--white);
   border-radius: 50%;
   background: var(--accent);
-  font-size: 11px;
+  font-size: 10px;
+  font-style: normal;
   font-weight: 850;
 }
 
-.reading-members p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
-.reading-members strong { display: block; color: var(--ink); font-size: 12px; }
+.reading-people strong { font-size: 11px; }
+.reading-people em { color: var(--accent); font-size: 9px; font-style: normal; font-weight: 800; }
 
 .note-comments { position: relative; }
 
