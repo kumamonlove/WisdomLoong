@@ -2574,18 +2574,18 @@ export function ReviewComposer({
             <span>文章库</span>
             <div>
               <strong>{availableArticles.length} 篇文章</strong>
-              <button
-                aria-expanded="true"
-                aria-label="隐藏文章库工具"
-                className="library-tools-toggle is-expanded"
-                onClick={() => {
-                  setLibraryBannerHidden(true);
-                  window.localStorage.setItem("wisdomloong-library-banner-hidden", "true");
-                }}
-                type="button"
-              ><i aria-hidden="true">⌃</i><span>隐藏工具</span></button>
             </div>
           </div>
+          <button
+            aria-expanded="true"
+            aria-label="隐藏文章库工具"
+            className="library-tools-toggle is-expanded library-tools-bar"
+            onClick={() => {
+              setLibraryBannerHidden(true);
+              window.localStorage.setItem("wisdomloong-library-banner-hidden", "true");
+            }}
+            type="button"
+          ><span>隐藏文章库工具</span><i aria-hidden="true">⌃</i></button>
           <input
             aria-label="搜索已有文章"
             onChange={(event) => setArticleSearch(event.target.value)}
