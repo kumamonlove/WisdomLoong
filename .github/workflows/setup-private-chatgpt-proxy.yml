@@ -1,0 +1,45 @@
+name: Setup private ChatGPT proxy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure SSH
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_SSH_KEY: ${{ secrets.ALIYUN_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$ALIYUN_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$ALIYUN_HOST" >> ~/.ssh/known_hosts
+
+      - name: Install restricted proxy account
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
+          PROXY_CLIENT_PUBLIC_KEY: ${{ secrets.PROXY_CLIENT_PUBLIC_KEY }}
+        run: |
+          if [ -z "$PROXY_CLIENT_PUBLIC_KEY" ]; then
+            echo "PROXY_CLIENT_PUBLIC_KEY secret is required" >&2
+            exit 1
+          fi
+          public_key_base64="$(printf '%s' "$PROXY_CLIENT_PUBLIC_KEY" | base64 -w 0)"
+          scp deploy/setup-private-chatgpt-proxy.sh \
+            "${ALIYUN_USER}@${ALIYUN_HOST}:/tmp/setup-private-chatgpt-proxy.sh"
+          ssh "${ALIYUN_USER}@${ALIYUN_HOST}" \
+            "sudo bash /tmp/setup-private-chatgpt-proxy.sh '${public_key_base64}' && rm /tmp/setup-private-chatgpt-proxy.sh"
+
+      - name: Verify website remains healthy
+        run: |
+          curl --fail --silent --show-error --location \
+            --connect-timeout 10 --max-time 30 \
+            https://wisdomloong.com/login >/dev/null

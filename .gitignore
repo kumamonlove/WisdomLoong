@@ -6,6 +6,7 @@ dist
 *.log
 .env
 .env.local
+.private/
 .wrangler
 .open-next
 .vinext
