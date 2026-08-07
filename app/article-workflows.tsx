@@ -2597,6 +2597,25 @@ export function ReviewComposer({
             <span>找到 {filteredArticles.length} 篇</span>
             {articleSearch && <button onClick={() => setArticleSearch("")} type="button">清空</button>}
           </div>
+          <div className="library-tag-filter" aria-label="文章分类筛选">
+            {visibleSearchableTags.map((tag) => (
+              <button
+                className={articleTag === tag ? "selected" : ""}
+                key={tag}
+                onClick={() => setArticleTag(tag)}
+                type="button"
+              >
+                {tag}
+              </button>
+            ))}
+            {searchableTags.length > 6 && (
+              <button
+                className="library-tag-more"
+                onClick={() => setShowAllArticleTags((current) => !current)}
+                type="button"
+              >{showAllArticleTags ? "收起" : `更多 +${searchableTags.length - 6}`}</button>
+            )}
+          </div>
           <div className="library-chronology-switch" aria-label="文章时间排序方式">
             <button className={articleChronology === "latest" ? "selected" : ""} onClick={() => setArticleChronology("latest")} type="button">
               <span>追随潮流</span><small>最新优先</small>
@@ -2624,25 +2643,6 @@ export function ReviewComposer({
             <span>当前分类</span>
             <strong>{readingFilterCounts[articleReadFilter]}</strong>
             <small>篇文章</small>
-          </div>
-          <div className="library-tag-filter">
-            {visibleSearchableTags.map((tag) => (
-              <button
-                className={articleTag === tag ? "selected" : ""}
-                key={tag}
-                onClick={() => setArticleTag(tag)}
-                type="button"
-              >
-                {tag}
-              </button>
-            ))}
-            {searchableTags.length > 6 && (
-              <button
-                className="library-tag-more"
-                onClick={() => setShowAllArticleTags((current) => !current)}
-                type="button"
-              >{showAllArticleTags ? "收起" : `更多 +${searchableTags.length - 6}`}</button>
-            )}
           </div>
         </div>
         )}

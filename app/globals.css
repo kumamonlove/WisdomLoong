@@ -2964,23 +2964,23 @@ select {
 
 .reader-workspace:not(.focus-mode) .library-chronology-switch {
   grid-column: 1;
-  grid-row: 5;
+  grid-row: 6;
 }
 
 .reader-workspace:not(.focus-mode) .library-read-filter {
   grid-column: 1;
-  grid-row: 6;
+  grid-row: 7;
   margin-top: 0;
 }
 
 .reader-workspace:not(.focus-mode) .library-read-filter-summary {
   grid-column: 1;
-  grid-row: 7;
+  grid-row: 8;
 }
 
 .reader-workspace:not(.focus-mode) .library-tag-filter {
   grid-column: 1;
-  grid-row: 8;
+  grid-row: 5;
   margin-top: 2px;
 }
 
