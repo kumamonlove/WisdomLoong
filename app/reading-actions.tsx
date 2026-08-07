@@ -3,6 +3,50 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+export function ReadingListButton({
+  articleId,
+  initialSaved = false,
+  onChange,
+}: {
+  articleId: number;
+  initialSaved?: boolean;
+  onChange?: (inReadingList: boolean, createdAt: string | null) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(initialSaved);
+  const [failed, setFailed] = useState(false);
+
+  async function toggleReadingList() {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const response = await fetch(`/api/articles/${articleId}/reading-list`, {
+        method: saved ? "DELETE" : "POST",
+      });
+      const data = (await response.json().catch(() => ({}))) as { createdAt?: string; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "待读状态更新失败");
+      const nextSaved = !saved;
+      setSaved(nextSaved);
+      onChange?.(nextSaved, nextSaved ? data.createdAt ?? new Date().toISOString() : null);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      className={`reading-list-button${saved ? " done" : ""}`}
+      disabled={busy}
+      onClick={toggleReadingList}
+      type="button"
+    >
+      {busy ? "正在更新…" : failed ? "更新失败" : saved ? "✓ 已加入待读" : "＋ 加入待读"}
+    </button>
+  );
+}
+
 export function MarkReadButton({
   articleId,
   initialRead = false,

@@ -26,6 +26,9 @@ export function ReadingArticlePage({
     .filter((article) => article.readingStatus === "reading" && article.readingActivityAt)
     .sort((left, right) => (right.readingActivityAt ?? "").localeCompare(left.readingActivityAt ?? ""))
     .slice(0, 2);
+  const waitingArticles = [...pageArticles]
+    .filter((article) => article.inReadingList)
+    .sort((left, right) => (right.readingListAddedAt ?? "").localeCompare(left.readingListAddedAt ?? ""));
 
   function addImportedArticle(article: ReaderArticle) {
     setPageArticles((current) => {
@@ -97,6 +100,26 @@ export function ReadingArticlePage({
         ) : <div className="empty compact"><h3>还没有在读文章</h3><p>添加批注或书签后会显示在这里。</p></div>}
       </section>
 
+      <section className="waiting-reading">
+        <div className="list-title">
+          <h2>待读文章</h2>
+          <span>我的待读 · {waitingArticles.length} 篇</span>
+        </div>
+        {waitingArticles.length > 0 ? (
+          <div className="waiting-reading-grid">
+            {waitingArticles.map((article) => (
+              <a href={`/reviews/new?article=${article.id}`} key={article.id}>
+                <span>待读</span>
+                <h3>{article.title}</h3>
+                <p>{article.publisher !== "机构待补充" && article.publisher.toLocaleLowerCase() !== "arxiv"
+                  ? article.publisher
+                  : article.tags.slice(0, 2).join(" · ")}</p>
+              </a>
+            ))}
+          </div>
+        ) : <div className="empty compact"><h3>还没有待读文章</h3><p>在文章库中点击“加入待读”，它会出现在这里。</p></div>}
+      </section>
+
       <ReviewComposer
         articles={pageArticles}
         initialArticleId={initialArticleId}
@@ -104,6 +127,11 @@ export function ReadingArticlePage({
         startFocused={startFocused}
         translationEnabled={translationEnabled}
         username={username}
+        onReadingListChange={(articleId, inReadingList, createdAt) => {
+          setPageArticles((current) => current.map((article) => article.id === articleId
+            ? { ...article, inReadingList, readingListAddedAt: createdAt }
+            : article));
+        }}
       />
     </KnowledgePage>
   );

@@ -82,6 +82,8 @@ export type ReaderArticle = {
   lastReadPositionY: number | null;
   lastReadPositionX: number | null;
   isRead: boolean;
+  inReadingList: boolean;
+  readingListAddedAt?: string | null;
   ownRating?: number | null;
   readingStatus: "read" | "reading" | "unread";
   canDelete: boolean;
@@ -392,6 +394,16 @@ export async function getArticlesForReview(userId: number) {
               WHERE article_reads.user_id = $1
                 AND article_reads.article_id = articles.id
             ) AS "isRead",
+            EXISTS (
+              SELECT 1 FROM reading_list
+              WHERE reading_list.user_id = $1
+                AND reading_list.article_id = articles.id
+            ) AS "inReadingList",
+            (
+              SELECT reading_list.created_at::text FROM reading_list
+              WHERE reading_list.user_id = $1
+                AND reading_list.article_id = articles.id
+            ) AS "readingListAddedAt",
             (
               SELECT article_ratings.rating
               FROM article_ratings

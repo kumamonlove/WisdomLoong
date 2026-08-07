@@ -2061,7 +2061,24 @@ select {
   box-shadow: 0 9px 26px rgba(214, 95, 64, .08);
 }
 
-.article-search-results > article > .mark-read-button { grid-column: 2; grid-row: 2 / span 2; align-self: start; min-height: 31px; padding: 6px 9px; font-size: 9px; }
+.waiting-reading { margin: 0 0 28px; }
+.waiting-reading-grid { padding-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.waiting-reading-grid > a { padding: 15px 17px; color: inherit; border: 1px solid var(--line); border-radius: 11px; background: rgba(255, 255, 255, .46); text-decoration: none; transition: border-color 160ms ease, background 160ms ease, transform 160ms ease; }
+.waiting-reading-grid > a:hover { border-color: rgba(214, 95, 64, .28); background: rgba(255, 255, 255, .82); transform: translateY(-1px); }
+.waiting-reading-grid span { color: var(--accent); font-size: 9px; font-weight: 820; letter-spacing: .08em; }
+.waiting-reading-grid h3 { margin: 7px 0 6px; font: 600 15px/1.45 var(--font-display); }
+.waiting-reading-grid p { margin: 0; color: var(--muted); font-size: 10px; }
+
+.library-card-secondary-actions { grid-column: 2; grid-row: 2 / span 2; align-self: start; display: grid; justify-items: stretch; gap: 3px; }
+.library-card-secondary-actions .reading-list-button,
+.library-card-secondary-actions .mark-read-button { min-height: 28px; padding: 5px 8px; color: var(--muted); border: 1px solid transparent; border-radius: 7px; background: transparent; box-shadow: none; font-size: 8px; font-weight: 680; opacity: .72; transform: none; }
+.library-card-secondary-actions .reading-list-button { cursor: pointer; }
+.library-card-secondary-actions .reading-list-button:hover,
+.library-card-secondary-actions .reading-list-button.done,
+.library-card-secondary-actions .mark-read-button:hover,
+.library-card-secondary-actions .mark-read-button.done,
+.library-card-secondary-actions .mark-read-button.done:hover { color: var(--ink); border-color: var(--line); background: rgba(255, 255, 255, .6); box-shadow: none; opacity: 1; transform: none; }
+.library-card-secondary-actions .reading-list-button.done { color: var(--accent); }
 .library-card-signals .reading-status { padding: 3px 7px; border-radius: 999px; font-weight: 850; }
 .library-card-signals .reading-status.is-read { color: var(--ink); background: rgba(24, 24, 22, .08); }
 .library-card-signals .reading-status.is-reading { color: var(--accent); background: rgba(214, 95, 64, .09); }
@@ -2076,7 +2093,8 @@ select {
   .activity-pager { padding: 0 26px; }
   .activity-page-key { width: 20px; height: 90px; }
   .best-reading-grid { grid-template-columns: 1fr; }
-  .article-search-results > article > .mark-read-button { grid-column: 1 / -1; grid-row: auto; justify-self: start; }
+  .waiting-reading-grid { grid-template-columns: 1fr; }
+  .library-card-secondary-actions { grid-column: 1 / -1; grid-row: auto; justify-self: start; }
 }
 
 .review-collection {

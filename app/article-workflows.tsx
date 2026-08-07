@@ -16,7 +16,7 @@ import {
 import { articleCategories, normalizeTags } from "@/lib/knowledge-types";
 import type { ReaderArticle } from "@/lib/knowledge";
 import { ReadingNoteComments, ReadingNoteLikeButton } from "@/app/review-actions";
-import { DeleteArticleButton, MarkReadButton } from "@/app/reading-actions";
+import { DeleteArticleButton, MarkReadButton, ReadingListButton } from "@/app/reading-actions";
 import { ArticleMetadataEditor } from "@/app/article-metadata-editor";
 import { MathTitle } from "@/app/math-title";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
@@ -146,6 +146,8 @@ function ArxivLookup({
         lastReadPositionY: null,
         lastReadPositionX: null,
         isRead: false,
+        inReadingList: addToReadingList,
+        readingListAddedAt: addToReadingList ? new Date().toISOString() : null,
         readingStatus: "unread",
         canDelete: true,
         savedAnnotations: [],
@@ -405,6 +407,8 @@ function PdfDropImporter({
         lastReadPositionY: null,
         lastReadPositionX: null,
         isRead: false,
+        inReadingList: false,
+        readingListAddedAt: null,
         readingStatus: "unread",
         canDelete: true,
         savedAnnotations: [],
@@ -1210,6 +1214,7 @@ export function ReviewComposer({
   initialPartnerNoteReviewId,
   startFocused = false,
   translationEnabled = false,
+  onReadingListChange,
 }: {
   articles: ReaderArticle[];
   username: string;
@@ -1217,6 +1222,7 @@ export function ReviewComposer({
   initialPartnerNoteReviewId?: number;
   startFocused?: boolean;
   translationEnabled?: boolean;
+  onReadingListChange?: (articleId: number, inReadingList: boolean, createdAt: string | null) => void;
 }) {
   const router = useRouter();
   const startingArticleId = initialArticleId ?? articles[0]?.id ?? 0;
@@ -1224,12 +1230,11 @@ export function ReviewComposer({
   const startingReview = startingArticle?.ownReview;
   const [availableArticles, setAvailableArticles] = useState(articles);
   const [articleId, setArticleId] = useState(startingArticleId);
-  const [expandedArticleId, setExpandedArticleId] = useState<number | null>(startingArticleId || null);
+  const [expandedArticleId, setExpandedArticleId] = useState<number | null>(null);
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
   const [articleReadFilter, setArticleReadFilter] = useState<"all" | "read" | "reading" | "unread">("all");
   const [articleChronology, setArticleChronology] = useState<"latest" | "classic" | "high-rating" | "low-rating">("latest");
-  const [articleFocusRevision, setArticleFocusRevision] = useState(0);
   const [showAllArticleTags, setShowAllArticleTags] = useState(false);
   const [rating, setRating] = useState<number | null>(startingArticle?.ownRating ?? startingReview?.rating ?? null);
   const [ratingSaving, setRatingSaving] = useState(false);
@@ -1245,6 +1250,8 @@ export function ReviewComposer({
   const [focusMode, setFocusMode] = useState(startFocused);
   const [contextTab, setContextTab] = useState<"annotations" | "publish">("annotations");
   const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
+  const [libraryReviewsByArticle, setLibraryReviewsByArticle] = useState<Record<number, CommunityReview[]>>({});
+  const [libraryDiscussionLoadingId, setLibraryDiscussionLoadingId] = useState<number | null>(null);
   const [communityAnnotations, setCommunityAnnotations] = useState<CommunityAnnotation[]>([]);
   const [discussionLoading, setDiscussionLoading] = useState(false);
   const [annotationsLoading, setAnnotationsLoading] = useState(false);
@@ -1313,7 +1320,6 @@ export function ReviewComposer({
   const pendingAnnotationNavigation = useRef<ReadingBookmark | null>(null);
   const pdfFrameRef = useRef<HTMLDivElement>(null);
   const currentArticleIdRef = useRef(articleId);
-  const articleFocusRequest = useRef<number | null>(null);
   const annotationSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const annotationSaveRevisions = useRef(new Map<number, number>());
   const annotationHoverTimer = useRef<number | null>(null);
@@ -1741,17 +1747,6 @@ export function ReviewComposer({
   }, [articleId, focusMode]);
 
   useEffect(() => {
-    if (focusMode || expandedArticleId !== articleId || articleFocusRequest.current !== articleId) return;
-    const timer = window.setTimeout(() => {
-      const card = document.querySelector<HTMLElement>(`[data-article-library-id="${articleId}"]`);
-      card?.scrollIntoView({ behavior: "smooth", block: "start" });
-      card?.focus({ preventScroll: true });
-      articleFocusRequest.current = null;
-    }, 80);
-    return () => window.clearTimeout(timer);
-  }, [articleFocusRevision, articleId, expandedArticleId, focusMode]);
-
-  useEffect(() => {
     const saved = window.localStorage.getItem("wisdomloong-annotations-enabled");
     if (saved === "false") {
       setAnnotationsEnabled(false);
@@ -1820,6 +1815,28 @@ export function ReviewComposer({
       });
     return () => { cancelled = true; };
   }, [articleId]);
+
+  useEffect(() => {
+    if (!expandedArticleId || Object.prototype.hasOwnProperty.call(libraryReviewsByArticle, expandedArticleId)) return;
+    let cancelled = false;
+    setLibraryDiscussionLoadingId(expandedArticleId);
+    fetch(`/api/articles/${expandedArticleId}/discussion?includeAnnotations=0`)
+      .then(responseJson)
+      .then((data) => {
+        if (cancelled) return;
+        setLibraryReviewsByArticle((current) => ({
+          ...current,
+          [expandedArticleId]: (data.reviews as CommunityReview[]) ?? [],
+        }));
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) {
+          setLibraryDiscussionLoadingId((current) => current === expandedArticleId ? null : current);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [expandedArticleId, libraryReviewsByArticle]);
 
   useEffect(() => {
     if (!articleId || (viewingPartnerNote ? pdfLoading : !articlePdfReady)) return;
@@ -1892,9 +1909,6 @@ export function ReviewComposer({
   function selectArticle(id: number) {
     const article = availableArticles.find((item) => item.id === id);
     setArticleId(id);
-    setExpandedArticleId(id);
-    articleFocusRequest.current = id;
-    setArticleFocusRevision((value) => value + 1);
     setPdfLoading(true);
     setArticlePdfReady(false);
     setPage(article?.lastReadPage ?? 1);
@@ -2705,6 +2719,8 @@ export function ReviewComposer({
           {filteredArticles.map((article, index) => {
             const month = article.publishedAt?.slice(0, 7) ?? "日期待补";
             const previousMonth = filteredArticles[index - 1]?.publishedAt?.slice(0, 7) ?? (index > 0 ? "日期待补" : "");
+            const inlineCommunityReviews = libraryReviewsByArticle[article.id] ?? [];
+            const inlineDiscussionLoading = libraryDiscussionLoadingId === article.id;
             return (
             <Fragment key={article.id}>
               {month !== previousMonth && (
@@ -2719,14 +2735,20 @@ export function ReviewComposer({
               data-article-library-id={article.id}
               onClick={(event) => {
                 if ((event.target as HTMLElement).closest("button, a, input, textarea, select, details, summary, form")) return;
-                if (article.id === expandedArticleId) setExpandedArticleId(null);
-                else selectArticle(article.id);
+                beginReadingArticle(article.id);
               }}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setExpandedArticleId((current) => current === article.id ? null : current);
+                }
+              }}
+              onFocus={() => setExpandedArticleId(article.id)}
+              onMouseEnter={() => setExpandedArticleId(article.id)}
+              onMouseLeave={() => setExpandedArticleId((current) => current === article.id ? null : current)}
               onKeyDown={(event) => {
                 if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
                 event.preventDefault();
-                if (article.id === expandedArticleId) setExpandedArticleId(null);
-                else selectArticle(article.id);
+                beginReadingArticle(article.id);
               }}
               tabIndex={0}
             >
@@ -2758,29 +2780,37 @@ export function ReviewComposer({
                   <i aria-hidden="true">●</i>{article.readingNowCount ?? 0} 人正在读
                 </span>
               </div>
-              <MarkReadButton
-                articleId={article.id}
-                initialRead={article.isRead}
-                onChange={(isRead) => setAvailableArticles((current) => current.map((item) => item.id === article.id
-                  ? {
-                      ...item,
-                      isRead,
-                      readingStatus: isRead
-                        ? "read"
-                        : item.savedAnnotations.length > 0 || item.lastReadPage ? "reading" : "unread",
-                    }
-                  : item))}
-              />
+              <div className="library-card-secondary-actions">
+                <ReadingListButton
+                  articleId={article.id}
+                  initialSaved={article.inReadingList}
+                  onChange={(inReadingList, createdAt) => {
+                    setAvailableArticles((current) => current.map((item) => item.id === article.id
+                      ? { ...item, inReadingList, readingListAddedAt: createdAt }
+                      : item));
+                    onReadingListChange?.(article.id, inReadingList, createdAt);
+                  }}
+                />
+                <MarkReadButton
+                  articleId={article.id}
+                  initialRead={article.isRead}
+                  onChange={(isRead) => setAvailableArticles((current) => current.map((item) => item.id === article.id
+                    ? {
+                        ...item,
+                        isRead,
+                        readingStatus: isRead
+                          ? "read"
+                          : item.savedAnnotations.length > 0 || item.lastReadPage ? "reading" : "unread",
+                      }
+                    : item))}
+                />
+              </div>
               {article.id !== expandedArticleId ? (
                 <p className="library-card-abstract">
                   {article.abstractZh || article.abstract || "摘要正在识别补齐。"}
                 </p>
               ) : (
-                <div
-                  className="library-inline-details"
-                  onClick={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => event.stopPropagation()}
-                >
+                <div className="library-inline-details">
                   <header>
                     <div>
                       <span>
@@ -2816,13 +2846,13 @@ export function ReviewComposer({
                   <section className="library-inline-comments">
                     <div>
                       <strong>伙伴评论</strong>
-                      <span>{communityReviews.length} 条</span>
+                      <span>{inlineCommunityReviews.length} 条</span>
                     </div>
-                    {discussionLoading ? (
+                    {inlineDiscussionLoading ? (
                       <p>正在加载评论…</p>
-                    ) : communityReviews.length > 0 ? (
+                    ) : inlineCommunityReviews.length > 0 ? (
                       <div>
-                        {communityReviews.slice(0, 3).map((review) => (
+                        {inlineCommunityReviews.slice(0, 3).map((review) => (
                           <article key={review.id}>
                             <span>{review.author.slice(0, 1).toUpperCase()}</span>
                             <p><strong>{review.author}</strong>{review.content}</p>
@@ -2852,7 +2882,7 @@ export function ReviewComposer({
                       if (articleId === article.id) {
                         const next = availableArticles.find((item) => item.id !== article.id);
                         setArticleId(next?.id ?? 0);
-                        setExpandedArticleId(next?.id ?? null);
+                        setExpandedArticleId(null);
                       }
                       router.refresh();
                     }}
