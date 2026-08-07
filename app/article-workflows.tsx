@@ -1287,6 +1287,7 @@ export function ReviewComposer({
   const [translation, setTranslation] = useState("");
   const [translating, setTranslating] = useState(false);
   const [translationError, setTranslationError] = useState("");
+  const translationAbortRef = useRef<AbortController | null>(null);
   const [textSelection, setTextSelection] = useState<{
     text: string;
     page: number;
@@ -1328,6 +1329,8 @@ export function ReviewComposer({
   const annotationSaveRevisions = useRef(new Map<number, number>());
   const annotationHoverTimer = useRef<number | null>(null);
   currentArticleIdRef.current = articleId;
+
+  useEffect(() => () => translationAbortRef.current?.abort(), []);
 
   const selectedArticle = availableArticles.find((item) => item.id === articleId);
   const activePartnerNote = communityReviews.find((review) => review.id === partnerNoteReviewId && review.noteFileName) ?? null;
@@ -2205,6 +2208,9 @@ export function ReviewComposer({
 
   async function translateSelectedText() {
     if (!textSelection?.text.trim()) return;
+    translationAbortRef.current?.abort();
+    const controller = new AbortController();
+    translationAbortRef.current = controller;
     setTranslating(true);
     setTranslation("");
     setTranslationError("");
@@ -2213,6 +2219,7 @@ export function ReviewComposer({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: textSelection.text }),
+        signal: controller.signal,
       });
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as { error?: string };
@@ -2237,14 +2244,32 @@ export function ReviewComposer({
       if (!result.trim()) throw new Error("翻译服务没有返回内容");
       setTranslation(result.trim());
     } catch (error) {
-      setTranslationError(error instanceof Error ? error.message : "翻译失败");
+      if (!controller.signal.aborted) {
+        setTranslationError(error instanceof Error ? error.message : "翻译失败");
+      }
     } finally {
-      setTranslating(false);
+      if (translationAbortRef.current === controller) {
+        translationAbortRef.current = null;
+        setTranslating(false);
+      }
     }
+  }
+
+  function closeSelectionActions() {
+    translationAbortRef.current?.abort();
+    translationAbortRef.current = null;
+    setTranslating(false);
+    setTranslation("");
+    setTranslationError("");
+    setTextSelection(null);
+    window.getSelection()?.removeAllRanges();
   }
 
   function beginTextAnnotation(selection: { text: string; page: number; rects: AnnotationRect[] }) {
     if (selection.rects.length === 0) return;
+    translationAbortRef.current?.abort();
+    translationAbortRef.current = null;
+    setTranslating(false);
     const x = Math.min(...selection.rects.map((rect) => rect.x));
     const y = Math.min(...selection.rects.map((rect) => rect.y));
     const right = Math.max(...selection.rects.map((rect) => rect.x + rect.width));
@@ -2277,6 +2302,9 @@ export function ReviewComposer({
       .slice(0, 12_000);
     if (!normalized) return;
     if (annotationRect) return;
+    translationAbortRef.current?.abort();
+    translationAbortRef.current = null;
+    setTranslating(false);
     setPage(pageNumber);
     setTranslation("");
     setTranslationError("");
@@ -2629,13 +2657,20 @@ export function ReviewComposer({
               top: `${selectionAnchor.y > 76 ? selectionAnchor.y : selectionAnchor.y + selectionAnchor.height}%`,
             }}
           >
-            <div>
+            <div className="pdf-selection-action-buttons">
               <button onClick={() => beginTextAnnotation(textSelection)} type="button">批注</button>
               <button
                 disabled={!translationEnabled || translating}
                 onClick={() => void translateSelectedText()}
                 type="button"
               >{translating ? "翻译中…" : "翻译"}</button>
+              <button
+                aria-label="关闭翻译器"
+                className="pdf-selection-close"
+                onClick={closeSelectionActions}
+                title="关闭"
+                type="button"
+              >×</button>
             </div>
             {!translationEnabled && <small>翻译服务暂不可用</small>}
             {translationError && <small className="is-error" role="alert">{translationError}</small>}
@@ -2654,14 +2689,14 @@ export function ReviewComposer({
         <div className="focus-status">
           <span><i />扩展算法组知识库</span>
           {!viewingPartnerNote && (
-            <div className="focus-direct-rating" aria-label="直接为当前文章评分">
+            <div className={`focus-direct-rating rating-${rating ?? "unrated"}${mustRead ? " is-must-read" : ""}${ratingSaving ? " is-saving" : ""}`} aria-label="直接为当前文章评分">
               <strong>我的评分</strong>
               <div>
                 {[1, 2, 3, 4, 5].map((value) => (
                   <button
                     aria-label={`${value} 星`}
                     aria-pressed={!mustRead && rating === value}
-                    className={value <= (rating ?? 0) ? "filled" : ""}
+                    className={`rating-star${value <= (rating ?? 0) ? " filled" : ""}`}
                     disabled={ratingSaving}
                     key={value}
                     onClick={() => void (!mustRead && rating === value ? clearArticleRating() : saveArticleRating(value))}
@@ -3463,20 +3498,20 @@ export function ReviewComposer({
           <header className="workbench-section-heading"><div><strong>{selectedArticle?.ownReview ? "修改并重新发布" : "发布读书笔记与评论"}</strong><small>依次完成下面 3 个步骤</small></div></header>
           <section className="publish-step">
             <header className="publish-step-heading"><span>1</span><div><strong>选择推荐等级</strong><small>必须评分，也可以直接标记为必读</small></div><em className={rating !== null ? "ready" : ""}>{rating !== null ? "已完成" : "待完成"}</em></header>
-            <div className={`star-rating rating-${rating ?? "unrated"}${mustRead ? " is-must-read" : ""}`}>
+            <div className={`star-rating rating-${rating ?? "unrated"}${mustRead ? " is-must-read" : ""}${ratingSaving ? " is-saving" : ""}`}>
               <div>
                 {[1, 2, 3, 4, 5].map((value) => (
                   <button
                     aria-label={`${value} 星`}
                     aria-pressed={!mustRead && rating === value}
-                    className={value <= (rating ?? 0) ? "filled" : ""}
+                    className={`rating-star${value <= (rating ?? 0) ? " filled" : ""}`}
                     key={value}
                     disabled={ratingSaving}
                     onClick={() => void (!mustRead && rating === value ? clearArticleRating() : saveArticleRating(value))}
                     type="button"
                   >★</button>
                 ))}
-                <strong>{mustRead ? "✦ 必读" : rating === null ? "请选择评分" : `${rating}.0`}</strong>
+                <strong aria-live="polite">{ratingSaving ? "保存中…" : mustRead ? "✦ 必读" : rating === null ? "请选择评分" : `${rating}.0`}</strong>
                 {rating !== null && (
                   <button
                     className="rating-clear"
