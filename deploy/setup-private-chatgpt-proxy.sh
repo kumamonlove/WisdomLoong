@@ -36,7 +36,7 @@ Match User wisdomproxy
     AuthenticationMethods publickey
     PasswordAuthentication no
     KbdInteractiveAuthentication no
-    AllowTcpForwarding yes
+    AllowTcpForwarding local
     AllowAgentForwarding no
     X11Forwarding no
     PermitTTY no
