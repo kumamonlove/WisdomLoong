@@ -1,10 +1,61 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { KnowledgePage } from "@/app/knowledge-page";
 import { ReadingListImporter, ReviewComposer } from "@/app/article-workflows";
 import { ReadingListButton } from "@/app/reading-actions";
 import type { ReaderArticle } from "@/lib/knowledge";
+
+const readingMilestones = [
+  { count: 1, title: "初次探索", mark: "◇" },
+  { count: 5, title: "渐入佳境", mark: "◐" },
+  { count: 10, title: "阅读新星", mark: "✦" },
+  { count: 20, title: "知识收藏家", mark: "◈" },
+  { count: 50, title: "深度阅读者", mark: "✧" },
+  { count: 100, title: "百篇学者", mark: "✺" },
+];
+
+function localDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function readingJourney(articles: ReaderArticle[]) {
+  const readArticles = articles.filter((article) => article.isRead);
+  const readCount = readArticles.length;
+  const completionDays = new Set(readArticles.flatMap((article) => {
+    if (!article.readAt) return [];
+    const date = new Date(article.readAt);
+    return Number.isNaN(date.getTime()) ? [] : [localDateKey(date)];
+  }));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + index);
+    return { key: localDateKey(date), label: "一二三四五六日"[index], active: completionDays.has(localDateKey(date)) };
+  });
+  const weekCount = readArticles.filter((article) => {
+    const readAt = article.readAt ? new Date(article.readAt) : null;
+    return readAt && !Number.isNaN(readAt.getTime()) && readAt >= monday;
+  }).length;
+  let streak = 0;
+  const streakCursor = new Date(today);
+  if (!completionDays.has(localDateKey(streakCursor))) streakCursor.setDate(streakCursor.getDate() - 1);
+  while (completionDays.has(localDateKey(streakCursor))) {
+    streak += 1;
+    streakCursor.setDate(streakCursor.getDate() - 1);
+  }
+  const nextLevel = readingMilestones.find((level) => level.count > readCount)
+    ?? { count: Math.ceil((readCount + 1) / 50) * 50, title: "继续累积", mark: "✦" };
+  const latestLevel = [...readingMilestones].reverse().find((level) => level.count <= readCount);
+  const milestoneProgress = Math.min(100, Math.round((readCount / Math.max(1, nextLevel.count)) * 100));
+  return { readCount, weekCount, weekDays, streak, nextLevel, latestLevel, milestoneProgress };
+}
 
 export function ReadingArticlePage({
   articles,
@@ -23,6 +74,8 @@ export function ReadingArticlePage({
 }) {
   const [importerOpen, setImporterOpen] = useState(false);
   const [pageArticles, setPageArticles] = useState(articles);
+  const [achievement, setAchievement] = useState<{ count: number; title: string; unlocked: boolean } | null>(null);
+  const journey = readingJourney(pageArticles);
   const recentReading = [...pageArticles]
     .filter((article) => article.readingStatus === "reading" && article.readingActivityAt)
     .sort((left, right) => (right.readingActivityAt ?? "").localeCompare(left.readingActivityAt ?? ""))
@@ -30,6 +83,12 @@ export function ReadingArticlePage({
   const waitingArticles = [...pageArticles]
     .filter((article) => article.inReadingList)
     .sort((left, right) => (right.readingListAddedAt ?? "").localeCompare(left.readingListAddedAt ?? ""));
+
+  useEffect(() => {
+    if (!achievement) return;
+    const timer = window.setTimeout(() => setAchievement(null), 4_200);
+    return () => window.clearTimeout(timer);
+  }, [achievement]);
 
   function addImportedArticle(article: ReaderArticle) {
     setPageArticles((current) => {
@@ -39,6 +98,31 @@ export function ReadingArticlePage({
         ...current.filter((item) => item.id !== article.id),
       ];
     });
+  }
+
+  function updateReadStatus(articleId: number, isRead: boolean, readAt: string | null) {
+    const previousArticle = pageArticles.find((article) => article.id === articleId);
+    const newlyCompleted = isRead && previousArticle?.isRead !== true;
+    setPageArticles((current) => current.map((article) => article.id === articleId
+      ? {
+          ...article,
+          isRead,
+          readAt,
+          readingStatus: isRead
+            ? "read"
+            : article.savedAnnotations.length > 0 || article.lastReadPage ? "reading" : "unread",
+        }
+      : article));
+    if (newlyCompleted) {
+      const nextCount = pageArticles.filter((article) => article.isRead).length + 1;
+      const unlockedLevel = readingMilestones.find((level) => level.count === nextCount);
+      const weeklyGoalUnlocked = journey.weekCount === 2;
+      setAchievement({
+        count: nextCount,
+        title: unlockedLevel?.title ?? (weeklyGoalUnlocked ? "本周目标达成" : "又完成了一篇"),
+        unlocked: Boolean(unlockedLevel) || weeklyGoalUnlocked,
+      });
+    }
   }
 
   return (
@@ -80,6 +164,32 @@ export function ReadingArticlePage({
           <ReadingListImporter onImported={addImportedArticle} />
         </section>
       )}
+
+      <section className="reading-journey" aria-label="我的阅读成就">
+        <header>
+          <div><span>MY READING JOURNEY</span><h2>我的阅读旅程</h2></div>
+          <strong>{journey.latestLevel ? `${journey.latestLevel.mark} ${journey.latestLevel.title}` : "从第一篇开始"}</strong>
+        </header>
+        <div className="reading-journey-body">
+          <div
+            className="reading-journey-ring"
+            style={{ "--journey-progress": `${journey.milestoneProgress * 3.6}deg` } as CSSProperties}
+          >
+            <div><strong>{journey.readCount}</strong><span>篇已读</span></div>
+          </div>
+          <div className="reading-journey-next">
+            <span>下一个里程碑</span>
+            <strong>{journey.nextLevel.mark} {journey.nextLevel.count} 篇 · {journey.nextLevel.title}</strong>
+            <small>再读 {Math.max(0, journey.nextLevel.count - journey.readCount)} 篇就能解锁</small>
+          </div>
+          <div className="reading-journey-number"><span>本周完成</span><strong>{journey.weekCount}<small> / 3 篇</small></strong><em>{journey.weekCount >= 3 ? "本周目标已达成" : "轻松读，慢慢积累"}</em></div>
+          <div className="reading-journey-number"><span>连续完成</span><strong>{journey.streak}<small> 天</small></strong><em>{journey.streak > 0 ? "保持你的阅读节奏" : "今天读完一篇吧"}</em></div>
+        </div>
+        <footer aria-label="本周阅读足迹">
+          <span>本周足迹</span>
+          {journey.weekDays.map((day) => <i className={day.active ? "active" : ""} key={day.key} title={day.key}>{day.label}</i>)}
+        </footer>
+      </section>
 
       <section className="best-reading recent-reading">
         <div className="list-title"><h2>最近在读</h2><span>我的最近 2 篇</span></div>
@@ -145,7 +255,15 @@ export function ReadingArticlePage({
             ? { ...article, inReadingList, readingListAddedAt: createdAt }
             : article));
         }}
+        onReadStatusChange={updateReadStatus}
       />
+      {achievement && (
+        <div className={`reading-achievement-toast${achievement.unlocked ? " unlocked" : ""}`} role="status">
+          <i aria-hidden="true">{achievement.unlocked ? "✦" : "✓"}</i>
+          <div><strong>{achievement.title}</strong><span>你已经读完 {achievement.count} 篇文章</span></div>
+          <button aria-label="关闭成就提示" onClick={() => setAchievement(null)} type="button">×</button>
+        </div>
+      )}
     </KnowledgePage>
   );
 }

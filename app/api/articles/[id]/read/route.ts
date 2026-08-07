@@ -16,12 +16,12 @@ export async function POST(
   const client = await database.connect();
   try {
     await client.query("BEGIN");
-    const result = await client.query(
+    const result = await client.query<{ readAt: string }>(
       `INSERT INTO article_reads (user_id, article_id)
        SELECT $1, articles.id FROM articles WHERE articles.id = $2
        ON CONFLICT (user_id, article_id)
        DO UPDATE SET read_at = NOW()
-       RETURNING article_id`,
+       RETURNING read_at::text AS "readAt"`,
       [user.id, articleId],
     );
     if (result.rowCount === 0) {
@@ -29,7 +29,7 @@ export async function POST(
       return NextResponse.json({ error: "文章不存在" }, { status: 404 });
     }
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true, isRead: true });
+    return NextResponse.json({ ok: true, isRead: true, readAt: result.rows[0].readAt });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Mark article read failed", error);
@@ -60,7 +60,7 @@ export async function DELETE(
       "DELETE FROM article_reads WHERE user_id = $1 AND article_id = $2",
       [user.id, articleId],
     );
-    return NextResponse.json({ ok: true, isRead: false });
+    return NextResponse.json({ ok: true, isRead: false, readAt: null });
   } catch (error) {
     console.error("Restore article unread failed", error);
     return NextResponse.json({ error: "恢复失败，请稍后重试" }, { status: 500 });

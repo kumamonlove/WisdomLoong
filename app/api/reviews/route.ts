@@ -162,15 +162,16 @@ export async function POST(request: Request) {
       "DELETE FROM reading_annotation_drafts WHERE user_id = $1 AND article_id = $2",
       [user.id, articleId],
     );
-    await client.query(
+    const readResult = await client.query<{ readAt: string }>(
       `INSERT INTO article_reads (user_id, article_id)
        VALUES ($1, $2)
        ON CONFLICT (user_id, article_id)
-       DO UPDATE SET read_at = NOW()`,
+       DO UPDATE SET read_at = NOW()
+       RETURNING read_at::text AS "readAt"`,
       [user.id, articleId],
     );
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true, reviewId, hasNotePdf: true });
+    return NextResponse.json({ ok: true, reviewId, hasNotePdf: true, readAt: readResult.rows[0].readAt });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Review save failed", error);

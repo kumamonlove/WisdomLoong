@@ -58,12 +58,14 @@ export function MarkReadButton({
 }: {
   articleId: number;
   initialRead?: boolean;
-  onChange?: (isRead: boolean) => void;
+  onChange?: (isRead: boolean, readAt: string | null) => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [isRead, setIsRead] = useState(initialRead);
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => setIsRead(initialRead), [initialRead]);
 
   async function toggleRead() {
     setBusy(true);
@@ -73,9 +75,10 @@ export function MarkReadButton({
         method: isRead ? "DELETE" : "POST",
       });
       if (!response.ok) throw new Error("read state update failed");
+      const data = (await response.json().catch(() => ({}))) as { readAt?: string | null };
       const nextRead = !isRead;
       setIsRead(nextRead);
-      onChange?.(nextRead);
+      onChange?.(nextRead, nextRead ? data.readAt ?? new Date().toISOString() : null);
       if (!onChange) router.refresh();
     } catch {
       setFailed(true);

@@ -146,6 +146,7 @@ function ArxivLookup({
         lastReadPositionY: null,
         lastReadPositionX: null,
         isRead: false,
+        readAt: null,
         inReadingList: addToReadingList,
         readingListAddedAt: addToReadingList ? new Date().toISOString() : null,
         readingStatus: "unread",
@@ -407,6 +408,7 @@ function PdfDropImporter({
         lastReadPositionY: null,
         lastReadPositionX: null,
         isRead: false,
+        readAt: null,
         inReadingList: false,
         readingListAddedAt: null,
         readingStatus: "unread",
@@ -1215,6 +1217,7 @@ export function ReviewComposer({
   startFocused = false,
   translationEnabled = false,
   onReadingListChange,
+  onReadStatusChange,
 }: {
   articles: ReaderArticle[];
   username: string;
@@ -1223,6 +1226,7 @@ export function ReviewComposer({
   startFocused?: boolean;
   translationEnabled?: boolean;
   onReadingListChange?: (articleId: number, inReadingList: boolean, createdAt: string | null) => void;
+  onReadStatusChange?: (articleId: number, isRead: boolean, readAt: string | null) => void;
 }) {
   const router = useRouter();
   const startingArticleId = initialArticleId ?? articles[0]?.id ?? 0;
@@ -2355,6 +2359,7 @@ export function ReviewComposer({
   async function submitReview(event: FormEvent) {
     event.preventDefault();
     const selectedRating = rating;
+    const wasAlreadyRead = selectedArticle?.isRead === true;
     if (selectedRating === null) {
       setMessage("请先选择推荐星级，或标记为必读。");
       return;
@@ -2397,9 +2402,19 @@ export function ReviewComposer({
       };
       setAvailableArticles((current) => current.map((article) =>
         article.id === articleId
-          ? { ...article, ownReview: updatedReview, savedAnnotations: notes, isRead: true, readingStatus: "read" }
+          ? {
+              ...article,
+              ownReview: updatedReview,
+              savedAnnotations: notes,
+              isRead: true,
+              readAt: String(saved.readAt ?? new Date().toISOString()),
+              readingStatus: "read",
+            }
           : article
       ));
+      if (!wasAlreadyRead) {
+        onReadStatusChange?.(articleId, true, String(saved.readAt ?? new Date().toISOString()));
+      }
       window.localStorage.removeItem(annotationDraftStorageKey(articleId));
       setAnnotationSaveStatus("saved");
       setMessage(selectedArticle?.ownReview
@@ -2708,12 +2723,6 @@ export function ReviewComposer({
             <i aria-hidden="true">⌄</i>
           </div>
           <div className="article-library-banner">
-          <div className="library-heading">
-            <span>文章库</span>
-            <div>
-              <strong>{availableArticles.length} 篇文章</strong>
-            </div>
-          </div>
           <input
             aria-label="搜索已有文章"
             onChange={(event) => setArticleSearch(event.target.value)}
@@ -2744,39 +2753,36 @@ export function ReviewComposer({
               >{showAllArticleTags ? "收起" : `更多 +${searchableTags.length - 6}`}</button>
             )}
           </div>
-          <div className="library-chronology-switch" aria-label="文章时间排序方式">
-            <button className={articleChronology === "latest" ? "selected" : ""} onClick={() => setArticleChronology("latest")} type="button">
-              <span>追随潮流</span><small>最新优先</small>
-            </button>
-            <button className={articleChronology === "classic" ? "selected" : ""} onClick={() => setArticleChronology("classic")} type="button">
-              <span>回味经典</span><small>最早优先</small>
-            </button>
-            <button className={articleChronology === "high-rating" ? "selected" : ""} onClick={() => setArticleChronology("high-rating")} type="button">
-              <span>慧眼识珠</span><small>高分优先</small>
-            </button>
-            <button className={articleChronology === "low-rating" ? "selected" : ""} onClick={() => setArticleChronology("low-rating")} type="button">
-              <span>独特品位</span><small>低分优先</small>
-            </button>
-          </div>
-          <div className="library-read-filter" aria-label="阅读状态筛选">
-            {([
-              ["all", "全部"],
-              ["read", "已读"],
-              ["unread", "未读"],
-              ["reading", "在读"],
-            ] as const).map(([value, label]) => (
-              <button
-                className={articleReadFilter === value ? "selected" : ""}
-                key={value}
-                onClick={() => setArticleReadFilter(value)}
-                type="button"
-              ><strong>{label}</strong><span>{readingFilterCounts[value]}</span></button>
-            ))}
-          </div>
-          <div className="library-read-filter-summary" aria-live="polite">
-            <span>当前分类</span>
-            <strong>{readingFilterCounts[articleReadFilter]}</strong>
-            <small>篇文章</small>
+          <div className="library-filter-row">
+            <div className="library-chronology-switch" aria-label="文章排序方式">
+              <button className={articleChronology === "latest" ? "selected" : ""} onClick={() => setArticleChronology("latest")} type="button">
+                <span>追随潮流</span><small>最新优先</small>
+              </button>
+              <button className={articleChronology === "classic" ? "selected" : ""} onClick={() => setArticleChronology("classic")} type="button">
+                <span>回味经典</span><small>最早优先</small>
+              </button>
+              <button className={articleChronology === "high-rating" ? "selected" : ""} onClick={() => setArticleChronology("high-rating")} type="button">
+                <span>慧眼识珠</span><small>高分优先</small>
+              </button>
+              <button className={articleChronology === "low-rating" ? "selected" : ""} onClick={() => setArticleChronology("low-rating")} type="button">
+                <span>独特品位</span><small>低分优先</small>
+              </button>
+            </div>
+            <div className="library-read-filter" aria-label="阅读状态筛选">
+              {([
+                ["all", "全部"],
+                ["read", "已读"],
+                ["unread", "未读"],
+                ["reading", "在读"],
+              ] as const).map(([value, label]) => (
+                <button
+                  className={articleReadFilter === value ? "selected" : ""}
+                  key={value}
+                  onClick={() => setArticleReadFilter(value)}
+                  type="button"
+                ><strong>{label}</strong><span>{readingFilterCounts[value]}</span></button>
+              ))}
+            </div>
           </div>
           </div>
         </div>
@@ -2859,15 +2865,19 @@ export function ReviewComposer({
                 <MarkReadButton
                   articleId={article.id}
                   initialRead={article.isRead}
-                  onChange={(isRead) => setAvailableArticles((current) => current.map((item) => item.id === article.id
-                    ? {
-                        ...item,
-                        isRead,
-                        readingStatus: isRead
-                          ? "read"
-                          : item.savedAnnotations.length > 0 || item.lastReadPage ? "reading" : "unread",
-                      }
-                    : item))}
+                  onChange={(isRead, readAt) => {
+                    setAvailableArticles((current) => current.map((item) => item.id === article.id
+                      ? {
+                          ...item,
+                          isRead,
+                          readAt,
+                          readingStatus: isRead
+                            ? "read"
+                            : item.savedAnnotations.length > 0 || item.lastReadPage ? "reading" : "unread",
+                        }
+                      : item));
+                    onReadStatusChange?.(article.id, isRead, readAt);
+                  }}
                 />
               </div>
               {article.id !== expandedArticleId ? (
