@@ -2567,7 +2567,7 @@ export function ReviewComposer({
               window.localStorage.setItem("wisdomloong-library-banner-hidden", "false");
             }}
             type="button"
-          ><i aria-hidden="true">⌄</i><span>显示文章库工具</span></button>
+          ><i aria-hidden="true">⌄</i><span>展开文章库工具</span></button>
         ) : (
         <div className="article-library-banner">
           <div className="library-heading">
@@ -2576,16 +2576,6 @@ export function ReviewComposer({
               <strong>{availableArticles.length} 篇文章</strong>
             </div>
           </div>
-          <button
-            aria-expanded="true"
-            aria-label="隐藏文章库工具"
-            className="library-tools-toggle is-expanded library-tools-bar"
-            onClick={() => {
-              setLibraryBannerHidden(true);
-              window.localStorage.setItem("wisdomloong-library-banner-hidden", "true");
-            }}
-            type="button"
-          ><span>隐藏文章库工具</span><i aria-hidden="true">⌃</i></button>
           <input
             aria-label="搜索已有文章"
             onChange={(event) => setArticleSearch(event.target.value)}
@@ -2644,6 +2634,16 @@ export function ReviewComposer({
             <strong>{readingFilterCounts[articleReadFilter]}</strong>
             <small>篇文章</small>
           </div>
+          <button
+            aria-expanded="true"
+            aria-label="收起文章库工具"
+            className="library-tools-toggle is-expanded library-tools-bar"
+            onClick={() => {
+              setLibraryBannerHidden(true);
+              window.localStorage.setItem("wisdomloong-library-banner-hidden", "true");
+            }}
+            type="button"
+          ><span>收起文章库工具</span><i aria-hidden="true">⌃</i></button>
         </div>
         )}
         <div className="article-search-results">
