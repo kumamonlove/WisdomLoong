@@ -38,7 +38,7 @@ sudo -u postgres psql \
   --tuples-only \
   --no-align \
   --command="SELECT FORMAT(
-    'User data summary: users=%s reviews=%s annotations=%s annotation_drafts=%s note_pdfs=%s attachments=%s likes=%s sessions=%s reading_list=%s progress=%s recent_views=%s reads=%s graph_canvas_nodes=%s graph_canvas_edges=%s',
+    'User data summary: users=%s reviews=%s annotations=%s annotation_drafts=%s note_pdfs=%s attachments=%s likes=%s note_comments=%s sessions=%s reading_list=%s progress=%s recent_views=%s reads=%s graph_canvas_nodes=%s graph_canvas_edges=%s',
     (SELECT COUNT(*) FROM users),
     (SELECT COUNT(*) FROM reviews),
     (SELECT COUNT(*) FROM review_annotations),
@@ -46,6 +46,7 @@ sudo -u postgres psql \
     (SELECT COUNT(*) FROM reading_note_pdfs),
     (SELECT COUNT(*) FROM review_attachments),
     (SELECT COUNT(*) FROM review_likes),
+    (SELECT COUNT(*) FROM review_comments),
     (SELECT COUNT(*) FROM sessions),
     (SELECT COUNT(*) FROM reading_list),
     (SELECT COUNT(*) FROM reading_progress),

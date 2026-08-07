@@ -22,6 +22,10 @@ export function ReadingArticlePage({
 }) {
   const [importerOpen, setImporterOpen] = useState(false);
   const [pageArticles, setPageArticles] = useState(articles);
+  const bestReading = [...pageArticles]
+    .filter((article) => (article.readingMembers?.length ?? 0) > 0 && article.readingActivityAt)
+    .sort((left, right) => (right.readingActivityAt ?? "").localeCompare(left.readingActivityAt ?? ""))
+    .slice(0, 2);
 
   function addImportedArticle(article: ReaderArticle) {
     setPageArticles((current) => {
@@ -72,6 +76,21 @@ export function ReadingArticlePage({
           <ReadingListImporter onImported={addImportedArticle} />
         </section>
       )}
+
+      <section className="best-reading">
+        <div className="list-title"><h2>最佳在读</h2><span>最新 2 篇</span></div>
+        {bestReading.length > 0 ? (
+          <div className="best-reading-grid">
+            {bestReading.map((article) => (
+              <a href={`/reviews/new?article=${article.id}`} key={article.id}>
+                <span>在读 · {article.readingMembers?.length ?? 0} 人</span>
+                <h3>{article.title}</h3>
+                <p><strong>{article.readingMembers?.join("、")}</strong> 有批注或书签</p>
+              </a>
+            ))}
+          </div>
+        ) : <div className="empty compact"><h3>还没有在读文章</h3><p>添加批注或书签后会显示在这里。</p></div>}
+      </section>
 
       <ReviewComposer
         articles={pageArticles}

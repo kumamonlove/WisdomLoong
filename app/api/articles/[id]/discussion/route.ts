@@ -14,6 +14,7 @@ type DiscussionReview = {
   isOwn: boolean;
   readCount: number;
   annotationCount: number;
+  commentCount: number;
   noteFileName: string | null;
   noteSource: "generated" | "uploaded" | null;
   updatedAt: string;
@@ -122,6 +123,7 @@ export async function GET(
          ) ELSE (
            SELECT COUNT(*)::int FROM review_annotations WHERE review_annotations.review_id = reviews.id
          ) END AS "annotationCount",
+         (SELECT COUNT(*)::int FROM review_comments WHERE review_comments.review_id = reviews.id) AS "commentCount",
          reading_note_pdfs.file_name AS "noteFileName",
          reading_note_pdfs.source AS "noteSource",
          reviews.updated_at::text AS "updatedAt"

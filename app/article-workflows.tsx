@@ -15,7 +15,8 @@ import {
 } from "react";
 import { articleCategories, normalizeTags } from "@/lib/knowledge-types";
 import type { ReaderArticle } from "@/lib/knowledge";
-import { ReadingNoteLikeButton } from "@/app/review-actions";
+import { ReadingNoteComments, ReadingNoteLikeButton } from "@/app/review-actions";
+import { DeleteArticleButton, MarkReadButton } from "@/app/reading-actions";
 import { ArticleMetadataEditor } from "@/app/article-metadata-editor";
 import { MathTitle } from "@/app/math-title";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
@@ -145,6 +146,8 @@ function ArxivLookup({
         lastReadPositionY: null,
         lastReadPositionX: null,
         isRead: false,
+        readingStatus: "unread",
+        canDelete: true,
         savedAnnotations: [],
         ownReview: null,
       });
@@ -402,6 +405,8 @@ function PdfDropImporter({
         lastReadPositionY: null,
         lastReadPositionX: null,
         isRead: false,
+        readingStatus: "unread",
+        canDelete: true,
         savedAnnotations: [],
         ownReview: null,
       });
@@ -568,6 +573,7 @@ type CommunityReview = {
   isOwn: boolean;
   readCount: number;
   annotationCount: number;
+  commentCount: number;
   noteFileName: string | null;
   noteSource: "generated" | "uploaded" | null;
   attachments: { id: number; reviewId: number; note: string }[];
@@ -1221,6 +1227,7 @@ export function ReviewComposer({
   const [expandedArticleId, setExpandedArticleId] = useState<number | null>(startingArticleId || null);
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
+  const [articleReadFilter, setArticleReadFilter] = useState<"all" | "read" | "reading" | "unread">("all");
   const [articleChronology, setArticleChronology] = useState<"latest" | "classic">("latest");
   const [libraryBannerHidden, setLibraryBannerHidden] = useState(false);
   const [articleFocusRevision, setArticleFocusRevision] = useState(0);
@@ -1332,6 +1339,7 @@ export function ReviewComposer({
     const terms = articleSearch.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
     return availableArticles.filter((article) => {
       if (articleTag !== "全部" && !article.tags.includes(articleTag)) return false;
+      if (articleReadFilter !== "all" && article.readingStatus !== articleReadFilter) return false;
       const haystack = [article.title, article.publisher, article.authors.join(" "), article.tags.join(" ")]
         .join(" ")
         .toLocaleLowerCase();
@@ -1345,7 +1353,7 @@ export function ReviewComposer({
         ? rightDate.localeCompare(leftDate) || right.id - left.id
         : leftDate.localeCompare(rightDate) || left.id - right.id;
     });
-  }, [articleChronology, articleSearch, articleTag, availableArticles]);
+  }, [articleChronology, articleReadFilter, articleSearch, articleTag, availableArticles]);
   const visibleSearchableTags = showAllArticleTags
     ? searchableTags
     : [
@@ -1439,7 +1447,11 @@ export function ReviewComposer({
     annotationSaveRevisions.current.set(targetArticleId, revision);
     const payload = JSON.stringify({ annotations: nextNotes });
     setAvailableArticles((current) => current.map((article) =>
-      article.id === targetArticleId ? { ...article, savedAnnotations: nextNotes } : article
+      article.id === targetArticleId ? {
+        ...article,
+        savedAnnotations: nextNotes,
+        readingStatus: article.isRead ? "read" : nextNotes.length > 0 || article.lastReadPage ? "reading" : "unread",
+      } : article
     ));
     try {
       window.localStorage.setItem(annotationDraftStorageKey(targetArticleId), JSON.stringify(nextNotes));
@@ -1598,6 +1610,7 @@ export function ReviewComposer({
             lastReadPage: nextBookmark.page,
             lastReadPositionY: nextBookmark.positionY,
             lastReadPositionX: nextBookmark.positionX ?? 0,
+            readingStatus: article.isRead ? "read" : "reading",
           }
         : article));
       setMessage(`书签已保存：第 ${nextBookmark.page} 页${(nextBookmark.positionX ?? 0) < 50 ? "左侧" : "右侧"}，页内 ${Math.round(nextBookmark.positionY)}% 位置。`);
@@ -1620,7 +1633,13 @@ export function ReviewComposer({
       const response = await fetch(`/api/articles/${articleId}/progress`, { method: "DELETE" });
       await responseJson(response);
       setAvailableArticles((current) => current.map((article) => article.id === articleId
-        ? { ...article, lastReadPage: null, lastReadPositionY: null, lastReadPositionX: null }
+        ? {
+            ...article,
+            lastReadPage: null,
+            lastReadPositionY: null,
+            lastReadPositionX: null,
+            readingStatus: article.isRead ? "read" : article.savedAnnotations.length > 0 ? "reading" : "unread",
+          }
         : article));
       setMessage("书签已删除。");
     } catch (error) {
@@ -2275,7 +2294,7 @@ export function ReviewComposer({
       };
       setAvailableArticles((current) => current.map((article) =>
         article.id === articleId
-          ? { ...article, ownReview: updatedReview, savedAnnotations: notes, isRead: true }
+          ? { ...article, ownReview: updatedReview, savedAnnotations: notes, isRead: true, readingStatus: "read" }
           : article
       ));
       window.localStorage.removeItem(annotationDraftStorageKey(articleId));
@@ -2578,6 +2597,21 @@ export function ReviewComposer({
               <span>回味经典</span><small>最早优先</small>
             </button>
           </div>
+          <div className="library-read-filter" aria-label="阅读状态筛选">
+            {([
+              ["all", "全部"],
+              ["read", "已读"],
+              ["reading", "在读"],
+              ["unread", "未读"],
+            ] as const).map(([value, label]) => (
+              <button
+                className={articleReadFilter === value ? "selected" : ""}
+                key={value}
+                onClick={() => setArticleReadFilter(value)}
+                type="button"
+              >{label}</button>
+            ))}
+          </div>
           <div className="library-tag-filter">
             {visibleSearchableTags.map((tag) => (
               <button
@@ -2647,12 +2681,28 @@ export function ReviewComposer({
                 ))}
               </div>
               <div className="library-card-signals" aria-label="文章阅读数据">
+                <span className={`reading-status is-${article.readingStatus}`}>
+                  {article.readingStatus === "read" ? "已读" : article.readingStatus === "reading" ? "在读" : "未读"}
+                </span>
                 <span><i aria-hidden="true">★</i>{article.rating ?? "暂无评分"}</span>
                 <span><i aria-hidden="true">✓</i>{article.readCount ?? 0} 人读过</span>
                 <span className={(article.readingNowCount ?? 0) > 0 ? "is-live" : ""}>
                   <i aria-hidden="true">●</i>{article.readingNowCount ?? 0} 人正在读
                 </span>
               </div>
+              <MarkReadButton
+                articleId={article.id}
+                initialRead={article.isRead}
+                onChange={(isRead) => setAvailableArticles((current) => current.map((item) => item.id === article.id
+                  ? {
+                      ...item,
+                      isRead,
+                      readingStatus: isRead
+                        ? "read"
+                        : item.savedAnnotations.length > 0 || item.lastReadPage ? "reading" : "unread",
+                    }
+                  : item))}
+              />
               {article.id !== expandedArticleId ? (
                 <p className="library-card-abstract">
                   {article.abstractZh || article.abstract || "摘要正在识别补齐。"}
@@ -2724,6 +2774,20 @@ export function ReviewComposer({
                     onSaved={(update) => setAvailableArticles((current) => current.map((item) =>
                       item.id === article.id ? { ...item, ...update } : item
                     ))}
+                  />
+                  <DeleteArticleButton
+                    articleId={article.id}
+                    articleTitle={article.title}
+                    canDelete={article.canDelete}
+                    onDeleted={() => {
+                      setAvailableArticles((current) => current.filter((item) => item.id !== article.id));
+                      if (articleId === article.id) {
+                        const next = availableArticles.find((item) => item.id !== article.id);
+                        setArticleId(next?.id ?? 0);
+                        setExpandedArticleId(next?.id ?? null);
+                      }
+                      router.refresh();
+                    }}
                   />
                 </div>
               )}
@@ -2802,11 +2866,17 @@ export function ReviewComposer({
                   {viewingPartnerNote && activePartnerNote && (
                     <div className="note-reader-engagement">
                       {activePartnerNote.isOwn ? (
-                        <div className="own-note-read-count">
-                          <span aria-hidden="true">◉</span>
-                          <strong>{activePartnerNote.readCount}</strong>
-                          <small>人读过我的笔记</small>
-                        </div>
+                        <>
+                          <div className="own-note-read-count">
+                            <span aria-hidden="true">◉</span>
+                            <strong>{activePartnerNote.readCount}</strong>
+                            <small>人读过我的笔记</small>
+                          </div>
+                          <ReadingNoteComments
+                            initialCount={activePartnerNote.commentCount}
+                            reviewId={activePartnerNote.id}
+                          />
+                        </>
                       ) : (
                         <>
                           <span className="note-like-prompt">读完有收获？</span>
@@ -2814,6 +2884,10 @@ export function ReviewComposer({
                             initialCount={activePartnerNote.likeCount}
                             initiallyLiked={activePartnerNote.likedByViewer}
                             key={`reader-like-${activePartnerNote.id}`}
+                            reviewId={activePartnerNote.id}
+                          />
+                          <ReadingNoteComments
+                            initialCount={activePartnerNote.commentCount}
                             reviewId={activePartnerNote.id}
                           />
                         </>

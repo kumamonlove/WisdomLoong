@@ -364,6 +364,19 @@ CREATE TABLE IF NOT EXISTS review_likes (
 CREATE INDEX IF NOT EXISTS review_likes_review_idx
   ON review_likes(review_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS review_comments (
+  id BIGSERIAL PRIMARY KEY,
+  review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL CHECK (CHAR_LENGTH(TRIM(content)) BETWEEN 1 AND 1000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS review_comments_review_idx
+  ON review_comments(review_id, created_at ASC, id ASC);
+CREATE INDEX IF NOT EXISTS review_comments_user_idx
+  ON review_comments(user_id, created_at DESC);
+
 DELETE FROM review_likes
 WHERE NOT EXISTS (
   SELECT 1 FROM reading_note_pdfs WHERE reading_note_pdfs.review_id = review_likes.review_id

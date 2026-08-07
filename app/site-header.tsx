@@ -57,12 +57,6 @@ export function SiteHeader({
             <a className={page === "recommended" ? "active" : ""} href="/">
               阅读动态
             </a>
-            <a
-              className={page === "categories" ? "active" : ""}
-              href="/categories"
-            >
-              知识图谱
-            </a>
           </nav>
 
           <a

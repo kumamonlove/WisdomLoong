@@ -28,6 +28,12 @@ export type ArticleCardData = {
   reviewContent: string | null;
   reviewId?: number | null;
   reviewAnnotationCount?: number;
+  activityAuthors?: string[];
+  activityCount?: number;
+  activityAt?: string;
+  noteLikeCount?: number;
+  noteReadCount?: number;
+  noteCommentCount?: number;
   rating: number | null;
   mustRead?: boolean;
   reviews?: {
@@ -76,6 +82,10 @@ export type ReaderArticle = {
   lastReadPositionY: number | null;
   lastReadPositionX: number | null;
   isRead: boolean;
+  readingStatus: "read" | "reading" | "unread";
+  canDelete: boolean;
+  readingMembers?: string[];
+  readingActivityAt?: string | null;
   rating?: number | null;
   readCount?: number;
   readingNowCount?: number;
@@ -137,33 +147,9 @@ export function parseReviewFilter(
   return "all";
 }
 
-export async function getTeamReadingArticles() {
+export async function getFeaturedNoteArticles() {
   const result = await database.query<ArticleCardData>(
-    `WITH review_stats AS (
-       SELECT
-         article_id,
-         ROUND(AVG(rating)::numeric, 1)::float AS average_rating,
-         BOOL_OR(must_read) AS must_read,
-         COUNT(*)::int AS long_review_count,
-         COUNT(*) FILTER (WHERE must_read)::int AS must_read_count,
-         MAX(updated_at) AS last_reviewed_at
-       FROM reviews
-       GROUP BY article_id
-     ),
-     note_like_stats AS (
-       SELECT reviews.article_id, COUNT(review_likes.user_id)::int AS like_count
-       FROM reviews
-       INNER JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
-       LEFT JOIN review_likes ON review_likes.review_id = reviews.id
-       GROUP BY reviews.article_id
-     ),
-     latest_reviews AS (
-       SELECT DISTINCT ON (article_id)
-         reviews.id, article_id, user_id, content
-       FROM reviews
-       ORDER BY article_id, updated_at DESC, id DESC
-     )
-     SELECT
+    `SELECT
        articles.id,
        articles.title,
        articles.category,
@@ -172,37 +158,58 @@ export async function getTeamReadingArticles() {
        articles.published_at::text AS "publishedAt",
        articles.source_url AS "sourceUrl",
        articles.authors,
-       latest_reviewer.username AS "reviewAuthor",
-       latest_reviews.content AS "reviewContent",
-       latest_reviews.id AS "reviewId",
+       users.username AS "reviewAuthor",
+       reviews.content AS "reviewContent",
+       reviews.id AS "reviewId",
        CASE WHEN EXISTS (
          SELECT 1 FROM published_annotations
-         WHERE published_annotations.user_id = latest_reviews.user_id
-           AND published_annotations.article_id = latest_reviews.article_id
+         WHERE published_annotations.user_id = reviews.user_id
+           AND published_annotations.article_id = reviews.article_id
        ) THEN (
          SELECT COUNT(*)::int FROM published_annotations
-         WHERE published_annotations.user_id = latest_reviews.user_id
-           AND published_annotations.article_id = latest_reviews.article_id
+         WHERE published_annotations.user_id = reviews.user_id
+           AND published_annotations.article_id = reviews.article_id
        ) ELSE (
-         SELECT COUNT(*)::int FROM review_annotations WHERE review_annotations.review_id = latest_reviews.id
+         SELECT COUNT(*)::int FROM review_annotations WHERE review_annotations.review_id = reviews.id
        ) END AS "reviewAnnotationCount",
-       review_stats.average_rating AS rating,
-       review_stats.must_read AS "mustRead",
-       JSON_BUILD_OBJECT(
-         'readCount', 0,
-         'longReviewCount', review_stats.long_review_count,
-         'mustReadCount', review_stats.must_read_count,
-         'likeCount', COALESCE(note_like_stats.like_count, 0)
-       ) AS "recommendationSignals"
-     FROM review_stats
-     INNER JOIN articles ON articles.id = review_stats.article_id
-     INNER JOIN latest_reviews ON latest_reviews.article_id = articles.id
-     INNER JOIN users latest_reviewer ON latest_reviewer.id = latest_reviews.user_id
-     LEFT JOIN note_like_stats ON note_like_stats.article_id = articles.id
-     ORDER BY review_stats.last_reviewed_at DESC
-     LIMIT 4`,
+       reviews.rating,
+       reviews.must_read AS "mustRead",
+       reviews.updated_at::text AS "activityAt",
+       (SELECT COUNT(*)::int FROM review_likes WHERE review_likes.review_id = reviews.id) AS "noteLikeCount",
+       (SELECT COUNT(*)::int FROM reading_note_reads WHERE reading_note_reads.review_id = reviews.id) AS "noteReadCount",
+       (SELECT COUNT(*)::int FROM review_comments WHERE review_comments.review_id = reviews.id) AS "noteCommentCount"
+     FROM reviews
+     INNER JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
+     INNER JOIN articles ON articles.id = reviews.article_id
+     INNER JOIN users ON users.id = reviews.user_id
+     ORDER BY reviews.updated_at DESC, reviews.id DESC`,
   );
 
+  return result.rows;
+}
+
+export async function getAnnotatedReadingArticles() {
+  const result = await database.query<ArticleCardData>(
+    `WITH annotation_activity AS (
+       SELECT article_id, user_id, MAX(updated_at) AS activity_at
+       FROM published_annotations
+       GROUP BY article_id, user_id
+     )
+     SELECT
+       articles.id, articles.title, articles.category, articles.tags,
+       articles.publisher, articles.published_at::text AS "publishedAt",
+       articles.source_url AS "sourceUrl", articles.authors,
+       NULL::text AS "reviewAuthor", NULL::text AS "reviewContent",
+       NULL::float AS rating,
+       ARRAY_AGG(users.username ORDER BY annotation_activity.activity_at DESC) AS "activityAuthors",
+       COUNT(*)::int AS "activityCount",
+       MAX(annotation_activity.activity_at)::text AS "activityAt"
+     FROM annotation_activity
+     INNER JOIN articles ON articles.id = annotation_activity.article_id
+     INNER JOIN users ON users.id = annotation_activity.user_id
+     GROUP BY articles.id
+     ORDER BY MAX(annotation_activity.activity_at) DESC, articles.id DESC`,
+  );
   return result.rows;
 }
 
@@ -385,6 +392,28 @@ export async function getArticlesForReview(userId: number) {
               WHERE article_reads.user_id = $1
                 AND article_reads.article_id = articles.id
             ) AS "isRead",
+            CASE
+              WHEN EXISTS (
+                SELECT 1 FROM article_reads
+                WHERE article_reads.user_id = $1 AND article_reads.article_id = articles.id
+              ) THEN 'read'
+              WHEN reading_progress.article_id IS NOT NULL
+                OR (reading_annotation_drafts.article_id IS NOT NULL
+                  AND JSONB_ARRAY_LENGTH(reading_annotation_drafts.annotations) > 0)
+                OR EXISTS (
+                  SELECT 1 FROM published_annotations
+                  WHERE published_annotations.user_id = $1 AND published_annotations.article_id = articles.id
+                ) THEN 'reading'
+              ELSE 'unread'
+            END AS "readingStatus",
+            NOT EXISTS (SELECT 1 FROM reviews WHERE reviews.article_id = articles.id)
+              AND NOT EXISTS (
+                SELECT 1 FROM review_comments
+                INNER JOIN reviews ON reviews.id = review_comments.review_id
+                WHERE reviews.article_id = articles.id
+              ) AS "canDelete",
+            COALESCE(team_reading.members, ARRAY[]::text[]) AS "readingMembers",
+            team_reading.activity_at::text AS "readingActivityAt",
             (
               SELECT ROUND(AVG(reviews.rating)::numeric, 1)::float
               FROM reviews
@@ -448,6 +477,29 @@ export async function getArticlesForReview(userId: number) {
          AND review_annotations.rect_width IS NOT NULL
          AND review_annotations.rect_height IS NOT NULL
      ) own_annotations ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT
+         ARRAY_AGG(activity.username ORDER BY activity.activity_at DESC) AS members,
+         MAX(activity.activity_at) AS activity_at
+       FROM (
+         SELECT users.username, MAX(published_annotations.updated_at) AS activity_at
+         FROM published_annotations
+         INNER JOIN users ON users.id = published_annotations.user_id
+         WHERE published_annotations.article_id = articles.id
+         GROUP BY users.id, users.username
+         UNION ALL
+         SELECT users.username, MAX(reading_progress.updated_at) AS activity_at
+         FROM reading_progress
+         INNER JOIN users ON users.id = reading_progress.user_id
+         WHERE reading_progress.article_id = articles.id
+           AND NOT EXISTS (
+             SELECT 1 FROM published_annotations
+             WHERE published_annotations.article_id = articles.id
+               AND published_annotations.user_id = reading_progress.user_id
+           )
+         GROUP BY users.id, users.username
+       ) activity
+     ) team_reading ON TRUE
      ORDER BY articles.published_at DESC NULLS LAST, articles.created_at DESC`,
     [userId],
   );

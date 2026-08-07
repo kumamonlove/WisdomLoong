@@ -1,6 +1,6 @@
 import packageInfo from "@/package.json";
 import { SiteHeader, type PageName } from "@/app/site-header";
-import { ReadingNoteLikeButton } from "@/app/review-actions";
+import { ReadingNoteComments, ReadingNoteLikeButton } from "@/app/review-actions";
 import { MarkReadButton } from "@/app/reading-actions";
 import { MathTitle } from "@/app/math-title";
 import { ArticleMetadataEditor } from "@/app/article-metadata-editor";
@@ -19,7 +19,7 @@ export function ArticleGrid({
   emptyTitle: string;
   emptyDescription: string;
   showReadAction?: boolean;
-  variant?: "default" | "team-reading";
+  variant?: "default" | "team-reading" | "annotated-reading";
 }) {
   if (articles.length === 0) {
     return (
@@ -32,7 +32,7 @@ export function ArticleGrid({
   }
 
   return (
-    <div className={`article-grid${variant === "team-reading" ? " is-team-reading" : ""}`}>
+    <div className={`article-grid${variant === "team-reading" ? " is-team-reading" : variant === "annotated-reading" ? " is-annotated-reading" : ""}`}>
       {articles.map((article) => (
         <article
           className={`article-card${article.mustRead || article.recommendationSignals?.mustReadCount ? " must-read-card" : ""}${showReadAction && article.isRead ? " is-read" : ""}`}
@@ -79,6 +79,15 @@ export function ArticleGrid({
               {article.rating !== null && (
                 <span><i aria-hidden="true">★</i>团队评分 {article.rating}</span>
               )}
+            </div>
+          )}
+          {article.activityAuthors && article.activityAuthors.length > 0 && (
+            <div className="reading-members">
+              <span aria-hidden="true">批</span>
+              <p>
+                <strong>{article.activityAuthors.join("、")}</strong>
+                {article.activityAuthors.length} 位成员批注过这篇文章
+              </p>
             </div>
           )}
           <dl className="article-meta">
@@ -153,6 +162,7 @@ export function ArticleGrid({
                         initiallyLiked={review.likedByViewer}
                         reviewId={review.id}
                         />
+                        <ReadingNoteComments reviewId={review.id} />
                       </div>
                     )}
                   </div>
@@ -160,10 +170,7 @@ export function ArticleGrid({
               ))}
             </div>
           ) : article.reviewAuthor ? (
-            <a
-              className="review-preview"
-              href={`/reviews/new?article=${article.id}${article.reviewId ? `&note=${article.reviewId}` : ""}`}
-            >
+            <div className="review-preview">
               <p>
                 <span className="mini-avatar" aria-hidden="true">
                   {article.reviewAuthor.slice(0, 1).toUpperCase()}
@@ -171,11 +178,26 @@ export function ArticleGrid({
                 <strong>{article.reviewAuthor}</strong> 的读书笔记
               </p>
               {article.reviewContent && <blockquote>{article.reviewContent}</blockquote>}
+              {(article.noteLikeCount !== undefined || article.noteReadCount !== undefined) && (
+                <div className="note-activity-signals">
+                  <span>♥ {article.noteLikeCount ?? 0} 个赞</span>
+                  <span>◉ {article.noteReadCount ?? 0} 人读过</span>
+                  <span>💬 {article.noteCommentCount ?? 0} 条评论</span>
+                </div>
+              )}
               {(article.reviewAnnotationCount ?? 0) > 0 && (
                 <span className="review-preview-annotations">▣ 同时包含 {article.reviewAnnotationCount} 条位置批注</span>
               )}
-              <span className="review-preview-open">在阅读器中打开读书笔记 <i aria-hidden="true">↗</i></span>
-            </a>
+              <a className="review-preview-open" href={`/reviews/new?article=${article.id}${article.reviewId ? `&note=${article.reviewId}` : ""}`}>
+                在阅读器中打开读书笔记 <i aria-hidden="true">↗</i>
+              </a>
+              {article.reviewId && (
+                <ReadingNoteComments
+                  initialCount={article.noteCommentCount}
+                  reviewId={article.reviewId}
+                />
+              )}
+            </div>
           ) : null}
           <div className="article-card-actions">
             <a

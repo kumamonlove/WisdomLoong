@@ -1860,6 +1860,182 @@ select {
   font-weight: 800;
 }
 
+.activity-sort {
+  padding: 3px;
+  display: flex;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .55);
+}
+
+.activity-sort button {
+  min-width: 58px;
+  padding: 7px 13px;
+  color: var(--muted);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.activity-sort button.selected {
+  color: var(--white);
+  background: var(--ink);
+}
+
+.activity-pager {
+  position: relative;
+  padding: 0 34px;
+}
+
+.activity-pager > .article-grid {
+  min-height: 370px;
+}
+
+.activity-page-key {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  width: 24px;
+  height: 112px;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .78);
+  box-shadow: 0 8px 24px rgba(24, 24, 22, .07);
+  cursor: pointer;
+  font: 500 24px/1 var(--font-display);
+  transform: translateY(-50%);
+}
+
+.activity-page-key.previous { left: 0; }
+.activity-page-key.next { right: 0; }
+.activity-page-key:disabled { cursor: default; opacity: .25; }
+
+.activity-page-status {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+
+.article-grid.is-annotated-reading .article-card {
+  min-height: 350px;
+  background: linear-gradient(145deg, rgba(248, 246, 239, .8), rgba(232, 241, 237, .7));
+}
+
+.reading-members {
+  margin: 0 0 18px;
+  padding: 13px 14px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border-left: 3px solid #4c685b;
+  background: rgba(76, 104, 91, .08);
+}
+
+.reading-members > span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  flex: 0 0 28px;
+  place-items: center;
+  color: var(--white);
+  border-radius: 50%;
+  background: #4c685b;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.reading-members p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.reading-members strong { display: block; color: var(--ink); font-size: 12px; }
+
+.note-comments { position: relative; }
+
+.note-comments-toggle {
+  min-height: 34px;
+  padding: 7px 10px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.note-comments-toggle span { margin-left: 5px; color: var(--accent); }
+
+.note-comments-panel {
+  margin-top: 9px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--white);
+}
+
+.note-comments-panel > p,
+.note-comments-panel > small { margin: 0; color: var(--muted); font-size: 10px; }
+.note-comments-panel > small { color: var(--accent); }
+.note-comment-list { max-height: 190px; display: grid; gap: 8px; overflow: auto; }
+.note-comment-list article { padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.note-comment-list strong { font-size: 10px; }
+.note-comment-list p { margin: 3px 0 0; font-size: 11px; line-height: 1.55; }
+.note-comments-panel form { display: grid; gap: 7px; }
+.note-comments-panel textarea { width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid var(--line); border-radius: 7px; resize: vertical; }
+.note-comments-panel form button { justify-self: end; padding: 7px 11px; color: var(--white); border: 0; border-radius: 7px; background: var(--ink); cursor: pointer; font-size: 10px; font-weight: 750; }
+.note-comments-panel form button:disabled { opacity: .4; }
+
+.review-preview > .note-comments { margin-top: 12px; }
+
+.note-activity-signals { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.note-activity-signals span { padding: 4px 7px; color: var(--muted); border-radius: 999px; background: rgba(24, 24, 22, .045); font-size: 9px; }
+
+.note-reader-engagement .note-comments-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(330px, 78vw);
+  box-sizing: border-box;
+  box-shadow: 0 16px 40px rgba(24, 24, 22, .18);
+}
+
+.best-reading { margin: 44px 0 24px; }
+.best-reading-grid { padding-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.best-reading-grid > a { padding: 18px 20px; color: inherit; border: 1px solid rgba(76, 104, 91, .26); border-radius: 12px; background: linear-gradient(135deg, rgba(232, 241, 237, .8), rgba(248, 246, 239, .72)); text-decoration: none; }
+.best-reading-grid > a:hover { border-color: #4c685b; transform: translateY(-1px); }
+.best-reading-grid span { color: #4c685b; font-size: 9px; font-weight: 850; letter-spacing: .08em; }
+.best-reading-grid h3 { margin: 8px 0; font: 600 17px/1.4 var(--font-display); }
+.best-reading-grid p { margin: 0; color: var(--muted); font-size: 10px; }
+.best-reading-grid p strong { color: var(--ink); }
+
+.library-read-filter { grid-template-columns: repeat(4, 1fr); }
+.article-search-results > article > .mark-read-button { grid-column: 2; grid-row: 2 / span 2; align-self: start; min-height: 31px; padding: 6px 9px; font-size: 9px; }
+.library-card-signals .reading-status { padding: 3px 7px; border-radius: 999px; font-weight: 850; }
+.library-card-signals .reading-status.is-read { color: #486355; background: rgba(76, 104, 91, .11); }
+.library-card-signals .reading-status.is-reading { color: #9a7100; background: rgba(225, 183, 47, .14); }
+.library-card-signals .reading-status.is-unread { color: var(--muted); background: rgba(24, 24, 22, .05); }
+
+.delete-article-action { margin-top: 13px; display: flex; align-items: center; gap: 9px; }
+.delete-article-action button { padding: 7px 10px; color: #a53f31; border: 1px solid rgba(165, 63, 49, .25); border-radius: 7px; background: rgba(165, 63, 49, .05); cursor: pointer; font-size: 9px; font-weight: 750; }
+.delete-article-action button:disabled { color: var(--muted); border-color: var(--line); background: transparent; cursor: not-allowed; opacity: .55; }
+.delete-article-action small { color: #a53f31; font-size: 9px; }
+
+@media (max-width: 760px) {
+  .activity-pager { padding: 0 26px; }
+  .activity-page-key { width: 20px; height: 90px; }
+  .best-reading-grid { grid-template-columns: 1fr; }
+  .article-search-results > article > .mark-read-button { grid-column: 1 / -1; grid-row: auto; justify-self: start; }
+}
+
 .review-collection {
   margin-top: 24px;
   border-top: 1px solid var(--line);

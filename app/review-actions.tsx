@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 export function ReadingNoteLikeButton({
   reviewId,
@@ -56,5 +56,111 @@ export function ReadingNoteLikeButton({
       <small>{count}</small>
       {celebrate && <i aria-hidden="true">＋1</i>}
     </button>
+  );
+}
+
+type NoteComment = {
+  id: number;
+  author: string;
+  content: string;
+  createdAt: string;
+  isOwn: boolean;
+};
+
+export function ReadingNoteComments({
+  reviewId,
+  initialCount = 0,
+}: {
+  reviewId: number;
+  initialCount?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [comments, setComments] = useState<NoteComment[]>([]);
+  const [count, setCount] = useState(initialCount);
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!open || loaded) return;
+    let active = true;
+    setLoading(true);
+    fetch(`/api/reviews/${reviewId}/comments`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json() as { comments?: NoteComment[]; error?: string };
+        if (!response.ok) throw new Error(data.error ?? "评论加载失败");
+        if (active) {
+          setComments(data.comments ?? []);
+          setCount(data.comments?.length ?? 0);
+          setLoaded(true);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setLoaded(true);
+          setMessage(error instanceof Error ? error.message : "评论加载失败");
+        }
+      })
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [loaded, open, reviewId]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const content = draft.trim();
+    if (!content || busy) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/reviews/${reviewId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      const data = await response.json() as { comment?: NoteComment; error?: string };
+      if (!response.ok || !data.comment) throw new Error(data.error ?? "评论发布失败");
+      setComments((current) => [...current, data.comment!]);
+      setCount((value) => value + 1);
+      setDraft("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "评论发布失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={`note-comments${open ? " is-open" : ""}`}>
+      <button className="note-comments-toggle" onClick={() => setOpen((value) => !value)} type="button">
+        评论笔记 <span>{count}</span>
+      </button>
+      {open && (
+        <div className="note-comments-panel">
+          {loading ? <p>正在加载评论…</p> : comments.length > 0 ? (
+            <div className="note-comment-list">
+              {comments.map((comment) => (
+                <article key={comment.id}>
+                  <strong>{comment.author}{comment.isOwn ? " · 我" : ""}</strong>
+                  <p>{comment.content}</p>
+                </article>
+              ))}
+            </div>
+          ) : <p>还没有评论，说说这份笔记给你的启发。</p>}
+          <form onSubmit={submit}>
+            <textarea
+              maxLength={1000}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="评论这份读书笔记…"
+              rows={2}
+              value={draft}
+            />
+            <button disabled={busy || !draft.trim()} type="submit">{busy ? "发布中…" : "发布评论"}</button>
+          </form>
+          {message && <small role="alert">{message}</small>}
+        </div>
+      )}
+    </div>
   );
 }
