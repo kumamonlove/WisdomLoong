@@ -82,6 +82,7 @@ export type ReaderArticle = {
   lastReadPositionY: number | null;
   lastReadPositionX: number | null;
   isRead: boolean;
+  ownRating?: number | null;
   readingStatus: "read" | "reading" | "unread";
   canDelete: boolean;
   readingActivityAt?: string | null;
@@ -391,6 +392,12 @@ export async function getArticlesForReview(userId: number) {
               WHERE article_reads.user_id = $1
                 AND article_reads.article_id = articles.id
             ) AS "isRead",
+            (
+              SELECT article_ratings.rating
+              FROM article_ratings
+              WHERE article_ratings.user_id = $1
+                AND article_ratings.article_id = articles.id
+            ) AS "ownRating",
             CASE
               WHEN EXISTS (
                 SELECT 1 FROM article_reads
@@ -419,9 +426,9 @@ export async function getArticlesForReview(userId: number) {
               own_annotation_activity.updated_at
             )::text AS "readingActivityAt",
             (
-              SELECT ROUND(AVG(reviews.rating)::numeric, 1)::float
-              FROM reviews
-              WHERE reviews.article_id = articles.id
+              SELECT ROUND(AVG(article_ratings.rating)::numeric, 1)::float
+              FROM article_ratings
+              WHERE article_ratings.article_id = articles.id
             ) AS rating,
             (
               SELECT COUNT(*)::int

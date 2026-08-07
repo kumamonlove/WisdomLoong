@@ -107,6 +107,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "没有找到这篇文章" }, { status: 404 });
     }
     const reviewId = result.rows[0].id;
+    await client.query(
+      `INSERT INTO article_ratings (user_id, article_id, rating)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, article_id) DO UPDATE SET
+         rating = EXCLUDED.rating, updated_at = NOW()`,
+      [user.id, articleId, rating],
+    );
     if (!parsedNotePdf) {
       const existingNote = await client.query("SELECT 1 FROM reading_note_pdfs WHERE review_id = $1", [reviewId]);
       if (existingNote.rowCount === 0) {

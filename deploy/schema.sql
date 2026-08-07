@@ -241,6 +241,26 @@ CREATE INDEX IF NOT EXISTS reviews_user_created_idx
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS review_type VARCHAR(8) NOT NULL DEFAULT 'long';
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS must_read BOOLEAN NOT NULL DEFAULT FALSE;
 
+CREATE TABLE IF NOT EXISTS article_ratings (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, article_id)
+);
+
+CREATE INDEX IF NOT EXISTS article_ratings_article_idx
+  ON article_ratings(article_id, rating DESC, updated_at DESC);
+
+INSERT INTO article_ratings (user_id, article_id, rating, updated_at)
+SELECT user_id, article_id, rating, updated_at FROM reviews
+ON CONFLICT (user_id, article_id) DO UPDATE SET
+  rating = CASE
+    WHEN EXCLUDED.updated_at >= article_ratings.updated_at THEN EXCLUDED.rating
+    ELSE article_ratings.rating
+  END,
+  updated_at = GREATEST(article_ratings.updated_at, EXCLUDED.updated_at);
+
 CREATE TABLE IF NOT EXISTS app_migrations (
   migration_key TEXT PRIMARY KEY,
   applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

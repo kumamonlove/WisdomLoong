@@ -1228,11 +1228,12 @@ export function ReviewComposer({
   const [articleSearch, setArticleSearch] = useState("");
   const [articleTag, setArticleTag] = useState("全部");
   const [articleReadFilter, setArticleReadFilter] = useState<"all" | "read" | "reading" | "unread">("all");
-  const [articleChronology, setArticleChronology] = useState<"latest" | "classic">("latest");
+  const [articleChronology, setArticleChronology] = useState<"latest" | "classic" | "high-rating" | "low-rating">("latest");
   const [libraryBannerHidden, setLibraryBannerHidden] = useState(false);
   const [articleFocusRevision, setArticleFocusRevision] = useState(0);
   const [showAllArticleTags, setShowAllArticleTags] = useState(false);
-  const [rating, setRating] = useState<number | null>(startingReview?.rating ?? null);
+  const [rating, setRating] = useState<number | null>(startingArticle?.ownRating ?? startingReview?.rating ?? null);
+  const [ratingSaving, setRatingSaving] = useState(false);
   const [mustRead, setMustRead] = useState(startingReview?.mustRead ?? false);
   const [content, setContent] = useState(startingReview?.content ?? "");
   const [page, setPage] = useState(
@@ -1354,11 +1355,19 @@ export function ReviewComposer({
   const filteredArticles = useMemo(() => readingFilterScope
     .filter((article) => articleReadFilter === "all" || article.readingStatus === articleReadFilter)
     .sort((left, right) => {
+      if (articleChronology === "high-rating" || articleChronology === "low-rating") {
+        if (left.rating === null || left.rating === undefined) return right.rating === null || right.rating === undefined ? right.id - left.id : 1;
+        if (right.rating === null || right.rating === undefined) return -1;
+        const ratingDifference = articleChronology === "high-rating"
+          ? right.rating - left.rating
+          : left.rating - right.rating;
+        if (ratingDifference !== 0) return ratingDifference;
+      }
       const leftDate = left.publishedAt ?? "";
       const rightDate = right.publishedAt ?? "";
       if (!leftDate) return rightDate ? 1 : right.id - left.id;
       if (!rightDate) return -1;
-      return articleChronology === "latest"
+      return articleChronology !== "classic"
         ? rightDate.localeCompare(leftDate) || right.id - left.id
         : leftDate.localeCompare(rightDate) || left.id - right.id;
     }), [articleChronology, articleReadFilter, readingFilterScope]);
@@ -1658,6 +1667,35 @@ export function ReviewComposer({
     }
   }
 
+  async function saveArticleRating(value: number, clearMustRead = true) {
+    if (!articleId || ratingSaving) return;
+    const previousRating = rating;
+    setRating(value);
+    if (clearMustRead) setMustRead(false);
+    setRatingSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/articles/${articleId}/rating`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating: value }),
+      });
+      const data = await responseJson(response);
+      const savedRating = Number(data.rating) || value;
+      const averageRating = Number(data.averageRating) || savedRating;
+      setRating(savedRating);
+      setAvailableArticles((current) => current.map((article) => article.id === articleId
+        ? { ...article, ownRating: savedRating, rating: averageRating }
+        : article));
+      setMessage(`已保存 ${savedRating} 星评分，发布区已同步。`);
+    } catch (error) {
+      setRating(previousRating);
+      setMessage(error instanceof Error ? error.message : "评分保存失败");
+    } finally {
+      setRatingSaving(false);
+    }
+  }
+
   useEffect(() => {
     setAvailableArticles((current) => articles.map((article) =>
       current.find((item) => item.id === article.id) ?? article
@@ -1865,7 +1903,7 @@ export function ReviewComposer({
     setPdfLoading(true);
     setArticlePdfReady(false);
     setPage(article?.lastReadPage ?? 1);
-    setRating(article?.ownReview?.rating ?? null);
+    setRating(article?.ownRating ?? article?.ownReview?.rating ?? null);
     setMustRead(article?.ownReview?.mustRead ?? false);
     setContent(article?.ownReview?.content ?? "");
     setNotes((article?.savedAnnotations ?? article?.ownReview?.annotations ?? []).filter((note) => note.rect));
@@ -2543,6 +2581,24 @@ export function ReviewComposer({
       {focusMode && (
         <div className="focus-status">
           <span><i />扩展算法组知识库</span>
+          {!viewingPartnerNote && (
+            <div className="focus-direct-rating" aria-label="直接为当前文章评分">
+              <strong>我的评分</strong>
+              <div>
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    aria-label={`${value} 星`}
+                    className={value <= (rating ?? 0) ? "filled" : ""}
+                    disabled={ratingSaving}
+                    key={value}
+                    onClick={() => void saveArticleRating(value)}
+                    type="button"
+                  >★</button>
+                ))}
+              </div>
+              <em>{ratingSaving ? "保存中" : rating ? `${rating}.0` : "未评分"}</em>
+            </div>
+          )}
           <small>
             {viewingPartnerNote
               ? `正在阅读 ${activeNoteAuthor} 的读书笔记`
@@ -2612,6 +2668,12 @@ export function ReviewComposer({
             </button>
             <button className={articleChronology === "classic" ? "selected" : ""} onClick={() => setArticleChronology("classic")} type="button">
               <span>回味经典</span><small>最早优先</small>
+            </button>
+            <button className={articleChronology === "high-rating" ? "selected" : ""} onClick={() => setArticleChronology("high-rating")} type="button">
+              <span>慧眼识珠</span><small>高分优先</small>
+            </button>
+            <button className={articleChronology === "low-rating" ? "selected" : ""} onClick={() => setArticleChronology("low-rating")} type="button">
+              <span>独特品位</span><small>低分优先</small>
             </button>
           </div>
           <div className="library-read-filter" aria-label="阅读状态筛选">
@@ -3310,10 +3372,8 @@ export function ReviewComposer({
                     aria-label={`${value} 星`}
                     className={value <= (rating ?? 0) ? "filled" : ""}
                     key={value}
-                    onClick={() => {
-                      setRating(value);
-                      setMustRead(false);
-                    }}
+                    disabled={ratingSaving}
+                    onClick={() => void saveArticleRating(value)}
                     type="button"
                   >★</button>
                 ))}
@@ -3325,7 +3385,7 @@ export function ReviewComposer({
                 checked={mustRead}
                 onChange={(event) => {
                   setMustRead(event.target.checked);
-                  setRating(event.target.checked ? 5 : null);
+                  if (event.target.checked) void saveArticleRating(5, false);
                 }}
                 type="checkbox"
               />
