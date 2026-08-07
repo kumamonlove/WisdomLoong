@@ -1229,7 +1229,6 @@ export function ReviewComposer({
   const [articleTag, setArticleTag] = useState("全部");
   const [articleReadFilter, setArticleReadFilter] = useState<"all" | "read" | "reading" | "unread">("all");
   const [articleChronology, setArticleChronology] = useState<"latest" | "classic" | "high-rating" | "low-rating">("latest");
-  const [libraryBannerHidden, setLibraryBannerHidden] = useState(false);
   const [articleFocusRevision, setArticleFocusRevision] = useState(0);
   const [showAllArticleTags, setShowAllArticleTags] = useState(false);
   const [rating, setRating] = useState<number | null>(startingArticle?.ownRating ?? startingReview?.rating ?? null);
@@ -1783,10 +1782,6 @@ export function ReviewComposer({
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [checkServerConnection]);
-
-  useEffect(() => {
-    setLibraryBannerHidden(window.localStorage.getItem("wisdomloong-library-banner-hidden") === "true");
-  }, []);
 
   useEffect(() => {
     if (!articleId) return;
@@ -2613,19 +2608,27 @@ export function ReviewComposer({
           </div>
         </div>
       )}
-      <aside className={`article-library${libraryBannerHidden ? " banner-hidden" : ""}`}>
-        {libraryBannerHidden ? (
-          <button
-            aria-expanded="false"
-            className="library-tools-toggle library-banner-restore"
-            onClick={() => {
-              setLibraryBannerHidden(false);
-              window.localStorage.setItem("wisdomloong-library-banner-hidden", "false");
-            }}
-            type="button"
-          ><i aria-hidden="true">⌄</i><span>展开文章库工具</span></button>
-        ) : (
-        <div className="article-library-banner">
+      <aside className="article-library">
+        <div
+          className="library-tools-hover-area"
+          onMouseLeave={(event) => {
+            const focusedElement = document.activeElement;
+            if (focusedElement instanceof HTMLElement && event.currentTarget.contains(focusedElement)) {
+              focusedElement.blur();
+            }
+          }}
+        >
+          <div
+            aria-label="悬浮或聚焦显示文章库工具"
+            className="library-tools-hover-trigger"
+            role="button"
+            tabIndex={0}
+          >
+            <span>文章库工具</span>
+            <small>悬浮查看检索与筛选</small>
+            <i aria-hidden="true">⌄</i>
+          </div>
+          <div className="article-library-banner">
           <div className="library-heading">
             <span>文章库</span>
             <div>
@@ -2696,18 +2699,8 @@ export function ReviewComposer({
             <strong>{readingFilterCounts[articleReadFilter]}</strong>
             <small>篇文章</small>
           </div>
-          <button
-            aria-expanded="true"
-            aria-label="收起文章库工具"
-            className="library-tools-toggle is-expanded library-tools-bar"
-            onClick={() => {
-              setLibraryBannerHidden(true);
-              window.localStorage.setItem("wisdomloong-library-banner-hidden", "true");
-            }}
-            type="button"
-          ><span>收起文章库工具</span><i aria-hidden="true">⌃</i></button>
+          </div>
         </div>
-        )}
         <div className="article-search-results">
           {filteredArticles.map((article, index) => {
             const month = article.publishedAt?.slice(0, 7) ?? "日期待补";
