@@ -3205,14 +3205,12 @@ select {
     transition: grid-template-columns var(--reader-panel-motion);
   }
 
-  .reader-workspace.focus-mode:has(> .notebook-hover-area:hover),
-  .reader-workspace.focus-mode:has(> .notebook-hover-area:focus-within) {
+  .reader-workspace.focus-mode:has(> .notebook-hover-area.is-expanded) {
     grid-template-columns: 0 minmax(0, 1fr) 320px;
   }
 }
 
-.notebook-hover-area:hover .reader-notebook,
-.notebook-hover-area:focus-within .reader-notebook {
+.notebook-hover-area.is-expanded .reader-notebook {
   visibility: visible;
   opacity: 1;
   pointer-events: auto;
@@ -3220,12 +3218,18 @@ select {
   transition-delay: 0s;
 }
 
-.notebook-hover-area:hover .notebook-hover-trigger,
-.notebook-hover-area:focus-within .notebook-hover-trigger {
+.notebook-hover-trigger:hover,
+.notebook-hover-trigger:focus-visible {
   color: var(--ink);
   border-color: rgba(214, 95, 64, .28);
   background: var(--white);
   box-shadow: inset -3px 0 0 rgba(214, 95, 64, .86), 0 10px 26px rgba(24, 24, 22, .11);
+}
+
+.notebook-hover-area.is-expanded .notebook-hover-trigger {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .article-library {
@@ -5283,6 +5287,30 @@ select {
   letter-spacing: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.notebook-heading-status .workbench-collapse {
+  width: auto;
+  min-width: 48px;
+  height: 27px;
+  padding: 0 7px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
+  transition: color var(--interaction-speed) ease, border-color var(--interaction-speed) ease, background-color var(--interaction-speed) ease;
+}
+
+.notebook-heading-status .workbench-collapse:hover {
+  color: var(--ink);
+  border-color: var(--interaction-border);
+  background: var(--surface);
 }
 
 .pdf-selection-actions {

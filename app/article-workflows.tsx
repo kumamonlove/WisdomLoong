@@ -1304,6 +1304,7 @@ export function ReviewComposer({
   const [zoom, setZoom] = useState(100);
   const [focusMode, setFocusMode] = useState(startFocused);
   const [contextTab, setContextTab] = useState<"annotations" | "publish">("annotations");
+  const [workbenchExpanded, setWorkbenchExpanded] = useState(false);
   const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
   const [libraryReviewsByArticle, setLibraryReviewsByArticle] = useState<Record<number, CommunityReview[]>>({});
   const [libraryDiscussionLoadingId, setLibraryDiscussionLoadingId] = useState<number | null>(null);
@@ -1622,6 +1623,7 @@ export function ReviewComposer({
     if (annotationHoverTimer.current !== null) window.clearTimeout(annotationHoverTimer.current);
     annotationHoverTimer.current = null;
     setContextTab("annotations");
+    setWorkbenchExpanded(true);
     setOtherAnnotationsExpanded(true);
     setActiveAnnotationId(annotationId);
     setExpandedCommunityAnnotationId(annotationId);
@@ -2050,6 +2052,7 @@ export function ReviewComposer({
     setNotePdfPreviewUrl("");
     setNotePdfIncludedNotes(article?.ownReview?.annotations ?? []);
     setContextTab("annotations");
+    setWorkbenchExpanded(false);
     const sessionUrl = sessionPdfUrls.current.get(id);
     setLocalPdfUrl(sessionUrl ?? `/api/articles/${id}/pdf`);
     setLocalPdfName(sessionUrl ? "本地 PDF" : "");
@@ -2745,7 +2748,7 @@ export function ReviewComposer({
               aria-label={`查看并编辑我的批注 ${item.noteIndex + 1}`}
               className="pdf-annotation-number"
               data-side={item.rect!.x + item.rect!.width / 2 > 50 ? "right" : "left"}
-              onClick={() => { setContextTab("annotations"); setActiveOwnAnnotationIndex(item.noteIndex); startEditingAnnotation(item.noteIndex); }}
+              onClick={() => { setContextTab("annotations"); setWorkbenchExpanded(true); setActiveOwnAnnotationIndex(item.noteIndex); startEditingAnnotation(item.noteIndex); }}
               onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)}
               onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
               type="button"
@@ -2761,7 +2764,7 @@ export function ReviewComposer({
             aria-label={`查看并编辑我的文字批注 ${item.noteIndex + 1}`}
             className={`pdf-text-annotation-target is-own${activeOwnAnnotationIndex === item.noteIndex ? " is-active" : ""}`}
             data-side={anchor.x > 50 ? "right" : "left"}
-            onClick={() => { setContextTab("annotations"); setActiveOwnAnnotationIndex(item.noteIndex); startEditingAnnotation(item.noteIndex); }}
+            onClick={() => { setContextTab("annotations"); setWorkbenchExpanded(true); setActiveOwnAnnotationIndex(item.noteIndex); startEditingAnnotation(item.noteIndex); }}
             onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)}
             onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
             style={{ left: `${anchor.x > 50 ? Math.min(100, anchor.x + anchor.width + 1) : Math.max(0, anchor.x - 1)}%`, top: `${anchor.y + anchor.height / 2}%` }}
@@ -3493,9 +3496,9 @@ export function ReviewComposer({
         )}
       </section>
 
-      <div className="notebook-hover-area">
-        <button aria-controls="reader-workbench" aria-label="展开阅读工作台" className="notebook-hover-trigger" type="button"><span>工作台</span><i aria-hidden="true">‹</i></button>
-        <aside className="reader-notebook" id="reader-workbench">
+      <div className={`notebook-hover-area${workbenchExpanded ? " is-expanded" : ""}`}>
+        <button aria-controls="reader-workbench" aria-expanded={workbenchExpanded} aria-label="展开阅读工作台" className="notebook-hover-trigger" onClick={() => setWorkbenchExpanded(true)} type="button"><span>工作台</span><i aria-hidden="true">‹</i></button>
+        <aside aria-hidden={!workbenchExpanded} className="reader-notebook" id="reader-workbench">
         <div className="notebook-heading">
           <div><span>阅读工作台</span><small>阅读、理解、整理、发布</small></div>
           <div className="notebook-heading-status">
@@ -3507,6 +3510,7 @@ export function ReviewComposer({
               title={serverConnectionError || "应用服务器和数据库连接正常"}
               type="button"
             ><i aria-hidden="true" />{serverConnection === "checking" ? "正在检查" : serverConnection === "connected" ? "已连接" : "连接异常"}</button>
+            <button aria-label="收起阅读工作台" className="workbench-collapse" onClick={() => setWorkbenchExpanded(false)} title="收起工作台" type="button">收起&nbsp;›</button>
           </div>
         </div>
         <nav className="workspace-tabs" aria-label="阅读工作台功能">
