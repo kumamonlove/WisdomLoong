@@ -1313,6 +1313,7 @@ export function ReviewComposer({
   const [annotationsLoading, setAnnotationsLoading] = useState(false);
   const [articlePdfReady, setArticlePdfReady] = useState(false);
   const [annotationsEnabled, setAnnotationsEnabled] = useState(true);
+  const [ownAnnotationsEnabled, setOwnAnnotationsEnabled] = useState(true);
   const [activeAnnotationId, setActiveAnnotationId] = useState<number | null>(null);
   const [expandedCommunityAnnotationId, setExpandedCommunityAnnotationId] = useState<number | null>(null);
   const [activeOwnAnnotationIndex, setActiveOwnAnnotationIndex] = useState<number | null>(null);
@@ -1521,6 +1522,14 @@ export function ReviewComposer({
     window.localStorage.setItem("wisdomloong-annotations-enabled", String(enabled));
     if (!enabled) {
       setActiveAnnotationId(null);
+    }
+  }
+
+  function setOwnAnnotationVisibility(enabled: boolean) {
+    setOwnAnnotationsEnabled(enabled);
+    window.localStorage.setItem("wisdomloong-own-annotations-enabled", String(enabled));
+    if (!enabled) {
+      setActiveOwnAnnotationIndex(null);
     }
   }
 
@@ -1860,6 +1869,9 @@ export function ReviewComposer({
     if (saved === "false") {
       setAnnotationsEnabled(false);
       setDrawingAnnotation(false);
+    }
+    if (window.localStorage.getItem("wisdomloong-own-annotations-enabled") === "false") {
+      setOwnAnnotationsEnabled(false);
     }
   }, []);
 
@@ -2691,7 +2703,11 @@ export function ReviewComposer({
               data-side={annotation.rect!.x + annotation.rect!.width / 2 > 50 ? "right" : "left"}
               type="button"
             >{number}</button>
-            <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}</strong>
+            <strong
+              className="pdf-annotation-tooltip"
+              data-align={annotation.rect!.x + annotation.rect!.width / 2 > 50 ? "right" : "left"}
+              data-placement={annotation.rect!.y < 25 ? "below" : "above"}
+            ><b>{annotation.author} · 批注 {number}</b>{annotation.content}</strong>
           </div>
         ))}
         {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.annotationKind === "highlight").map(({ annotation, number }) => {
@@ -2721,10 +2737,10 @@ export function ReviewComposer({
               data-side={anchor.x > 50 ? "right" : "left"}
               style={{ left: `${anchor.x > 50 ? Math.min(100, anchor.x + anchor.width + 1) : Math.max(0, anchor.x - 1)}%`, top: `${anchor.y + anchor.height / 2}%` }}
               type="button"
-            ><span>{number}</span><strong className="pdf-annotation-tooltip"><b>{annotation.author} · 文字批注 {number}</b>{annotation.content}</strong></button>
+            ><span>{number}</span><strong className="pdf-annotation-tooltip" data-placement={anchor.y < 25 ? "below" : "above"}><b>{annotation.author} · 文字批注 {number}</b>{annotation.content}</strong></button>
           </Fragment>;
         })}
-        {pageNotes.filter((item) => item.annotationKind !== "highlight").map((item, index) => {
+        {ownAnnotationsEnabled && pageNotes.filter((item) => item.annotationKind !== "highlight").map((item, index) => {
           const overlapIndex = pageAnnotations.filter((annotation) =>
             annotation.rect && rectanglesOverlap(item.rect!, annotation.rect)
           ).length + pageNotes.slice(0, index).filter((note) =>
@@ -2752,10 +2768,14 @@ export function ReviewComposer({
               onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)}
               onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
               type="button"
-            >我</button><strong className="pdf-annotation-tooltip"><b>我的批注</b>{item.content}</strong></span>
+            >我</button><strong
+              className="pdf-annotation-tooltip"
+              data-align={item.rect!.x + item.rect!.width / 2 > 50 ? "right" : "left"}
+              data-placement={item.rect!.y < 25 ? "below" : "above"}
+            ><b>我的批注</b>{item.content}</strong></span>
           );
         })}
-        {pageNotes.filter((item) => item.annotationKind === "highlight").map((item, index) => {
+        {ownAnnotationsEnabled && pageNotes.filter((item) => item.annotationKind === "highlight").map((item, index) => {
           const rects = item.highlightRects?.length ? item.highlightRects : item.rect ? [item.rect] : [];
           const anchor = rects[0];
           return rects.length > 0 ? <Fragment key={`own-text-${item.noteIndex}`}><svg aria-label={`我的文字批注 ${index + 1}：${item.content}`} className={`pdf-text-annotation-shape is-own${activeOwnAnnotationIndex === item.noteIndex ? " is-active" : ""}`} onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)} onMouseLeave={() => setActiveOwnAnnotationIndex(null)} preserveAspectRatio="none" role="img" viewBox="0 0 100 100">
@@ -2769,7 +2789,7 @@ export function ReviewComposer({
             onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
             style={{ left: `${anchor.x > 50 ? Math.min(100, anchor.x + anchor.width + 1) : Math.max(0, anchor.x - 1)}%`, top: `${anchor.y + anchor.height / 2}%` }}
             type="button"
-          ><span>我</span><strong className="pdf-annotation-tooltip"><b>我的批注</b>{item.content}</strong></button></Fragment> : null;
+          ><span>我</span><strong className="pdf-annotation-tooltip" data-placement={anchor.y < 25 ? "below" : "above"}><b>我的批注</b>{item.content}</strong></button></Fragment> : null;
         })}
         {annotationRect && annotationKind !== "highlight" && annotationPage === pageNumber && (
           <span
@@ -3308,7 +3328,15 @@ export function ReviewComposer({
                         onClick={() => setAnnotationVisibility(!annotationsEnabled)}
                         type="button"
                       >
-                        <ReaderToolIcon name="eye" /><span className="reader-tool-label">他人批注</span><i aria-hidden="true" className="reader-tool-status" />
+                        <ReaderToolIcon name="eye" /><span className="reader-tool-label">他人批注</span><i aria-hidden="true" className="reader-tool-status">{annotationsEnabled ? "开" : "关"}</i>
+                      </button>
+                      <button
+                        aria-pressed={ownAnnotationsEnabled}
+                        className={`annotation-toggle${ownAnnotationsEnabled ? " enabled" : ""}`}
+                        onClick={() => setOwnAnnotationVisibility(!ownAnnotationsEnabled)}
+                        type="button"
+                      >
+                        <ReaderToolIcon name="eye" /><span className="reader-tool-label">我的批注</span><i aria-hidden="true" className="reader-tool-status">{ownAnnotationsEnabled ? "开" : "关"}</i>
                       </button>
                     </div>
                   )}
@@ -3599,8 +3627,8 @@ export function ReviewComposer({
                 <div
                   className={`${editingAnnotationIndex === noteIndex ? "is-editing" : ""}${activeOwnAnnotationIndex === noteIndex ? " is-active" : ""}`}
                   key={`${note.page}-${noteIndex}`}
-                  onMouseEnter={() => setActiveOwnAnnotationIndex(noteIndex)}
-                  onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
+                  onClick={() => setActiveOwnAnnotationIndex(noteIndex)}
+                  onDoubleClick={() => startEditingAnnotation(noteIndex)}
                 >
                   {editingAnnotationIndex === noteIndex ? (
                     <div className="saved-note-editor">
@@ -3626,11 +3654,10 @@ export function ReviewComposer({
                     <>
                       <button
                         className="saved-note-jump"
-                        onClick={() => navigateToAnnotation(note)}
+                        title="单击选中，双击编辑"
                         type="button"
                       ><span>{note.content}</span></button>
-                      <button aria-label="编辑批注" className="saved-note-edit" onClick={() => startEditingAnnotation(noteIndex)} title="编辑批注" type="button">✎</button>
-                      <button aria-label="删除批注" className="saved-note-delete" onClick={() => deleteAnnotation(noteIndex)} title="删除批注" type="button">⌫</button>
+                      <button aria-label="删除批注" className="saved-note-delete" onClick={(event) => { event.stopPropagation(); deleteAnnotation(noteIndex); }} title="删除批注" type="button"><ReaderToolIcon name="trash" /></button>
                     </>
                   )}
                 </div>

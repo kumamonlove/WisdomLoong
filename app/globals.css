@@ -4390,15 +4390,26 @@ select {
 }
 
 .reader-tool-status {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #aaa69c;
+  min-width: 25px;
+  height: 18px;
+  padding: 0 6px;
+  display: inline-grid;
+  place-items: center;
+  color: #6e6a61;
+  border: 1px solid rgba(24, 24, 22, .16);
+  border-radius: 999px;
+  background: rgba(24, 24, 22, .08);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .annotation-toggle.enabled .reader-tool-status {
+  color: #fff;
+  border-color: var(--accent);
   background: var(--accent);
-  box-shadow: 0 0 0 3px rgba(214, 95, 64, .12);
+  box-shadow: 0 0 0 3px rgba(214, 95, 64, .14);
 }
 
 .reader-toolbar .reader-document-switch {
@@ -4925,6 +4936,7 @@ select {
   left: 0;
   bottom: calc(100% + 12px);
   width: min(240px, 42vw);
+  max-height: 140px;
   padding: 9px 10px;
   display: none;
   color: var(--white);
@@ -4935,7 +4947,20 @@ select {
   font-weight: 500;
   line-height: 1.5;
   text-align: left;
+  overflow: hidden;
+  overflow-wrap: anywhere;
   pointer-events: none;
+}
+
+.pdf-annotation-tooltip[data-align="right"],
+.pdf-text-annotation-target[data-side="right"] .pdf-annotation-tooltip {
+  right: 0;
+  left: auto;
+}
+
+.pdf-annotation-tooltip[data-placement="below"] {
+  top: calc(100% + 12px);
+  bottom: auto;
 }
 
 .pdf-annotation-tooltip b {
@@ -4994,6 +5019,10 @@ select {
   stroke: rgba(154, 69, 48, .82);
   stroke-width: 1.6;
   stroke-linejoin: round;
+}
+
+.pdf-text-annotation-shape:is(.is-community, .is-own) polygon {
+  pointer-events: all;
 }
 
 .pdf-text-annotation-shape.is-active polygon {
@@ -6558,7 +6587,7 @@ select {
 
 .saved-notes > div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 24px;
+  grid-template-columns: minmax(0, 1fr) 30px;
   align-items: center;
   gap: 3px;
 }
@@ -6605,14 +6634,20 @@ select {
 }
 
 .saved-note-delete {
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   color: var(--muted);
   border: 0;
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
+}
+
+.saved-note-delete .reader-tool-icon {
+  width: 17px;
+  height: 17px;
+  margin: auto;
 }
 
 .saved-note-delete:hover {
