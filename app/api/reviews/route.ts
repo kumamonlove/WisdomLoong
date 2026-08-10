@@ -136,8 +136,25 @@ export async function POST(request: Request) {
         [reviewId, parsedNotePdf.fileName, parsedNotePdf.source, parsedNotePdf.data],
       );
     }
-    await client.query("DELETE FROM review_annotations WHERE review_id = $1", [reviewId]);
-    for (const annotation of annotations) {
+    const existingAnnotations = await client.query<{ id: number }>(
+      "SELECT id FROM review_annotations WHERE review_id = $1 ORDER BY id",
+      [reviewId],
+    );
+    for (const [index, annotation] of annotations.entries()) {
+      const existingId = existingAnnotations.rows[index]?.id;
+      if (existingId) {
+        await client.query(
+          `UPDATE review_annotations SET
+             page_number = $2, quote = $3, translation = $4, content = $5,
+             rect_x = $6, rect_y = $7, rect_width = $8, rect_height = $9,
+             annotation_kind = $10, highlight_rects = $11::jsonb
+           WHERE id = $1`,
+          [existingId, annotation.page, annotation.quote, annotation.translation, annotation.content,
+            annotation.rect?.x ?? null, annotation.rect?.y ?? null, annotation.rect?.width ?? null,
+            annotation.rect?.height ?? null, annotation.annotationKind, JSON.stringify(annotation.highlightRects)],
+        );
+        continue;
+      }
       await client.query(
         `INSERT INTO review_annotations
            (review_id, page_number, quote, translation, content,
@@ -157,6 +174,10 @@ export async function POST(request: Request) {
           JSON.stringify(annotation.highlightRects),
         ],
       );
+    }
+    const obsoleteAnnotationIds = existingAnnotations.rows.slice(annotations.length).map((item) => item.id);
+    if (obsoleteAnnotationIds.length > 0) {
+      await client.query("DELETE FROM review_annotations WHERE id = ANY($1::int[])", [obsoleteAnnotationIds]);
     }
     await client.query(
       "DELETE FROM reading_annotation_drafts WHERE user_id = $1 AND article_id = $2",

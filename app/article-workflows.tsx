@@ -15,7 +15,7 @@ import {
 } from "react";
 import { articleCategories, normalizeTags } from "@/lib/knowledge-types";
 import type { ReaderArticle } from "@/lib/knowledge";
-import { ReadingNoteComments, ReadingNoteLikeButton } from "@/app/review-actions";
+import { AnnotationComments, ReadingNoteComments, ReadingNoteLikeButton } from "@/app/review-actions";
 import { DeleteArticleButton, MarkReadButton, ReadingListButton } from "@/app/reading-actions";
 import { ArticleMetadataEditor } from "@/app/article-metadata-editor";
 import { MathTitle } from "@/app/math-title";
@@ -564,6 +564,8 @@ type ReadingNote = {
 type ReadingBookmark = { page: number; positionY: number; positionX?: number };
 type CommunityAnnotation = ReadingNote & {
   id: number;
+  source: "published" | "review";
+  sourceId: number;
   reviewId: number;
   author: string;
 };
@@ -622,17 +624,19 @@ function canvasLines(context: CanvasRenderingContext2D, text: string, maxWidth: 
 
 async function generateReadingNotePdf({
   pdfUrl,
+  basePdfUrl,
   title,
   author,
   notes,
 }: {
   pdfUrl: string;
+  basePdfUrl?: string;
   title: string;
   author: string;
   notes: ReadingNote[];
 }) {
   const framedNotes = notes.filter((note) => note.rect);
-  if (!pdfUrl || framedNotes.length === 0) throw new Error("请先添加至少一条图片或文字批注");
+  if (!pdfUrl || framedNotes.length === 0) throw new Error("没有尚未加入读书笔记的批注");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
   pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.30`;
@@ -778,7 +782,24 @@ async function generateReadingNotePdf({
   }
 
   const safeTitle = title.replace(/[\\/:*?"<>|]/g, "_").slice(0, 80);
-  return new File([output.output("blob")], `${safeTitle}-读书笔记.pdf`, { type: "application/pdf" });
+  const additions = output.output("blob");
+  if (!basePdfUrl) {
+    return new File([additions], `${safeTitle}-读书笔记.pdf`, { type: "application/pdf" });
+  }
+  const baseResponse = await fetch(basePdfUrl, { cache: "no-store" });
+  if (!baseResponse.ok) throw new Error("无法读取原读书笔记");
+  const { PDFDocument } = await import("pdf-lib");
+  const [baseDocument, additionsDocument] = await Promise.all([
+    PDFDocument.load(await baseResponse.arrayBuffer()),
+    PDFDocument.load(await additions.arrayBuffer()),
+  ]);
+  const merged = await PDFDocument.create();
+  const basePages = await merged.copyPages(baseDocument, baseDocument.getPageIndices());
+  basePages.forEach((page) => merged.addPage(page));
+  const additionPages = await merged.copyPages(additionsDocument, additionsDocument.getPageIndices());
+  additionPages.forEach((page) => merged.addPage(page));
+  const bytes = await merged.save({ useObjectStreams: true });
+  return new File([new Uint8Array(bytes).buffer], `${safeTitle}-读书笔记.pdf`, { type: "application/pdf" });
 }
 
 const annotationColors = ["#277da1", "#7b5ea7", "#2a8c6b", "#c06a32", "#b14366", "#56733f"];
@@ -791,6 +812,32 @@ function annotationColor(author: string) {
 
 function annotationDraftStorageKey(articleId: number) {
   return `wisdomloong-annotation-draft-${articleId}`;
+}
+
+function annotationIdentity(note: ReadingNote) {
+  const rect = note.rect;
+  return JSON.stringify([
+    note.page,
+    note.annotationKind ?? "frame",
+    note.quote.trim(),
+    note.content.trim(),
+    rect ? [rect.x, rect.y, rect.width, rect.height].map((value) => Math.round(value * 1000) / 1000) : null,
+  ]);
+}
+
+function annotationsNotYetIncluded(notes: ReadingNote[], included: ReadingNote[]) {
+  const counts = new Map<string, number>();
+  for (const note of included) {
+    const key = annotationIdentity(note);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return notes.filter((note) => {
+    const key = annotationIdentity(note);
+    const remaining = counts.get(key) ?? 0;
+    if (remaining === 0) return true;
+    counts.set(key, remaining - 1);
+    return false;
+  });
 }
 
 function rectanglesOverlap(first: AnnotationRect, second: AnnotationRect) {
@@ -1262,9 +1309,12 @@ export function ReviewComposer({
   const [articlePdfReady, setArticlePdfReady] = useState(false);
   const [annotationsEnabled, setAnnotationsEnabled] = useState(true);
   const [activeAnnotationId, setActiveAnnotationId] = useState<number | null>(null);
+  const [expandedCommunityAnnotationId, setExpandedCommunityAnnotationId] = useState<number | null>(null);
+  const [activeOwnAnnotationIndex, setActiveOwnAnnotationIndex] = useState<number | null>(null);
   const [notePdfFile, setNotePdfFile] = useState<File | null>(null);
   const [notePdfSource, setNotePdfSource] = useState<"generated" | "uploaded">("generated");
   const [notePdfPreviewUrl, setNotePdfPreviewUrl] = useState("");
+  const [notePdfIncludedNotes, setNotePdfIncludedNotes] = useState<ReadingNote[]>(startingReview?.annotations ?? []);
   const [generatingNotePdf, setGeneratingNotePdf] = useState(false);
   const [partnerNoteReviewId, setPartnerNoteReviewId] = useState<number | null>(initialPartnerNoteReviewId ?? null);
   const [partnerNoteError, setPartnerNoteError] = useState(false);
@@ -1344,6 +1394,7 @@ export function ReviewComposer({
     ? arxivPageUrl(selectedArticle.sourceUrl)
     : null;
   const hasReadingNote = Boolean(notePdfFile || selectedArticle?.ownReview?.noteFileName);
+  const pendingNoteCount = annotationsNotYetIncluded(notes, notePdfIncludedNotes).filter((note) => note.rect).length;
   const searchableTags = useMemo(
     () => ["全部", ...new Set(availableArticles.flatMap((article) => article.tags))],
     [availableArticles],
@@ -1573,6 +1624,7 @@ export function ReviewComposer({
     annotationHoverTimer.current = null;
     setContextTab("annotations");
     setActiveAnnotationId(annotationId);
+    setExpandedCommunityAnnotationId(annotationId);
     window.requestAnimationFrame(() => {
       const card = document.querySelector<HTMLElement>(`[data-community-annotation-id="${annotationId}"]`);
       card?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1987,6 +2039,8 @@ export function ReviewComposer({
     setTranslation("");
     setTranslationError("");
     setActiveAnnotationId(null);
+    setExpandedCommunityAnnotationId(null);
+    setActiveOwnAnnotationIndex(null);
     setPartnerNoteReviewId(null);
     setPartnerNoteError(false);
     setMessage("");
@@ -1994,6 +2048,7 @@ export function ReviewComposer({
     notePdfPreviewRef.current = "";
     setNotePdfFile(null);
     setNotePdfPreviewUrl("");
+    setNotePdfIncludedNotes(article?.ownReview?.annotations ?? []);
     setContextTab("annotations");
     const sessionUrl = sessionPdfUrls.current.get(id);
     setLocalPdfUrl(sessionUrl ?? `/api/articles/${id}/pdf`);
@@ -2319,14 +2374,14 @@ export function ReviewComposer({
     setMessage("");
   }
 
-  function useNotePdf(file: File, source: "generated" | "uploaded") {
+  function useNotePdf(file: File, source: "generated" | "uploaded", includedNotes?: ReadingNote[]) {
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
       setMessage("读书笔记必须是 PDF 文件。");
-      return;
+      return false;
     }
     if (file.size > 30_000_000) {
       setMessage("读书笔记 PDF 不能超过 30 MB。");
-      return;
+      return false;
     }
     if (notePdfPreviewRef.current) URL.revokeObjectURL(notePdfPreviewRef.current);
     const previewUrl = URL.createObjectURL(file);
@@ -2334,7 +2389,9 @@ export function ReviewComposer({
     setNotePdfFile(file);
     setNotePdfSource(source);
     setNotePdfPreviewUrl(previewUrl);
+    setNotePdfIncludedNotes(source === "uploaded" ? [] : includedNotes ?? notePdfIncludedNotes);
     setMessage(source === "generated" ? "读书笔记 PDF 已生成，可预览后随评论发布。" : "已选择个人读书笔记 PDF。");
+    return true;
   }
 
   async function translateForReadingNote(text: string) {
@@ -2356,6 +2413,7 @@ export function ReviewComposer({
     if (!selectedArticle) return;
     setGeneratingNotePdf(true);
     setMessage("");
+    let temporaryBaseUrl = "";
     try {
       const translatedNotes: ReadingNote[] = [];
       for (const note of notes) {
@@ -2370,16 +2428,27 @@ export function ReviewComposer({
         setNotes(translatedNotes);
         persistAnnotationDrafts(articleId, translatedNotes);
       }
+      const newNotes = annotationsNotYetIncluded(translatedNotes, notePdfIncludedNotes);
+      if (newNotes.length === 0) throw new Error("当前批注都已经加入读书笔记");
+      const basePdfUrl = notePdfFile
+        ? (temporaryBaseUrl = URL.createObjectURL(notePdfFile))
+        : selectedArticle.ownReview?.noteFileName
+          ? `/api/reading-notes/${selectedArticle.ownReview.id}/pdf`
+          : undefined;
       const file = await generateReadingNotePdf({
         pdfUrl: localPdfUrl,
+        basePdfUrl,
         title: selectedArticle.title,
         author: username,
-        notes: translatedNotes,
+        notes: newNotes,
       });
-      useNotePdf(file, "generated");
+      if (useNotePdf(file, "generated", translatedNotes)) {
+        setMessage(basePdfUrl ? "已经更新读书笔记，新批注已追加在原 PDF 下方。" : "读书笔记 PDF 已生成，可预览后发布。");
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "读书笔记生成失败");
     } finally {
+      if (temporaryBaseUrl) URL.revokeObjectURL(temporaryBaseUrl);
       setGeneratingNotePdf(false);
     }
   }
@@ -2445,8 +2514,9 @@ export function ReviewComposer({
       }
       window.localStorage.removeItem(annotationDraftStorageKey(articleId));
       setAnnotationSaveStatus("saved");
+      if (notePdfFile) setNotePdfIncludedNotes(notes);
       setMessage(selectedArticle?.ownReview
-        ? "评论修改已保存。"
+        ? notePdfFile ? "已经更新读书笔记，评分和评论也已保存。" : "评分和评论已更新。"
         : "评论已发布，文章已标记为已读。");
       router.refresh();
     } catch (error) {
@@ -2465,7 +2535,8 @@ export function ReviewComposer({
         ? items.slice(0, index).filter((item) => item.rect && rectanglesOverlap(annotation.rect!, item.rect)).length
         : 0,
     }));
-    const pageNotes = notes.filter((item) => item.page === pageNumber && item.rect);
+    const pageNotes = notes.map((item, noteIndex) => ({ ...item, noteIndex }))
+      .filter((item) => item.page === pageNumber && item.rect);
     const pendingOverlap = annotationRect && annotationPage === pageNumber
       ? pageAnnotations.filter((annotation) => annotation.rect && rectanglesOverlap(annotationRect, annotation.rect)).length
       : 0;
@@ -2536,7 +2607,7 @@ export function ReviewComposer({
         {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.rect && annotation.annotationKind !== "highlight").map(({ annotation, number, overlapIndex }) => (
           <div
             aria-label={`批注 ${number}，${annotation.author}：${annotation.content}。点击在相同位置添加我的批注`}
-            className={`pdf-annotation-box is-community is-${annotation.annotationKind ?? "frame"}${activeAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
+            className={`pdf-annotation-box is-community is-${annotation.annotationKind ?? "frame"}${activeAnnotationId === annotation.id || expandedCommunityAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
             key={`community-${annotation.id}`}
             onClick={(event) => {
               event.stopPropagation();
@@ -2555,7 +2626,7 @@ export function ReviewComposer({
               width: `${annotation.rect!.width}%`,
               height: `${annotation.rect!.height}%`,
               transform: `translate(${overlapIndex * 4}px, ${overlapIndex * 4}px)`,
-              zIndex: activeAnnotationId === annotation.id ? 50 : 10 + overlapIndex,
+              zIndex: activeAnnotationId === annotation.id || expandedCommunityAnnotationId === annotation.id ? 50 : 10 + overlapIndex,
               "--annotation-color": annotationColor(annotation.author),
             } as CSSProperties}
             tabIndex={0}
@@ -2567,6 +2638,7 @@ export function ReviewComposer({
               onFocus={() => showAnnotationAfterDelay(annotation.id)}
               onMouseEnter={() => showAnnotationAfterDelay(annotation.id)}
               onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
+              data-side={annotation.rect!.x + annotation.rect!.width / 2 > 50 ? "right" : "left"}
               type="button"
             >{number}</button>
             <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}<small>点击数字在右侧查看</small></strong>
@@ -2579,7 +2651,7 @@ export function ReviewComposer({
           return <Fragment key={`community-text-${annotation.id}`}>
             <svg
               aria-label={`文字批注 ${number}：${annotation.content}`}
-              className={`pdf-text-annotation-shape is-community${activeAnnotationId === annotation.id ? " is-active" : ""}`}
+              className={`pdf-text-annotation-shape is-community${activeAnnotationId === annotation.id || expandedCommunityAnnotationId === annotation.id ? " is-active" : ""}`}
               onClick={(event) => { event.stopPropagation(); focusAnnotationInSidebar(annotation.id); }}
               preserveAspectRatio="none"
               role="button"
@@ -2589,12 +2661,13 @@ export function ReviewComposer({
             </svg>
             <button
               aria-label={`显示文字批注 ${number}：${annotation.content}`}
-              className={`pdf-text-annotation-target${activeAnnotationId === annotation.id ? " is-active" : ""}`}
+              className={`pdf-text-annotation-target${activeAnnotationId === annotation.id || expandedCommunityAnnotationId === annotation.id ? " is-active" : ""}`}
               onClick={(event) => { event.stopPropagation(); focusAnnotationInSidebar(annotation.id); }}
               onFocus={() => setActiveAnnotationId(annotation.id)}
               onMouseEnter={() => showAnnotationAfterDelay(annotation.id)}
               onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
-              style={{ left: `${anchor.x}%`, top: `${anchor.y}%` }}
+              data-side={anchor.x > 50 ? "right" : "left"}
+              style={{ left: `${anchor.x > 50 ? Math.min(100, anchor.x + anchor.width + 1) : Math.max(0, anchor.x - 1)}%`, top: `${anchor.y + anchor.height / 2}%` }}
               type="button"
             ><span>{number}</span><strong className="pdf-annotation-tooltip"><b>{annotation.author} · 文字批注 {number}</b>{annotation.content}</strong></button>
           </Fragment>;
@@ -2607,8 +2680,8 @@ export function ReviewComposer({
           ).length;
           return (
             <span
-              className={`pdf-annotation-box is-own is-${item.annotationKind ?? "frame"}${overlapIndex ? " is-overlapping" : ""}`}
-              key={`own-${index}`}
+              className={`pdf-annotation-box is-own is-${item.annotationKind ?? "frame"}${activeOwnAnnotationIndex === item.noteIndex ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
+              key={`own-${item.noteIndex}`}
               style={{
                 left: `${item.rect!.x}%`,
                 top: `${item.rect!.y}%`,
@@ -2617,15 +2690,32 @@ export function ReviewComposer({
                 transform: `translate(${overlapIndex * 4}px, ${overlapIndex * 4}px)`,
                 zIndex: 20 + overlapIndex,
               }}
-              title={`我的批注：${item.content}`}
-            ><span>我{index + 1}</span></span>
+            ><button
+              aria-label={`查看并编辑我的批注 ${item.noteIndex + 1}`}
+              className="pdf-annotation-number"
+              data-side={item.rect!.x + item.rect!.width / 2 > 50 ? "right" : "left"}
+              onClick={() => { setContextTab("annotations"); setActiveOwnAnnotationIndex(item.noteIndex); startEditingAnnotation(item.noteIndex); }}
+              onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)}
+              onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
+              type="button"
+            >我</button><strong className="pdf-annotation-tooltip"><b>我的批注</b>{item.content}</strong></span>
           );
         })}
         {pageNotes.filter((item) => item.annotationKind === "highlight").map((item, index) => {
           const rects = item.highlightRects?.length ? item.highlightRects : item.rect ? [item.rect] : [];
-          return rects.length > 0 ? <svg aria-label={`我的文字批注 ${index + 1}：${item.content}`} className="pdf-text-annotation-shape is-own" key={`own-text-${index}`} preserveAspectRatio="none" role="img" viewBox="0 0 100 100">
+          const anchor = rects[0];
+          return rects.length > 0 ? <Fragment key={`own-text-${item.noteIndex}`}><svg aria-label={`我的文字批注 ${index + 1}：${item.content}`} className={`pdf-text-annotation-shape is-own${activeOwnAnnotationIndex === item.noteIndex ? " is-active" : ""}`} preserveAspectRatio="none" role="img" viewBox="0 0 100 100">
             <polygon points={textAnnotationPolygon(rects)} vectorEffect="non-scaling-stroke" />
-          </svg> : null;
+          </svg><button
+            aria-label={`查看并编辑我的文字批注 ${item.noteIndex + 1}`}
+            className={`pdf-text-annotation-target is-own${activeOwnAnnotationIndex === item.noteIndex ? " is-active" : ""}`}
+            data-side={anchor.x > 50 ? "right" : "left"}
+            onClick={() => { setContextTab("annotations"); setActiveOwnAnnotationIndex(item.noteIndex); startEditingAnnotation(item.noteIndex); }}
+            onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)}
+            onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
+            style={{ left: `${anchor.x > 50 ? Math.min(100, anchor.x + anchor.width + 1) : Math.max(0, anchor.x - 1)}%`, top: `${anchor.y + anchor.height / 2}%` }}
+            type="button"
+          ><span>我</span><strong className="pdf-annotation-tooltip"><b>我的批注</b>{item.content}</strong></button></Fragment> : null;
         })}
         {annotationRect && annotationKind !== "highlight" && annotationPage === pageNumber && (
           <span
@@ -3176,14 +3266,14 @@ export function ReviewComposer({
                       </button>
                       <button
                         className="generate-note-button"
-                        disabled={generatingNotePdf || notes.every((note) => !note.rect)}
+                        disabled={generatingNotePdf || (!hasReadingNote && notes.every((note) => !note.rect))}
                         onClick={() => {
                           setContextTab("publish");
-                          void buildNotePdf();
+                          if (!hasReadingNote) void buildNotePdf();
                         }}
                         type="button"
                       >
-                        {generatingNotePdf ? "生成中…" : "生成读书笔记"}
+                        {generatingNotePdf ? "生成中…" : hasReadingNote ? "编辑读书笔记" : "生成读书笔记"}
                       </button>
                     </div>
                   )}
@@ -3364,7 +3454,7 @@ export function ReviewComposer({
             <i aria-hidden="true">▣</i><strong>批注</strong>
           </button>
           <button className={contextTab === "publish" ? "selected" : ""} onClick={() => { setContextTab("publish"); setMessage(""); }} type="button">
-            <i aria-hidden="true">↑</i><strong>发布</strong>
+            <i aria-hidden="true">{selectedArticle?.ownReview ? "✓" : "↑"}</i><strong>{selectedArticle?.ownReview ? "已发布" : "发布"}</strong>
           </button>
         </nav>
         <div className="context-panel annotation-workspace" hidden={contextTab !== "annotations"}>
@@ -3395,13 +3485,17 @@ export function ReviewComposer({
             <div className="current-page-discussion">
               {currentAnnotationLayout.map(({ annotation, number }) => (
                 <article
-                  className={activeAnnotationId === annotation.id ? "is-active" : ""}
+                  aria-expanded={expandedCommunityAnnotationId === annotation.id}
+                  className={`${activeAnnotationId === annotation.id ? "is-active" : ""}${expandedCommunityAnnotationId === annotation.id ? " is-expanded" : ""}`}
                   data-community-annotation-id={annotation.id}
                   key={annotation.id}
-                  onBlur={() => setActiveAnnotationId(null)}
+                  onClick={() => {
+                    setExpandedCommunityAnnotationId((current) => current === annotation.id ? null : annotation.id);
+                    setActiveAnnotationId(annotation.id);
+                  }}
                   onFocus={() => setActiveAnnotationId(annotation.id)}
                   onMouseEnter={() => setActiveAnnotationId(annotation.id)}
-                  onMouseLeave={() => setActiveAnnotationId(null)}
+                  onMouseLeave={() => setActiveAnnotationId((current) => expandedCommunityAnnotationId === annotation.id ? current : null)}
                   style={{ "--annotation-color": annotationColor(annotation.author) } as CSSProperties}
                   tabIndex={0}
                 >
@@ -3409,6 +3503,7 @@ export function ReviewComposer({
                   {annotation.quote && <blockquote>{annotation.quote}</blockquote>}
                   {annotation.translation && <p className="community-translation">{annotation.translation}</p>}
                   <p>{annotation.content}</p>
+                  {expandedCommunityAnnotationId === annotation.id && <AnnotationComments annotationId={annotation.sourceId} source={annotation.source} />}
                 </article>
               ))}
               {currentPageAnnotations.length === 0 && <p className="context-empty">当前页还没有伙伴批注。</p>}
@@ -3456,7 +3551,12 @@ export function ReviewComposer({
                 {annotationSaveStatus === "error" && <button onClick={() => persistAnnotationDrafts(articleId, notes)} type="button">重新保存</button>}
               </div>
               {notes.map((note, index) => (
-                <div className={editingAnnotationIndex === index ? "is-editing" : ""} key={`${note.page}-${index}`}>
+                <div
+                  className={`${editingAnnotationIndex === index ? "is-editing" : ""}${activeOwnAnnotationIndex === index ? " is-active" : ""}`}
+                  key={`${note.page}-${index}`}
+                  onMouseEnter={() => setActiveOwnAnnotationIndex(index)}
+                  onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
+                >
                   {editingAnnotationIndex === index ? (
                     <div className="saved-note-editor">
                       <label htmlFor={`annotation-edit-${index}`}>修改批注 {index + 1}</label>
@@ -3483,9 +3583,9 @@ export function ReviewComposer({
                         className="saved-note-jump"
                         onClick={() => navigateToAnnotation(note)}
                         type="button"
-                      ><strong>{note.annotationKind === "highlight" ? "文字批注" : "图片批注"} {index + 1}</strong><span>{note.annotationKind === "highlight" ? "▨" : "▣"} {note.content}</span></button>
-                      <button aria-label={`编辑批注 ${index + 1}`} className="saved-note-edit" onClick={() => startEditingAnnotation(index)} type="button">编辑</button>
-                      <button aria-label={`删除批注 ${index + 1}`} className="saved-note-delete" onClick={() => deleteAnnotation(index)} type="button">×</button>
+                      ><span>{note.content}</span></button>
+                      <button aria-label={`编辑批注 ${index + 1}`} className="saved-note-edit" onClick={() => startEditingAnnotation(index)} title="编辑批注" type="button">✎</button>
+                      <button aria-label={`删除批注 ${index + 1}`} className="saved-note-delete" onClick={() => deleteAnnotation(index)} title="删除批注" type="button">⌫</button>
                     </>
                   )}
                 </div>
@@ -3495,7 +3595,7 @@ export function ReviewComposer({
         </div>
 
         <form className="review-form reader-review-form" hidden={contextTab !== "publish"} onSubmit={submitReview}>
-          <header className="workbench-section-heading"><div><strong>{selectedArticle?.ownReview ? "修改并重新发布" : "发布读书笔记与评论"}</strong><small>依次完成下面 3 个步骤</small></div></header>
+          <header className="workbench-section-heading"><div><strong>{selectedArticle?.ownReview ? "✓ 已发布" : "发布读书笔记与评论"}</strong><small>{selectedArticle?.ownReview ? "可以继续更新读书笔记、评分和评论" : "依次完成下面 3 个步骤"}</small></div></header>
           <section className="publish-step">
             <header className="publish-step-heading"><span>1</span><div><strong>选择推荐等级</strong><small>必须评分，也可以直接标记为必读</small></div><em className={rating !== null ? "ready" : ""}>{rating !== null ? "已完成" : "待完成"}</em></header>
             <div className={`star-rating rating-${rating ?? "unrated"}${mustRead ? " is-must-read" : ""}${ratingSaving ? " is-saving" : ""}`}>
@@ -3545,12 +3645,12 @@ export function ReviewComposer({
               </header>
               <div className="reading-note-methods">
                 <button
-                  disabled={generatingNotePdf || !localPdfUrl || notes.every((note) => !note.rect)}
+                  disabled={generatingNotePdf || !localPdfUrl || pendingNoteCount === 0}
                   onClick={() => void buildNotePdf()}
                   type="button"
                 >
-                  <strong>{generatingNotePdf ? "正在生成…" : "从我的截图框生成"}</strong>
-                  <small>{notes.filter((note) => note.rect).length} 个截图框可用</small>
+                  <strong>{generatingNotePdf ? "正在更新…" : hasReadingNote ? "更新读书笔记" : "从我的批注生成"}</strong>
+                  <small>{pendingNoteCount > 0 ? `${pendingNoteCount} 条新批注待加入` : "已经更新读书笔记"}</small>
                 </button>
                 <button onClick={() => notePdfInput.current?.click()} type="button">
                   <strong>上传本地读书笔记 PDF</strong>

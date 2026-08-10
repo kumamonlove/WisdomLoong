@@ -219,6 +219,23 @@ CREATE INDEX IF NOT EXISTS published_annotations_article_idx
 CREATE INDEX IF NOT EXISTS published_annotations_user_article_idx
   ON published_annotations(user_id, article_id);
 
+CREATE TABLE IF NOT EXISTS annotation_comments (
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  published_annotation_id INTEGER REFERENCES published_annotations(id) ON DELETE CASCADE,
+  review_annotation_id INTEGER,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL CHECK (CHAR_LENGTH(TRIM(content)) BETWEEN 1 AND 1000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT annotation_comments_single_target CHECK (
+    (published_annotation_id IS NOT NULL)::int + (review_annotation_id IS NOT NULL)::int = 1
+  )
+);
+
+CREATE INDEX IF NOT EXISTS annotation_comments_published_idx
+  ON annotation_comments(published_annotation_id, created_at, id);
+CREATE INDEX IF NOT EXISTS annotation_comments_review_idx
+  ON annotation_comments(review_annotation_id, created_at, id);
+
 CREATE TABLE IF NOT EXISTS reviews (
   id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -333,6 +350,13 @@ ALTER TABLE review_annotations ADD COLUMN IF NOT EXISTS highlight_rects JSONB NO
 
 CREATE INDEX IF NOT EXISTS review_annotations_review_idx
   ON review_annotations(review_id, page_number, id);
+
+DO $$ BEGIN
+  ALTER TABLE annotation_comments
+    ADD CONSTRAINT annotation_comments_review_annotation_fk
+    FOREIGN KEY (review_annotation_id) REFERENCES review_annotations(id) ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP TABLE IF EXISTS review_annotation_likes;
 

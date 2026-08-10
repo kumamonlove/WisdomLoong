@@ -4792,7 +4792,7 @@ select {
 .pdf-annotation-box > span,
 .pdf-annotation-box > .pdf-annotation-number {
   position: absolute;
-  top: -10px;
+  top: 50%;
   right: -10px;
   min-width: 20px;
   height: 20px;
@@ -4808,6 +4808,12 @@ select {
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+.pdf-annotation-box > .pdf-annotation-number[data-side="left"] {
+  right: auto;
+  left: -10px;
 }
 
 .pdf-annotation-box > .pdf-annotation-number {
@@ -4819,7 +4825,7 @@ select {
 .pdf-annotation-box > .pdf-annotation-number:focus-visible {
   outline: 2px solid rgba(255, 255, 255, .9);
   outline-offset: 2px;
-  transform: scale(1.08);
+  transform: translateY(-50%) scale(1.08);
 }
 
 .pdf-annotation-tooltip {
@@ -4858,6 +4864,11 @@ select {
 }
 
 .pdf-annotation-box.is-community.is-active .pdf-annotation-tooltip {
+  display: block;
+}
+
+.pdf-annotation-box.is-own.is-active .pdf-annotation-tooltip,
+.pdf-text-annotation-target.is-own.is-active .pdf-annotation-tooltip {
   display: block;
 }
 
@@ -4931,6 +4942,18 @@ select {
   cursor: pointer;
   pointer-events: auto;
   transform: translate(-50%, -50%);
+}
+
+.pdf-text-annotation-target[data-side="left"] {
+  transform: translate(-100%, -50%);
+}
+
+.pdf-text-annotation-target[data-side="right"] {
+  transform: translate(0, -50%);
+}
+
+.pdf-text-annotation-target.is-own {
+  background: var(--accent);
 }
 
 .pdf-text-annotation-target > span {
@@ -5457,6 +5480,7 @@ select {
   border-radius: 8px;
   background: rgba(214, 95, 64, 0.045);
   transition: background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  cursor: pointer;
 }
 
 .current-page-discussion > article.is-active,
@@ -5527,6 +5551,70 @@ select {
   border-radius: 5px;
   background: var(--white);
   color: #5d5542;
+}
+
+.annotation-comments {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid color-mix(in srgb, var(--annotation-color, var(--accent)) 22%, transparent);
+  cursor: default;
+}
+
+.annotation-comments > p,
+.annotation-comments small {
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.annotation-comment-list {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.annotation-comment-list article {
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .72);
+}
+
+.annotation-comment-list article strong {
+  font-size: 8px;
+}
+
+.annotation-comment-list article p {
+  margin: 3px 0 0;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.annotation-comments form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px;
+}
+
+.annotation-comments textarea {
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  font: inherit;
+  font-size: 9px;
+  resize: vertical;
+}
+
+.annotation-comments button {
+  align-self: end;
+  padding: 7px 9px;
+  color: var(--white);
+  border: 0;
+  border-radius: 6px;
+  background: var(--ink);
+  cursor: pointer;
+  font-size: 9px;
 }
 
 .annotations-disabled {
@@ -6201,20 +6289,28 @@ select {
   gap: 3px;
 }
 
+.saved-notes > div.is-active:not(.is-editing) {
+  border-radius: 7px;
+  background: rgba(214, 95, 64, .08);
+  box-shadow: 0 0 0 1px rgba(214, 95, 64, .16);
+}
+
 .saved-notes > div.is-editing {
   display: block;
 }
 
 .saved-note-jump {
   padding: 8px;
-  display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 5px;
+  display: block;
   border: 0;
   border-radius: 6px;
   background: var(--surface);
   cursor: pointer;
   text-align: left;
+}
+
+.saved-note-jump > span {
+  display: -webkit-box;
 }
 
 .saved-note-edit {

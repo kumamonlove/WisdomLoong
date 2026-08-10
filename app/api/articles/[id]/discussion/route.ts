@@ -22,6 +22,8 @@ type DiscussionReview = {
 
 type DiscussionAnnotation = {
   id: number;
+  source: "published" | "review";
+  sourceId: number;
   reviewId: number;
   author: string;
   page: number;
@@ -50,6 +52,8 @@ export async function GET(
         `SELECT * FROM (
            SELECT
              review_annotations.id,
+             'review' AS source,
+             review_annotations.id AS "sourceId",
              reviews.id AS "reviewId",
              users.username AS author,
              review_annotations.page_number AS page,
@@ -78,6 +82,8 @@ export async function GET(
            UNION ALL
            SELECT
              -published_annotations.id AS id,
+             'published' AS source,
+             published_annotations.id AS "sourceId",
              0 AS "reviewId",
              users.username AS author,
              published_annotations.page_number AS page,

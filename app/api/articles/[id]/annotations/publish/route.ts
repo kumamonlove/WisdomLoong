@@ -67,8 +67,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await client.query("ROLLBACK");
       return NextResponse.json({ error: "文章不存在" }, { status: 404 });
     }
-    await client.query("DELETE FROM published_annotations WHERE user_id = $1 AND article_id = $2", [user.id, articleId]);
-    for (const annotation of annotations) {
+    const existing = await client.query<{ id: number }>(
+      "SELECT id FROM published_annotations WHERE user_id = $1 AND article_id = $2 ORDER BY id",
+      [user.id, articleId],
+    );
+    for (const [index, annotation] of annotations.entries()) {
+      const existingId = existing.rows[index]?.id;
+      if (existingId) {
+        await client.query(
+          `UPDATE published_annotations SET
+             page_number = $2, quote = $3, translation = $4, content = $5, annotation_kind = $6,
+             rect_x = $7, rect_y = $8, rect_width = $9, rect_height = $10,
+             highlight_rects = $11::jsonb, updated_at = NOW()
+           WHERE id = $1`,
+          [existingId, annotation.page, annotation.quote, annotation.translation, annotation.content,
+            annotation.kind, annotation.rect.x, annotation.rect.y, annotation.rect.width, annotation.rect.height,
+            JSON.stringify(annotation.highlightRects)],
+        );
+        continue;
+      }
       await client.query(
         `INSERT INTO published_annotations
            (user_id, article_id, page_number, quote, translation, content, annotation_kind,
@@ -78,6 +95,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           annotation.kind, annotation.rect.x, annotation.rect.y, annotation.rect.width, annotation.rect.height,
           JSON.stringify(annotation.highlightRects)],
       );
+    }
+    const obsoleteIds = existing.rows.slice(annotations.length).map((item) => item.id);
+    if (obsoleteIds.length > 0) {
+      await client.query("DELETE FROM published_annotations WHERE id = ANY($1::int[])", [obsoleteIds]);
     }
     await client.query("COMMIT");
     return NextResponse.json({ ok: true, count: annotations.length });
