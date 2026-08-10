@@ -4206,13 +4206,13 @@ select {
 }
 
 .reader-toolbar {
-  padding: 10px 14px;
+  padding: 10px 14px 12px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 72%, var(--white));
 }
 
 .reader-toolbar > div {
@@ -4223,13 +4223,23 @@ select {
 
 .reader-toolbar button {
   min-height: 34px;
-  padding: 6px 10px;
+  padding: 7px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 9px;
   background: var(--white);
   cursor: pointer;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 720;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.reader-toolbar button:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(24, 24, 22, .1);
 }
 
 .reader-toolbar label,
@@ -4257,9 +4267,9 @@ select {
 }
 
 .reader-toolbar .annotation-toggle.enabled {
-  color: var(--ink);
-  border-color: rgba(24, 24, 22, .34);
-  background: rgba(24, 24, 22, .07);
+  color: #216348;
+  border-color: rgba(42, 140, 107, .34);
+  background: rgba(42, 140, 107, .09);
 }
 
 .reader-toolbar .text-annotation-button {
@@ -4269,10 +4279,9 @@ select {
 }
 
 .reader-toolbar .bookmark-save-button {
-  min-width: 92px;
-  color: var(--white);
-  border-color: var(--ink);
-  background: var(--ink);
+  color: #69500d;
+  border-color: rgba(180, 135, 24, .32);
+  background: rgba(247, 221, 144, .22);
   box-shadow: none;
 }
 
@@ -4290,6 +4299,8 @@ select {
 }
 
 .reader-toolbar .bookmark-delete-button {
+  width: 36px;
+  padding: 7px;
   color: #8f3f2d;
   border-color: rgba(173, 72, 49, 0.34);
   background: rgba(255, 248, 245, 0.9);
@@ -4302,11 +4313,63 @@ select {
 }
 
 .reader-toolbar .reader-bookmark-tools {
-  padding-left: 10px;
-  border-left: 1px solid var(--line);
+  order: 1;
+}
+
+.reader-toolbar :is(.reader-bookmark-tools, .reader-view-tools, .reader-annotation-tools, .reader-note-tools) {
+  position: relative;
+  min-height: 54px;
+  padding: 18px 8px 4px;
+  gap: 5px;
+  border: 1px solid rgba(24, 24, 22, .12);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .48);
+}
+
+.reader-tool-group-label {
+  position: absolute;
+  top: 3px;
+  left: 9px;
+  color: var(--muted);
+  font-size: 10px !important;
+  font-weight: 760;
+  letter-spacing: .06em;
+  line-height: 1;
+}
+
+.reader-tool-icon {
+  width: 19px;
+  height: 19px;
+  display: grid;
+  flex: 0 0 19px;
+  place-items: center;
+}
+
+.reader-tool-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.reader-tool-label {
+  font-size: 12px !important;
+  white-space: nowrap;
+}
+
+.reader-tool-status {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #aaa69c;
+}
+
+.annotation-toggle.enabled .reader-tool-status {
+  background: #2a8c6b;
+  box-shadow: 0 0 0 3px rgba(42, 140, 107, .13);
 }
 
 .reader-toolbar .reader-document-switch {
+  order: 0;
   max-width: min(48%, 520px);
   padding: 3px;
   gap: 2px;
@@ -4458,23 +4521,8 @@ select {
   background: rgba(42, 140, 107, .1);
 }
 
-.reader-toolbar .reader-zoom-tools {
-  padding-left: 10px;
-  border-left: 1px solid var(--line);
-}
-
-.reader-toolbar .reader-zoom-tools .fit-width {
-  margin-left: 3px;
-  padding-inline: 12px;
-}
-
-.reader-toolbar .reader-zoom-tools .fit-width.active {
-  color: var(--white);
-  border-color: var(--ink);
-  background: var(--ink);
-}
-
 .reader-toolbar .reader-file-tools {
+  order: 5;
   padding-left: 10px;
   border-left: 1px solid var(--line);
 }
@@ -4501,7 +4549,7 @@ select {
   background: var(--ink);
 }
 
-.reader-file-tools a i {
+.reader-file-tools a .reader-tool-icon {
   width: 21px;
   height: 21px;
   display: grid;
@@ -4509,19 +4557,25 @@ select {
   color: var(--white);
   border-radius: 6px;
   background: #2a8c6b;
-  font-size: 16px;
-  font-style: normal;
+  flex-basis: 21px;
 }
 
-.reader-file-tools a:hover i {
+.reader-file-tools a:hover .reader-tool-icon {
   color: #2a8c6b;
   background: var(--white);
 }
 
 .reader-toolbar .reader-annotation-tools {
+  order: 3;
+}
+
+.reader-toolbar .reader-view-tools {
+  order: 2;
+}
+
+.reader-toolbar .reader-note-tools {
+  order: 4;
   margin-left: auto;
-  padding-left: 10px;
-  border-left: 1px solid var(--line);
 }
 
 .title-inline-math {
@@ -4851,15 +4905,6 @@ select {
   margin-bottom: 3px;
   display: block;
   color: color-mix(in srgb, var(--annotation-color, #277da1) 70%, white);
-  font-size: 10px;
-}
-
-.pdf-annotation-tooltip small {
-  margin-top: 6px;
-  padding-top: 5px;
-  display: block;
-  color: rgba(255, 255, 255, .68);
-  border-top: 1px solid rgba(255, 255, 255, .16);
   font-size: 10px;
 }
 
@@ -5450,10 +5495,72 @@ select {
   font-weight: 800;
 }
 
+.annotation-workspace:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+}
+
 .own-annotation-workspace {
+  order: 1;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.other-annotation-workspace {
+  order: 2;
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
+}
+
+.annotation-section-toggle {
+  width: 100%;
+  padding: 4px 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.annotation-section-toggle > i {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+  transition: transform 140ms ease;
+}
+
+.is-collapsed .annotation-section-toggle > i {
+  transform: rotate(-90deg);
+}
+
+.annotation-section-toggle > div {
+  display: grid;
+  gap: 2px;
+}
+
+.annotation-section-toggle > span {
+  min-width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  border-radius: 999px;
+  background: rgba(214, 95, 64, .09);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+:is(.own-annotation-workspace, .other-annotation-workspace).is-collapsed > :not(.workbench-section-heading) {
+  display: none;
+}
+
+:is(.own-annotation-workspace, .other-annotation-workspace).is-collapsed > .workbench-section-heading {
+  margin-bottom: 0;
 }
 
 .context-panel[hidden],
@@ -8158,21 +8265,20 @@ select {
 
   .reader-toolbar .reader-document-switch,
   .reader-toolbar .reader-bookmark-tools,
-  .reader-toolbar .reader-annotation-tools {
+  .reader-toolbar .reader-view-tools,
+  .reader-toolbar .reader-annotation-tools,
+  .reader-toolbar .reader-note-tools {
     width: 100%;
     max-width: none;
   }
 
   .reader-toolbar .reader-document-switch button,
   .reader-toolbar .reader-bookmark-tools button,
-  .reader-toolbar .reader-annotation-tools button {
+  .reader-toolbar .reader-view-tools button,
+  .reader-toolbar .reader-annotation-tools button,
+  .reader-toolbar .reader-note-tools button {
     min-width: 0;
     flex: 1;
-  }
-
-  .reader-toolbar .reader-zoom-tools {
-    padding-left: 0;
-    border-left: 0;
   }
 
   .reader-toolbar .reader-file-tools {
@@ -8181,16 +8287,12 @@ select {
   }
 
   .reader-toolbar .reader-bookmark-tools {
-    padding: 8px 0 0;
-    border-top: 1px solid var(--line);
-    border-left: 0;
+    padding-top: 18px;
   }
 
-  .reader-toolbar .reader-annotation-tools {
+  .reader-toolbar :is(.reader-view-tools, .reader-annotation-tools, .reader-note-tools) {
     margin-left: 0;
-    padding: 10px 0 0;
-    border-top: 1px solid var(--line);
-    border-left: 0;
+    padding-top: 18px;
   }
 
   .focus-status {

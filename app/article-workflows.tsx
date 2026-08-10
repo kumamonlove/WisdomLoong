@@ -1149,7 +1149,6 @@ function PdfContinuousCanvas({
   onDocumentReady,
   onProgress,
   onTextSelect,
-  onZoom,
   children,
 }: {
   url: string;
@@ -1162,24 +1161,11 @@ function PdfContinuousCanvas({
   onDocumentReady: (pageCount: number, naturalPageWidth: number) => void;
   onProgress: (loaded: number, total: number) => void;
   onTextSelect: (text: string, page: number, rects: AnnotationRect[]) => void;
-  onZoom: (delta: number) => void;
   children: (page: number) => ReactNode;
 }) {
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const initialPositionRef = useRef({ page: initialPage, positionY: initialPositionY });
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (!element) return;
-    const zoomPdf = (event: WheelEvent) => {
-      if (!event.ctrlKey) return;
-      event.preventDefault();
-      onZoom(event.deltaY < 0 ? 10 : -10);
-    };
-    element.addEventListener("wheel", zoomPdf, { passive: false });
-    return () => element.removeEventListener("wheel", zoomPdf);
-  }, [onZoom]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1259,6 +1245,22 @@ function PdfContinuousCanvas({
   );
 }
 
+type ReaderToolIconName = "bookmark" | "return" | "trash" | "eye" | "image" | "text" | "note" | "download";
+
+function ReaderToolIcon({ name }: { name: ReaderToolIconName }) {
+  const content = {
+    bookmark: <path d="M6.5 3.5h11v17l-5.5-3.4-5.5 3.4z" />,
+    return: <><path d="M9 7 4 12l5 5" /><path d="M5 12h8a6 6 0 0 1 6 6" /></>,
+    trash: <><path d="M5 7h14M9 7V4h6v3M8 10v8m4-8v8m4-8v8M7 7l1 14h8l1-14" /></>,
+    eye: <><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6" /><circle cx="12" cy="12" r="2.5" /></>,
+    image: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path d="m5 18 4.5-4.5 3 3 2-2 4.5 3.5" /></>,
+    text: <><path d="M5 5h14M12 5v14M8 19h8" /><path d="M4 9V5h4m8 0h4v4" /></>,
+    note: <><path d="M5 3.5h11l3 3V21H5z" /><path d="M16 3.5V7h3M8 11h8M8 15h8M8 19h5" /></>,
+    download: <><path d="M12 3v12m-4-4 4 4 4-4" /><path d="M5 20h14" /></>,
+  }[name];
+  return <span aria-hidden="true" className="reader-tool-icon"><svg fill="none" viewBox="0 0 24 24"><g stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">{content}</g></svg></span>;
+}
+
 export function ReviewComposer({
   articles,
   username,
@@ -1300,7 +1302,6 @@ export function ReviewComposer({
       1,
   );
   const [zoom, setZoom] = useState(100);
-  const [fitWidthEnabled, setFitWidthEnabled] = useState(true);
   const [focusMode, setFocusMode] = useState(startFocused);
   const [contextTab, setContextTab] = useState<"annotations" | "publish">("annotations");
   const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
@@ -1314,6 +1315,8 @@ export function ReviewComposer({
   const [activeAnnotationId, setActiveAnnotationId] = useState<number | null>(null);
   const [expandedCommunityAnnotationId, setExpandedCommunityAnnotationId] = useState<number | null>(null);
   const [activeOwnAnnotationIndex, setActiveOwnAnnotationIndex] = useState<number | null>(null);
+  const [ownAnnotationsExpanded, setOwnAnnotationsExpanded] = useState(true);
+  const [otherAnnotationsExpanded, setOtherAnnotationsExpanded] = useState(true);
   const [notePdfFile, setNotePdfFile] = useState<File | null>(null);
   const [notePdfSource, setNotePdfSource] = useState<"generated" | "uploaded">("generated");
   const [notePdfPreviewUrl, setNotePdfPreviewUrl] = useState("");
@@ -1462,10 +1465,6 @@ export function ReviewComposer({
       ? items.slice(0, index).filter((item) => item.rect && rectanglesOverlap(annotation.rect!, item.rect)).length
       : 0,
   })), [currentPageAnnotations]);
-  const handlePdfZoom = useCallback((delta: number) => {
-    setFitWidthEnabled(false);
-    setZoom((value) => Math.max(30, Math.min(250, value + delta)));
-  }, []);
   const fitPdfToWidth = useCallback(() => {
     const frame = pdfFrameRef.current;
     const scroll = frame?.querySelector<HTMLElement>(".pdf-page-scroll");
@@ -1474,14 +1473,9 @@ export function ReviewComposer({
     const nextZoom = Math.floor(availableWidth / pdfNaturalWidth * 1000) / 10;
     setZoom(Math.max(30, Math.min(250, nextZoom)));
   }, [pdfNaturalWidth]);
-  const enableFitWidth = useCallback(() => {
-    setFitWidthEnabled(true);
-    window.requestAnimationFrame(() => window.requestAnimationFrame(fitPdfToWidth));
-  }, [fitPdfToWidth]);
   const handlePdfDocumentReady = useCallback((pageCount: number, naturalPageWidth: number) => {
     setPdfPageCount(pageCount);
     setPdfNaturalWidth(naturalPageWidth);
-    setFitWidthEnabled(true);
     if (partnerNoteReviewId === null) {
       setLocalCache({ status: "ready", progress: 100 });
     }
@@ -1624,6 +1618,7 @@ export function ReviewComposer({
     if (annotationHoverTimer.current !== null) window.clearTimeout(annotationHoverTimer.current);
     annotationHoverTimer.current = null;
     setContextTab("annotations");
+    setOtherAnnotationsExpanded(true);
     setActiveAnnotationId(annotationId);
     setExpandedCommunityAnnotationId(annotationId);
     window.requestAnimationFrame(() => {
@@ -1973,11 +1968,9 @@ export function ReviewComposer({
   useEffect(() => {
     setPdfPageCount(0);
     setPdfNaturalWidth(0);
-    setFitWidthEnabled(true);
   }, [activeReaderPdfUrl]);
 
   useEffect(() => {
-    if (!fitWidthEnabled) return;
     const frame = pdfFrameRef.current;
     const scroll = frame?.querySelector<HTMLElement>(".pdf-page-scroll");
     if (!scroll) return;
@@ -1988,7 +1981,7 @@ export function ReviewComposer({
       window.cancelAnimationFrame(frameId);
       observer.disconnect();
     };
-  }, [fitWidthEnabled, fitPdfToWidth, activeReaderPdfUrl]);
+  }, [fitPdfToWidth, activeReaderPdfUrl]);
 
   useEffect(() => {
     if (localCache.status === "ready") {
@@ -2242,6 +2235,7 @@ export function ReviewComposer({
   }
 
   function startEditingAnnotation(index: number) {
+    setOwnAnnotationsExpanded(true);
     setEditingAnnotationIndex(index);
     setEditingAnnotationContent(notes[index]?.content ?? "");
   }
@@ -2644,7 +2638,7 @@ export function ReviewComposer({
               data-side={annotation.rect!.x + annotation.rect!.width / 2 > 50 ? "right" : "left"}
               type="button"
             >{number}</button>
-            <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}<small>点击数字在右侧查看</small></strong>
+            <strong className="pdf-annotation-tooltip"><b>{annotation.author} · 批注 {number}</b>{annotation.content}</strong>
           </div>
         ))}
         {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.annotationKind === "highlight").map(({ annotation, number }) => {
@@ -3199,6 +3193,7 @@ export function ReviewComposer({
                   )}
                   {!viewingPartnerNote && (
                     <div className="reader-bookmark-tools">
+                      <span className="reader-tool-group-label">阅读位置</span>
                       <button
                         aria-pressed={placingBookmark}
                         className={`bookmark-save-button${placingBookmark ? " is-placing" : ""}`}
@@ -3213,7 +3208,7 @@ export function ReviewComposer({
                         }}
                         title="在 PDF 中精确放置阅读书签"
                         type="button"
-                      >{bookmarkSaving ? "保存中…" : placingBookmark ? "取消放置" : "＋ 加书签"}</button>
+                      ><ReaderToolIcon name="bookmark" /><span className="reader-tool-label">{bookmarkSaving ? "保存中…" : placingBookmark ? "取消放置" : "加书签"}</span></button>
                       {bookmark && (
                         <>
                           <button
@@ -3221,54 +3216,53 @@ export function ReviewComposer({
                             onClick={() => navigateToPosition(bookmark)}
                             title={`跳到第 ${bookmark.page} 页${(bookmark.positionX ?? 0) < 50 ? "左侧" : "右侧"}页内 ${Math.round(bookmark.positionY)}%`}
                             type="button"
-                          >🔖 跳转到书签</button>
+                          ><ReaderToolIcon name="return" /><span className="reader-tool-label">回到书签</span></button>
                           <button
+                            aria-label="删除书签"
                             className="bookmark-delete-button"
                             disabled={bookmarkSaving}
                             onClick={() => void deleteBookmark()}
                             title="删除当前阅读书签"
                             type="button"
-                          >删除书签</button>
+                          ><ReaderToolIcon name="trash" /></button>
                         </>
                       )}
                     </div>
                   )}
-                  <div className="reader-zoom-tools">
-                    <button onClick={() => handlePdfZoom(-10)} title="缩小 PDF" type="button">−</button>
-                    <span>{zoom}%</span>
-                    <button onClick={() => handlePdfZoom(10)} title="放大 PDF" type="button">＋</button>
-                    <button
-                      aria-pressed={fitWidthEnabled}
-                      className={fitWidthEnabled ? "fit-width active" : "fit-width"}
-                      disabled={pdfLoading}
-                      onClick={enableFitWidth}
-                      title="让 PDF 左右撑满阅读区域"
-                      type="button"
-                    >适合宽度</button>
-                  </div>
                   <div className="reader-file-tools">
                     <a
                       download
                       href={`/api/articles/${selectedArticle.id}/pdf?download=1`}
                       title="把当前论文 PDF 下载到本地"
-                    ><i aria-hidden="true">↓</i><span>下载 PDF</span></a>
+                    ><ReaderToolIcon name="download" /><span>下载 PDF</span></a>
                   </div>
                   {!viewingPartnerNote && (
-                    <div className="reader-annotation-tools">
+                    <div className="reader-view-tools">
+                      <span className="reader-tool-group-label">显示</span>
                       <button
                         aria-pressed={annotationsEnabled}
                         className={`annotation-toggle${annotationsEnabled ? " enabled" : ""}`}
                         onClick={() => setAnnotationVisibility(!annotationsEnabled)}
                         type="button"
                       >
-                        他人批注 {annotationsEnabled ? "开" : "关"}
+                        <ReaderToolIcon name="eye" /><span className="reader-tool-label">他人批注</span><i aria-hidden="true" className="reader-tool-status" />
                       </button>
+                    </div>
+                  )}
+                  {!viewingPartnerNote && (
+                    <div className="reader-annotation-tools">
+                      <span className="reader-tool-group-label">添加批注</span>
                       <button className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("frame")} type="button">
-                        ▣ 图片批注
+                        <ReaderToolIcon name="image" /><span className="reader-tool-label">图片批注</span>
                       </button>
                       <button className="text-annotation-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("highlight")} type="button">
-                        ▨ 文字批注
+                        <ReaderToolIcon name="text" /><span className="reader-tool-label">文字批注</span>
                       </button>
+                    </div>
+                  )}
+                  {!viewingPartnerNote && (
+                    <div className="reader-note-tools">
+                      <span className="reader-tool-group-label">读书笔记</span>
                       <button
                         className="generate-note-button"
                         disabled={generatingNotePdf || (!hasReadingNote && notes.every((note) => !note.rect))}
@@ -3278,7 +3272,7 @@ export function ReviewComposer({
                         }}
                         type="button"
                       >
-                        {generatingNotePdf ? "生成中…" : hasReadingNote ? "编辑读书笔记" : "生成读书笔记"}
+                        <ReaderToolIcon name="note" /><span className="reader-tool-label">{generatingNotePdf ? "生成中…" : hasReadingNote ? "编辑读书笔记" : "生成读书笔记"}</span>
                       </button>
                     </div>
                   )}
@@ -3386,7 +3380,6 @@ export function ReviewComposer({
                       onProgress={handlePdfProgress}
                       onTextSelect={useSelectedPdfText}
                       onVisiblePage={setPage}
-                      onZoom={handlePdfZoom}
                       url={activeReaderPdfUrl}
                       zoom={zoom}
                     >
@@ -3463,7 +3456,8 @@ export function ReviewComposer({
           </button>
         </nav>
         <div className="context-panel annotation-workspace" hidden={contextTab !== "annotations"}>
-          <header className="workbench-section-heading"><div><strong>当前页他人批注</strong><small>悬停临时查看，点击后在右侧展开</small></div><span>{currentPageAnnotations.length}</span></header>
+          <section className={`other-annotation-workspace${otherAnnotationsExpanded ? " is-expanded" : " is-collapsed"}`}>
+          <header className="workbench-section-heading"><button aria-expanded={otherAnnotationsExpanded} className="annotation-section-toggle" onClick={() => setOtherAnnotationsExpanded((value) => !value)} type="button"><i aria-hidden="true">▾</i><div><strong>他人批注</strong><small>悬停临时查看，点击后在右侧展开</small></div><span>{currentPageAnnotations.length}</span></button></header>
           {viewingPartnerNote ? (
             <div className="current-page-discussion note-reading-notice">
               <h3>{activeNoteAuthor}的读书笔记</h3>
@@ -3516,9 +3510,10 @@ export function ReviewComposer({
           ) : (
             <button className="annotations-disabled" onClick={() => setAnnotationVisibility(true)} type="button">他人批注已关闭 · 点击开启</button>
           )}
+          </section>
 
-          <section className="own-annotation-workspace">
-            <header className="workbench-section-heading"><div><strong>我的批注</strong><small>文字批注保存原文，生成报告时自动翻译</small></div><span>{notes.length}</span></header>
+          <section className={`own-annotation-workspace${ownAnnotationsExpanded ? " is-expanded" : " is-collapsed"}`}>
+            <header className="workbench-section-heading"><button aria-expanded={ownAnnotationsExpanded} className="annotation-section-toggle" onClick={() => setOwnAnnotationsExpanded((value) => !value)} type="button"><i aria-hidden="true">▾</i><div><strong>我的批注</strong><small>文字批注保存原文，生成报告时自动翻译</small></div><span>{notes.length}</span></button></header>
             {annotationRect ? (
               <section className="note-composer">
                 <header><span>新批注</span><div><strong>填写{annotationKind === "highlight" ? "文字" : "图片"}批注</strong><small>{annotationKind === "highlight" ? "所选原文和批注会一起保存" : "截图、位置和批注会一起保存"}</small></div></header>
