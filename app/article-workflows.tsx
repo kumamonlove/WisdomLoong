@@ -2741,6 +2741,8 @@ export function ReviewComposer({
             <span
               className={`pdf-annotation-box is-own is-${item.annotationKind ?? "frame"}${activeOwnAnnotationIndex === item.noteIndex ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
               key={`own-${item.noteIndex}`}
+              onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)}
+              onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
               style={{
                 left: `${item.rect!.x}%`,
                 top: `${item.rect!.y}%`,
@@ -2763,7 +2765,7 @@ export function ReviewComposer({
         {pageNotes.filter((item) => item.annotationKind === "highlight").map((item, index) => {
           const rects = item.highlightRects?.length ? item.highlightRects : item.rect ? [item.rect] : [];
           const anchor = rects[0];
-          return rects.length > 0 ? <Fragment key={`own-text-${item.noteIndex}`}><svg aria-label={`我的文字批注 ${index + 1}：${item.content}`} className={`pdf-text-annotation-shape is-own${activeOwnAnnotationIndex === item.noteIndex ? " is-active" : ""}`} preserveAspectRatio="none" role="img" viewBox="0 0 100 100">
+          return rects.length > 0 ? <Fragment key={`own-text-${item.noteIndex}`}><svg aria-label={`我的文字批注 ${index + 1}：${item.content}`} className={`pdf-text-annotation-shape is-own${activeOwnAnnotationIndex === item.noteIndex ? " is-active" : ""}`} onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)} onMouseLeave={() => setActiveOwnAnnotationIndex(null)} preserveAspectRatio="none" role="img" viewBox="0 0 100 100">
             <polygon points={textAnnotationPolygon(rects)} vectorEffect="non-scaling-stroke" />
           </svg><button
             aria-label={`查看并编辑我的文字批注 ${item.noteIndex + 1}`}
