@@ -587,16 +587,6 @@ type CommunityReview = {
   attachments: { id: number; reviewId: number; note: string }[];
 };
 
-function ratingReaction(rating: number | null, mustRead: boolean) {
-  if (mustRead) return "✦ 必读";
-  if (rating === 1) return "垃圾";
-  if (rating === 2) return "不太行";
-  if (rating === 3) return "还不错";
-  if (rating === 4) return "很推荐";
-  if (rating === 5) return "太好了";
-  return "未评分";
-}
-
 const pdfjsResourceOptions = {
   cMapPacked: true,
   cMapUrl: "/pdfjs/cmaps/",
@@ -2894,7 +2884,7 @@ export function ReviewComposer({
                   type="button"
                 >✦ 必读</button>
               </div>
-              <em aria-live="polite">{ratingSaving ? "保存中" : ratingReaction(rating, mustRead)}</em>
+              <em aria-live="polite">{ratingSaving ? "保存中" : mustRead ? "✦ 必读" : rating === null ? "未评分" : `${rating}.0`}</em>
               {rating !== null && (
                 <button
                   className="focus-rating-clear"
@@ -3662,7 +3652,7 @@ export function ReviewComposer({
                     type="button"
                   >★</button>
                 ))}
-                <strong aria-live="polite">{ratingSaving ? "保存中…" : rating === null ? "请选择评分" : ratingReaction(rating, mustRead)}</strong>
+                <strong aria-live="polite">{ratingSaving ? "保存中…" : mustRead ? "✦ 必读" : rating === null ? "请选择评分" : `${rating}.0`}</strong>
                 {rating !== null && (
                   <button
                     className="rating-clear"
