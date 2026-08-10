@@ -1315,6 +1315,9 @@ export function ReviewComposer({
   const [annotationsEnabled, setAnnotationsEnabled] = useState(true);
   const [ownAnnotationsEnabled, setOwnAnnotationsEnabled] = useState(true);
   const [activeAnnotationId, setActiveAnnotationId] = useState<number | null>(null);
+  const [pinnedAnnotation, setPinnedAnnotation] = useState<
+    { kind: "community"; id: number } | { kind: "own"; index: number } | null
+  >(null);
   const [expandedCommunityAnnotationId, setExpandedCommunityAnnotationId] = useState<number | null>(null);
   const [activeOwnAnnotationIndex, setActiveOwnAnnotationIndex] = useState<number | null>(null);
   const [ownAnnotationsExpanded, setOwnAnnotationsExpanded] = useState(true);
@@ -1620,27 +1623,30 @@ export function ReviewComposer({
     setActiveAnnotationId(annotationId);
   }
 
+  function pinCommunityAnnotation(annotationId: number) {
+    closeSelectionActions();
+    setActiveAnnotationId(annotationId);
+    setActiveOwnAnnotationIndex(null);
+    setPinnedAnnotation((current) => current?.kind === "community" && current.id === annotationId
+      ? null
+      : { kind: "community", id: annotationId });
+  }
+
+  function pinOwnAnnotation(index: number) {
+    closeSelectionActions();
+    setActiveAnnotationId(null);
+    setActiveOwnAnnotationIndex(index);
+    setPinnedAnnotation((current) => current?.kind === "own" && current.index === index
+      ? null
+      : { kind: "own", index });
+  }
+
   function cancelAnnotationPreview(annotationId: number) {
     if (annotationHoverTimer.current !== null) {
       window.clearTimeout(annotationHoverTimer.current);
       annotationHoverTimer.current = null;
     }
     setActiveAnnotationId((current) => current === annotationId ? null : current);
-  }
-
-  function focusAnnotationInSidebar(annotationId: number) {
-    if (annotationHoverTimer.current !== null) window.clearTimeout(annotationHoverTimer.current);
-    annotationHoverTimer.current = null;
-    setContextTab("annotations");
-    setWorkbenchExpanded(true);
-    setOtherAnnotationsExpanded(true);
-    setActiveAnnotationId(annotationId);
-    setExpandedCommunityAnnotationId(annotationId);
-    window.requestAnimationFrame(() => {
-      const card = document.querySelector<HTMLElement>(`[data-community-annotation-id="${annotationId}"]`);
-      card?.focus({ preventScroll: true });
-      card?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
   }
 
   function navigateToPosition(target: ReadingBookmark, behavior: ScrollBehavior = "smooth") {
@@ -2346,6 +2352,27 @@ export function ReviewComposer({
   }
 
   useEffect(() => {
+    if (!pinnedAnnotation && !textSelection) return;
+    const closeTransientReaderUi = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".pdf-annotation-popover, .pdf-selection-actions, .pdf-inline-note-composer")) return;
+      if (pinnedAnnotation?.kind === "own" && editingAnnotationIndex === pinnedAnnotation.index) {
+        cancelEditingAnnotation();
+      }
+      setPinnedAnnotation(null);
+      setActiveAnnotationId(null);
+      setActiveOwnAnnotationIndex(null);
+      if (textSelection) closeSelectionActions();
+    };
+    document.addEventListener("pointerdown", closeTransientReaderUi);
+    return () => document.removeEventListener("pointerdown", closeTransientReaderUi);
+  }, [editingAnnotationIndex, pinnedAnnotation, textSelection]);
+
+  useEffect(() => {
+    setPinnedAnnotation(null);
+  }, [articleId, page, viewingPartnerNote]);
+
+  useEffect(() => {
     if (!focusMode) return;
     const cancelWithEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
@@ -2604,6 +2631,14 @@ export function ReviewComposer({
     const selectionAnchor = textSelection?.page === pageNumber
       ? textSelection.rects[textSelection.rects.length - 1]
       : null;
+    const pinnedCommunity = pinnedAnnotation?.kind === "community"
+      ? pageAnnotations.find((item) => item.id === pinnedAnnotation.id) ?? null
+      : null;
+    const pinnedOwn = pinnedAnnotation?.kind === "own"
+      ? pageNotes.find((item) => item.noteIndex === pinnedAnnotation.index) ?? null
+      : null;
+    const pinnedItem = pinnedCommunity ?? pinnedOwn;
+    const pinnedRect = pinnedItem?.rect ?? null;
 
     return (
       <div
@@ -2667,17 +2702,17 @@ export function ReviewComposer({
         )}
         {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.rect && annotation.annotationKind !== "highlight").map(({ annotation, number, overlapIndex }) => (
           <div
-            aria-label={`批注 ${number}，${annotation.author}：${annotation.content}。点击后在右侧展开`}
-            className={`pdf-annotation-box is-community is-${annotation.annotationKind ?? "frame"}${activeAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
+            aria-label={`批注 ${number}，${annotation.author}：${annotation.content}。点击固定批注卡片`}
+            className={`pdf-annotation-box is-community is-${annotation.annotationKind ?? "frame"}${activeAnnotationId === annotation.id || pinnedAnnotation?.kind === "community" && pinnedAnnotation.id === annotation.id ? " is-active" : ""}${pinnedAnnotation?.kind === "community" && pinnedAnnotation.id === annotation.id ? " is-pinned" : ""}${overlapIndex ? " is-overlapping" : ""}`}
             key={`community-${annotation.id}`}
             onClick={(event) => {
               event.stopPropagation();
-              focusAnnotationInSidebar(annotation.id);
+              pinCommunityAnnotation(annotation.id);
             }}
             onKeyDown={(event) => {
               if (event.key !== "Enter" && event.key !== " ") return;
               event.preventDefault();
-              focusAnnotationInSidebar(annotation.id);
+              pinCommunityAnnotation(annotation.id);
             }}
             onMouseEnter={() => showAnnotationPreview(annotation.id)}
             onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
@@ -2690,13 +2725,13 @@ export function ReviewComposer({
               transform: `translate(${overlapIndex * 4}px, ${overlapIndex * 4}px)`,
               zIndex: activeAnnotationId === annotation.id ? 50 : 10 + overlapIndex,
               "--annotation-color": annotationColor(annotation.author),
-            } as CSSProperties}
+            } as CSSProperties & { "--annotation-color": string }}
             tabIndex={0}
           >
             <button
-              aria-label={`在右侧查看批注 ${number}`}
+              aria-label={`固定批注 ${number}`}
               className="pdf-annotation-number"
-              onClick={(event) => { event.stopPropagation(); focusAnnotationInSidebar(annotation.id); }}
+              onClick={(event) => { event.stopPropagation(); pinCommunityAnnotation(annotation.id); }}
               onFocus={() => showAnnotationPreview(annotation.id)}
               onMouseEnter={() => showAnnotationPreview(annotation.id)}
               onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
@@ -2717,8 +2752,8 @@ export function ReviewComposer({
           return <Fragment key={`community-text-${annotation.id}`}>
             <svg
               aria-label={`文字批注 ${number}：${annotation.content}`}
-              className={`pdf-text-annotation-shape is-community${activeAnnotationId === annotation.id ? " is-active" : ""}`}
-              onClick={(event) => { event.stopPropagation(); focusAnnotationInSidebar(annotation.id); }}
+              className={`pdf-text-annotation-shape is-community${activeAnnotationId === annotation.id || pinnedAnnotation?.kind === "community" && pinnedAnnotation.id === annotation.id ? " is-active" : ""}`}
+              onClick={(event) => { event.stopPropagation(); pinCommunityAnnotation(annotation.id); }}
               onMouseEnter={() => showAnnotationPreview(annotation.id)}
               onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
               preserveAspectRatio="none"
@@ -2729,8 +2764,8 @@ export function ReviewComposer({
             </svg>
             <button
               aria-label={`显示文字批注 ${number}：${annotation.content}`}
-              className={`pdf-text-annotation-target${activeAnnotationId === annotation.id ? " is-active" : ""}`}
-              onClick={(event) => { event.stopPropagation(); focusAnnotationInSidebar(annotation.id); }}
+              className={`pdf-text-annotation-target${activeAnnotationId === annotation.id || pinnedAnnotation?.kind === "community" && pinnedAnnotation.id === annotation.id ? " is-active" : ""}${pinnedAnnotation?.kind === "community" && pinnedAnnotation.id === annotation.id ? " is-pinned" : ""}`}
+              onClick={(event) => { event.stopPropagation(); pinCommunityAnnotation(annotation.id); }}
               onFocus={() => setActiveAnnotationId(annotation.id)}
               onMouseEnter={() => showAnnotationPreview(annotation.id)}
               onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
@@ -2748,8 +2783,10 @@ export function ReviewComposer({
           ).length;
           return (
             <span
-              className={`pdf-annotation-box is-own is-${item.annotationKind ?? "frame"}${activeOwnAnnotationIndex === item.noteIndex ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
+              className={`pdf-annotation-box is-own is-${item.annotationKind ?? "frame"}${activeOwnAnnotationIndex === item.noteIndex || pinnedAnnotation?.kind === "own" && pinnedAnnotation.index === item.noteIndex ? " is-active" : ""}${pinnedAnnotation?.kind === "own" && pinnedAnnotation.index === item.noteIndex ? " is-pinned" : ""}${overlapIndex ? " is-overlapping" : ""}`}
               key={`own-${item.noteIndex}`}
+              onClick={(event) => { event.stopPropagation(); pinOwnAnnotation(item.noteIndex); }}
+              onDoubleClick={(event) => { event.stopPropagation(); setPinnedAnnotation({ kind: "own", index: item.noteIndex }); startEditingAnnotation(item.noteIndex); }}
               onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)}
               onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
               style={{
@@ -2764,7 +2801,8 @@ export function ReviewComposer({
               aria-label={`查看并编辑我的批注 ${item.noteIndex + 1}`}
               className="pdf-annotation-number"
               data-side={item.rect!.x + item.rect!.width / 2 > 50 ? "right" : "left"}
-              onClick={() => { setContextTab("annotations"); setWorkbenchExpanded(true); setActiveOwnAnnotationIndex(item.noteIndex); startEditingAnnotation(item.noteIndex); }}
+              onClick={(event) => { event.stopPropagation(); pinOwnAnnotation(item.noteIndex); }}
+              onDoubleClick={(event) => { event.stopPropagation(); setPinnedAnnotation({ kind: "own", index: item.noteIndex }); startEditingAnnotation(item.noteIndex); }}
               onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)}
               onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
               type="button"
@@ -2778,19 +2816,75 @@ export function ReviewComposer({
         {ownAnnotationsEnabled && pageNotes.filter((item) => item.annotationKind === "highlight").map((item, index) => {
           const rects = item.highlightRects?.length ? item.highlightRects : item.rect ? [item.rect] : [];
           const anchor = rects[0];
-          return rects.length > 0 ? <Fragment key={`own-text-${item.noteIndex}`}><svg aria-label={`我的文字批注 ${index + 1}：${item.content}`} className={`pdf-text-annotation-shape is-own${activeOwnAnnotationIndex === item.noteIndex ? " is-active" : ""}`} onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)} onMouseLeave={() => setActiveOwnAnnotationIndex(null)} preserveAspectRatio="none" role="img" viewBox="0 0 100 100">
+          return rects.length > 0 ? <Fragment key={`own-text-${item.noteIndex}`}><svg aria-label={`我的文字批注 ${index + 1}：${item.content}`} className={`pdf-text-annotation-shape is-own${activeOwnAnnotationIndex === item.noteIndex || pinnedAnnotation?.kind === "own" && pinnedAnnotation.index === item.noteIndex ? " is-active" : ""}`} onClick={(event) => { event.stopPropagation(); pinOwnAnnotation(item.noteIndex); }} onDoubleClick={(event) => { event.stopPropagation(); setPinnedAnnotation({ kind: "own", index: item.noteIndex }); startEditingAnnotation(item.noteIndex); }} onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)} onMouseLeave={() => setActiveOwnAnnotationIndex(null)} preserveAspectRatio="none" role="button" viewBox="0 0 100 100">
             <polygon points={textAnnotationPolygon(rects)} vectorEffect="non-scaling-stroke" />
           </svg><button
             aria-label={`查看并编辑我的文字批注 ${item.noteIndex + 1}`}
-            className={`pdf-text-annotation-target is-own${activeOwnAnnotationIndex === item.noteIndex ? " is-active" : ""}`}
+            className={`pdf-text-annotation-target is-own${activeOwnAnnotationIndex === item.noteIndex || pinnedAnnotation?.kind === "own" && pinnedAnnotation.index === item.noteIndex ? " is-active" : ""}${pinnedAnnotation?.kind === "own" && pinnedAnnotation.index === item.noteIndex ? " is-pinned" : ""}`}
             data-side={anchor.x > 50 ? "right" : "left"}
-            onClick={() => { setContextTab("annotations"); setWorkbenchExpanded(true); setActiveOwnAnnotationIndex(item.noteIndex); startEditingAnnotation(item.noteIndex); }}
+            onClick={(event) => { event.stopPropagation(); pinOwnAnnotation(item.noteIndex); }}
+            onDoubleClick={(event) => { event.stopPropagation(); setPinnedAnnotation({ kind: "own", index: item.noteIndex }); startEditingAnnotation(item.noteIndex); }}
             onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)}
             onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
             style={{ left: `${anchor.x > 50 ? Math.min(100, anchor.x + anchor.width + 1) : Math.max(0, anchor.x - 1)}%`, top: `${anchor.y + anchor.height / 2}%` }}
             type="button"
           ><span>我</span><strong className="pdf-annotation-tooltip" data-placement={anchor.y < 25 ? "below" : "above"}><b>我的批注</b>{item.content}</strong></button></Fragment> : null;
         })}
+        {pinnedItem && pinnedRect && (
+          <section
+            aria-label={pinnedCommunity ? `${pinnedCommunity.author}的批注` : "我的批注"}
+            className={`pdf-annotation-popover${pinnedRect.y > 52 ? " is-above" : ""}`}
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            style={{
+              ...(pinnedRect.x + pinnedRect.width / 2 > 50 ? { right: "2%" } : { left: "2%" }),
+              top: `${pinnedRect.y > 52 ? pinnedRect.y : pinnedRect.y + pinnedRect.height}%`,
+              "--annotation-color": pinnedCommunity ? annotationColor(pinnedCommunity.author) : "var(--accent)",
+            } as CSSProperties & { "--annotation-color": string }}
+          >
+            <header>
+              <div>
+                <strong>{pinnedCommunity ? pinnedCommunity.author : "我的批注"}</strong>
+                <small>{pinnedItem.annotationKind === "highlight" ? "文字批注" : "图片批注"} · 第 {pageNumber} 页</small>
+              </div>
+              <button
+                aria-label="关闭批注卡片"
+                onClick={() => {
+                  if (pinnedOwn && editingAnnotationIndex === pinnedOwn.noteIndex) cancelEditingAnnotation();
+                  setPinnedAnnotation(null);
+                  setActiveAnnotationId(null);
+                  setActiveOwnAnnotationIndex(null);
+                }}
+                title="关闭"
+                type="button"
+              >×</button>
+            </header>
+            {pinnedOwn && editingAnnotationIndex === pinnedOwn.noteIndex ? (
+              <div className="pdf-annotation-popover-editor">
+                <textarea
+                  autoFocus
+                  maxLength={4000}
+                  onChange={(event) => setEditingAnnotationContent(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") cancelEditingAnnotation();
+                    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") saveEditedAnnotation();
+                  }}
+                  rows={4}
+                  value={editingAnnotationContent}
+                />
+                <footer><span>Esc 取消 · Ctrl/⌘ + Enter 保存</span><div><button onClick={cancelEditingAnnotation} type="button">取消</button><button disabled={!editingAnnotationContent.trim()} onClick={saveEditedAnnotation} type="button">保存</button></div></footer>
+              </div>
+            ) : (
+              <p
+                className={pinnedOwn ? "is-editable" : undefined}
+                onDoubleClick={pinnedOwn ? () => startEditingAnnotation(pinnedOwn.noteIndex) : undefined}
+                title={pinnedOwn ? "双击修改批注" : undefined}
+              >{pinnedItem.content}</p>
+            )}
+            {pinnedOwn && editingAnnotationIndex !== pinnedOwn.noteIndex && <small className="pdf-annotation-popover-hint">双击批注文字即可修改</small>}
+            {pinnedCommunity && <AnnotationComments annotationId={pinnedCommunity.sourceId} source={pinnedCommunity.source} />}
+          </section>
+        )}
         {annotationRect && annotationKind !== "highlight" && annotationPage === pageNumber && (
           <span
             className={`pdf-annotation-box is-pending is-${annotationKind}`}

@@ -4935,17 +4935,17 @@ select {
   z-index: 60;
   left: 0;
   bottom: calc(100% + 12px);
-  width: min(240px, 42vw);
-  max-height: 140px;
-  padding: 9px 10px;
+  width: min(280px, 46vw);
+  max-height: 180px;
+  padding: 11px 12px;
   display: none;
   color: var(--white);
   border-radius: 7px;
   background: rgba(24, 24, 22, .93);
   box-shadow: 0 5px 18px rgba(24, 24, 22, .25);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.6;
   text-align: left;
   overflow: hidden;
   overflow-wrap: anywhere;
@@ -4967,7 +4967,7 @@ select {
   margin-bottom: 3px;
   display: block;
   color: color-mix(in srgb, var(--annotation-color, var(--accent)) 70%, white);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .pdf-annotation-box.is-community.is-active .pdf-annotation-tooltip {
@@ -4977,6 +4977,146 @@ select {
 .pdf-annotation-box.is-own.is-active .pdf-annotation-tooltip,
 .pdf-text-annotation-target.is-own.is-active .pdf-annotation-tooltip {
   display: block;
+}
+
+.pdf-annotation-box.is-pinned .pdf-annotation-tooltip,
+.pdf-text-annotation-target.is-pinned .pdf-annotation-tooltip {
+  display: none;
+}
+
+.pdf-annotation-popover {
+  position: absolute;
+  z-index: 110;
+  width: min(360px, calc(100% - 24px));
+  max-height: min(420px, 50vh);
+  padding: 13px;
+  overflow: auto;
+  color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--annotation-color, var(--accent)) 38%, var(--line));
+  border-radius: 12px;
+  background: rgba(255, 254, 250, .99);
+  box-shadow: 0 18px 44px rgba(24, 24, 22, .25);
+  pointer-events: auto;
+  transform: translateY(10px);
+}
+
+.pdf-annotation-popover.is-above {
+  transform: translateY(calc(-100% - 10px));
+}
+
+.pdf-annotation-popover > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pdf-annotation-popover > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.pdf-annotation-popover > header strong {
+  color: var(--annotation-color, var(--accent));
+  font-size: 13px;
+}
+
+.pdf-annotation-popover > header small,
+.pdf-annotation-popover-hint,
+.pdf-annotation-popover-editor footer > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.pdf-annotation-popover > header > button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 19px;
+}
+
+.pdf-annotation-popover > p {
+  margin: 10px 0 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pdf-annotation-popover > p.is-editable {
+  padding: 7px 8px;
+  border-radius: 7px;
+  cursor: text;
+}
+
+.pdf-annotation-popover-hint {
+  margin-top: 5px;
+  display: block;
+}
+
+.pdf-annotation-popover-editor {
+  margin-top: 10px;
+}
+
+.pdf-annotation-popover-editor textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 9px 10px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+  background: var(--white);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.pdf-annotation-popover-editor textarea:focus {
+  border-color: color-mix(in srgb, var(--annotation-color, var(--accent)) 50%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--annotation-color, var(--accent)) 12%, transparent);
+}
+
+.pdf-annotation-popover-editor footer {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pdf-annotation-popover-editor footer > div {
+  display: flex;
+  gap: 6px;
+}
+
+.pdf-annotation-popover-editor footer button {
+  padding: 7px 9px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.pdf-annotation-popover-editor footer button:last-child {
+  color: var(--white);
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.pdf-annotation-popover-editor footer button:disabled {
+  cursor: default;
+  opacity: .42;
 }
 
 .pdf-annotation-box.is-own > span {
@@ -5032,12 +5172,12 @@ select {
 
 .pdf-text-annotation-shape.is-community polygon {
   cursor: pointer;
-  pointer-events: stroke;
+  pointer-events: all;
 }
 
 .pdf-text-annotation-shape.is-own polygon {
   cursor: pointer;
-  pointer-events: stroke;
+  pointer-events: all;
 }
 
 .pdf-text-annotation-shape.is-pending polygon {
