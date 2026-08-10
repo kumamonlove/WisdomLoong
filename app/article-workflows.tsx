@@ -1159,7 +1159,7 @@ function PdfContinuousCanvas({
   onLoad: () => void;
   onError: () => void;
   onVisiblePage: (page: number) => void;
-  onDocumentReady: (pageCount: number) => void;
+  onDocumentReady: (pageCount: number, naturalPageWidth: number) => void;
   onProgress: (loaded: number, total: number) => void;
   onTextSelect: (text: string, page: number, rects: AnnotationRect[]) => void;
   onZoom: (delta: number) => void;
@@ -1204,8 +1204,11 @@ function PdfContinuousCanvas({
         });
         const document = await loadingTask.promise;
         if (!cancelled) {
+          const firstPage = await document.getPage(1);
+          const naturalPageWidth = firstPage.getViewport({ scale: 96 / 72 }).width;
+          if (cancelled) return;
           setPdfDocument(document);
-          onDocumentReady(document.numPages);
+          onDocumentReady(document.numPages, naturalPageWidth);
         }
       } catch {
         if (!cancelled) onError();
@@ -1297,7 +1300,7 @@ export function ReviewComposer({
       1,
   );
   const [zoom, setZoom] = useState(100);
-  const [fitWidthEnabled, setFitWidthEnabled] = useState(false);
+  const [fitWidthEnabled, setFitWidthEnabled] = useState(true);
   const [focusMode, setFocusMode] = useState(startFocused);
   const [contextTab, setContextTab] = useState<"annotations" | "publish">("annotations");
   const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
@@ -1365,6 +1368,7 @@ export function ReviewComposer({
   const [busy, setBusy] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(true);
   const [pdfPageCount, setPdfPageCount] = useState(0);
+  const [pdfNaturalWidth, setPdfNaturalWidth] = useState(0);
   const [pdfRenderAttempt, setPdfRenderAttempt] = useState(0);
   const [message, setMessage] = useState("");
   const readerFileInput = useRef<HTMLInputElement>(null);
@@ -1465,20 +1469,19 @@ export function ReviewComposer({
   const fitPdfToWidth = useCallback(() => {
     const frame = pdfFrameRef.current;
     const scroll = frame?.querySelector<HTMLElement>(".pdf-page-scroll");
-    const visiblePage = frame?.querySelector<HTMLElement>(`.continuous-page[data-page="${page}"]`)
-      ?? frame?.querySelector<HTMLElement>(".continuous-page");
-    if (!scroll || !visiblePage) return;
-    const pageWidth = visiblePage.getBoundingClientRect().width;
-    const availableWidth = scroll.clientWidth;
-    if (pageWidth <= 0 || availableWidth <= 0) return;
-    setZoom((current) => Math.max(30, Math.min(250, Math.round(current * availableWidth / pageWidth))));
-  }, [page]);
+    if (!scroll || pdfNaturalWidth <= 0) return;
+    const availableWidth = Math.max(1, scroll.clientWidth - 2);
+    const nextZoom = Math.floor(availableWidth / pdfNaturalWidth * 1000) / 10;
+    setZoom(Math.max(30, Math.min(250, nextZoom)));
+  }, [pdfNaturalWidth]);
   const enableFitWidth = useCallback(() => {
     setFitWidthEnabled(true);
-    window.requestAnimationFrame(fitPdfToWidth);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(fitPdfToWidth));
   }, [fitPdfToWidth]);
-  const handlePdfDocumentReady = useCallback((pageCount: number) => {
+  const handlePdfDocumentReady = useCallback((pageCount: number, naturalPageWidth: number) => {
     setPdfPageCount(pageCount);
+    setPdfNaturalWidth(naturalPageWidth);
+    setFitWidthEnabled(true);
     if (partnerNoteReviewId === null) {
       setLocalCache({ status: "ready", progress: 100 });
     }
@@ -1603,12 +1606,10 @@ export function ReviewComposer({
     }
   }
 
-  function showAnnotationAfterDelay(annotationId: number) {
+  function showAnnotationPreview(annotationId: number) {
     if (annotationHoverTimer.current !== null) window.clearTimeout(annotationHoverTimer.current);
-    annotationHoverTimer.current = window.setTimeout(() => {
-      setActiveAnnotationId(annotationId);
-      annotationHoverTimer.current = null;
-    }, 2_000);
+    annotationHoverTimer.current = null;
+    setActiveAnnotationId(annotationId);
   }
 
   function cancelAnnotationPreview(annotationId: number) {
@@ -1628,7 +1629,6 @@ export function ReviewComposer({
     window.requestAnimationFrame(() => {
       const card = document.querySelector<HTMLElement>(`[data-community-annotation-id="${annotationId}"]`);
       card?.scrollIntoView({ behavior: "smooth", block: "center" });
-      card?.focus({ preventScroll: true });
     });
   }
 
@@ -1972,6 +1972,8 @@ export function ReviewComposer({
 
   useEffect(() => {
     setPdfPageCount(0);
+    setPdfNaturalWidth(0);
+    setFitWidthEnabled(true);
   }, [activeReaderPdfUrl]);
 
   useEffect(() => {
@@ -2606,8 +2608,8 @@ export function ReviewComposer({
         )}
         {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.rect && annotation.annotationKind !== "highlight").map(({ annotation, number, overlapIndex }) => (
           <div
-            aria-label={`批注 ${number}，${annotation.author}：${annotation.content}。点击在相同位置添加我的批注`}
-            className={`pdf-annotation-box is-community is-${annotation.annotationKind ?? "frame"}${activeAnnotationId === annotation.id || expandedCommunityAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
+            aria-label={`批注 ${number}，${annotation.author}：${annotation.content}。点击后在右侧展开`}
+            className={`pdf-annotation-box is-community is-${annotation.annotationKind ?? "frame"}${activeAnnotationId === annotation.id ? " is-active" : ""}${overlapIndex ? " is-overlapping" : ""}`}
             key={`community-${annotation.id}`}
             onClick={(event) => {
               event.stopPropagation();
@@ -2618,6 +2620,7 @@ export function ReviewComposer({
               event.preventDefault();
               focusAnnotationInSidebar(annotation.id);
             }}
+            onMouseEnter={() => showAnnotationPreview(annotation.id)}
             onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
             role="button"
             style={{
@@ -2626,7 +2629,7 @@ export function ReviewComposer({
               width: `${annotation.rect!.width}%`,
               height: `${annotation.rect!.height}%`,
               transform: `translate(${overlapIndex * 4}px, ${overlapIndex * 4}px)`,
-              zIndex: activeAnnotationId === annotation.id || expandedCommunityAnnotationId === annotation.id ? 50 : 10 + overlapIndex,
+              zIndex: activeAnnotationId === annotation.id ? 50 : 10 + overlapIndex,
               "--annotation-color": annotationColor(annotation.author),
             } as CSSProperties}
             tabIndex={0}
@@ -2635,8 +2638,8 @@ export function ReviewComposer({
               aria-label={`在右侧查看批注 ${number}`}
               className="pdf-annotation-number"
               onClick={(event) => { event.stopPropagation(); focusAnnotationInSidebar(annotation.id); }}
-              onFocus={() => showAnnotationAfterDelay(annotation.id)}
-              onMouseEnter={() => showAnnotationAfterDelay(annotation.id)}
+              onFocus={() => showAnnotationPreview(annotation.id)}
+              onMouseEnter={() => showAnnotationPreview(annotation.id)}
               onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
               data-side={annotation.rect!.x + annotation.rect!.width / 2 > 50 ? "right" : "left"}
               type="button"
@@ -2651,8 +2654,10 @@ export function ReviewComposer({
           return <Fragment key={`community-text-${annotation.id}`}>
             <svg
               aria-label={`文字批注 ${number}：${annotation.content}`}
-              className={`pdf-text-annotation-shape is-community${activeAnnotationId === annotation.id || expandedCommunityAnnotationId === annotation.id ? " is-active" : ""}`}
+              className={`pdf-text-annotation-shape is-community${activeAnnotationId === annotation.id ? " is-active" : ""}`}
               onClick={(event) => { event.stopPropagation(); focusAnnotationInSidebar(annotation.id); }}
+              onMouseEnter={() => showAnnotationPreview(annotation.id)}
+              onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
               preserveAspectRatio="none"
               role="button"
               viewBox="0 0 100 100"
@@ -2661,10 +2666,10 @@ export function ReviewComposer({
             </svg>
             <button
               aria-label={`显示文字批注 ${number}：${annotation.content}`}
-              className={`pdf-text-annotation-target${activeAnnotationId === annotation.id || expandedCommunityAnnotationId === annotation.id ? " is-active" : ""}`}
+              className={`pdf-text-annotation-target${activeAnnotationId === annotation.id ? " is-active" : ""}`}
               onClick={(event) => { event.stopPropagation(); focusAnnotationInSidebar(annotation.id); }}
               onFocus={() => setActiveAnnotationId(annotation.id)}
-              onMouseEnter={() => showAnnotationAfterDelay(annotation.id)}
+              onMouseEnter={() => showAnnotationPreview(annotation.id)}
               onMouseLeave={() => cancelAnnotationPreview(annotation.id)}
               data-side={anchor.x > 50 ? "right" : "left"}
               style={{ left: `${anchor.x > 50 ? Math.min(100, anchor.x + anchor.width + 1) : Math.max(0, anchor.x - 1)}%`, top: `${anchor.y + anchor.height / 2}%` }}
@@ -3256,7 +3261,7 @@ export function ReviewComposer({
                         onClick={() => setAnnotationVisibility(!annotationsEnabled)}
                         type="button"
                       >
-                        伙伴批注 {annotationsEnabled ? "开" : "关"}
+                        他人批注 {annotationsEnabled ? "开" : "关"}
                       </button>
                       <button className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("frame")} type="button">
                         ▣ 图片批注
@@ -3458,7 +3463,7 @@ export function ReviewComposer({
           </button>
         </nav>
         <div className="context-panel annotation-workspace" hidden={contextTab !== "annotations"}>
-          <header className="workbench-section-heading"><div><strong>当前页伙伴批注</strong><small>悬浮查看，点击复用同一画框</small></div><span>{currentPageAnnotations.length}</span></header>
+          <header className="workbench-section-heading"><div><strong>当前页他人批注</strong><small>悬停临时查看，点击后在右侧展开</small></div><span>{currentPageAnnotations.length}</span></header>
           {viewingPartnerNote ? (
             <div className="current-page-discussion note-reading-notice">
               <h3>{activeNoteAuthor}的读书笔记</h3>
@@ -3495,7 +3500,7 @@ export function ReviewComposer({
                   }}
                   onFocus={() => setActiveAnnotationId(annotation.id)}
                   onMouseEnter={() => setActiveAnnotationId(annotation.id)}
-                  onMouseLeave={() => setActiveAnnotationId((current) => expandedCommunityAnnotationId === annotation.id ? current : null)}
+                  onMouseLeave={() => setActiveAnnotationId(null)}
                   style={{ "--annotation-color": annotationColor(annotation.author) } as CSSProperties}
                   tabIndex={0}
                 >
@@ -3506,10 +3511,10 @@ export function ReviewComposer({
                   {expandedCommunityAnnotationId === annotation.id && <AnnotationComments annotationId={annotation.sourceId} source={annotation.source} />}
                 </article>
               ))}
-              {currentPageAnnotations.length === 0 && <p className="context-empty">当前页还没有伙伴批注。</p>}
+              {currentPageAnnotations.length === 0 && <p className="context-empty">当前页还没有他人批注。</p>}
             </div>
           ) : (
-            <button className="annotations-disabled" onClick={() => setAnnotationVisibility(true)} type="button">伙伴批注已关闭 · 点击开启</button>
+            <button className="annotations-disabled" onClick={() => setAnnotationVisibility(true)} type="button">他人批注已关闭 · 点击开启</button>
           )}
 
           <section className="own-annotation-workspace">
