@@ -5275,10 +5275,51 @@ select {
   font-weight: 750;
 }
 
-.pdf-selection-actions button:first-child {
-  color: var(--white);
-  border-color: var(--ink);
-  background: var(--ink);
+.pdf-selection-actions .pdf-selection-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.pdf-selection-actions .pdf-selection-primary > span {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .58);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.pdf-selection-actions .pdf-selection-primary.is-annotation {
+  color: #7f3f2c;
+  border-color: rgba(214, 95, 64, .28);
+  background: rgba(241, 177, 162, .28);
+}
+
+.pdf-selection-actions .pdf-selection-primary.is-translation {
+  color: #315f58;
+  border-color: rgba(74, 131, 122, .28);
+  background: rgba(196, 220, 213, .4);
+}
+
+.pdf-selection-actions .pdf-selection-primary:hover:not(:disabled) {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .82), 0 5px 13px rgba(24, 24, 22, .1);
+  transform: translateY(-1px);
+}
+
+.pdf-selection-actions .pdf-selection-primary.is-annotation:hover:not(:disabled) {
+  border-color: rgba(214, 95, 64, .48);
+  background: rgba(241, 177, 162, .42);
+}
+
+.pdf-selection-actions .pdf-selection-primary.is-translation:hover:not(:disabled) {
+  border-color: rgba(74, 131, 122, .48);
+  background: rgba(196, 220, 213, .58);
 }
 
 .pdf-selection-actions .pdf-selection-close {
@@ -5298,7 +5339,7 @@ select {
   background: var(--surface);
 }
 
-.pdf-selection-actions button:hover:not(:disabled) {
+.pdf-selection-actions button:not(.pdf-selection-primary):hover:not(:disabled) {
   border-color: var(--ink);
 }
 
@@ -5726,8 +5767,7 @@ select {
   font-size: 12px;
 }
 
-.note-reading-notice > button,
-.annotation-start-actions > button {
+.note-reading-notice > button {
   padding: 8px 10px;
   color: var(--white);
   border: 0;
@@ -5736,48 +5776,6 @@ select {
   cursor: pointer;
   font-size: 12px;
   font-weight: 750;
-}
-
-.annotation-start-card {
-  padding: 18px 14px;
-  display: grid;
-  justify-items: start;
-  gap: 8px;
-  border: 1px dashed var(--line);
-  border-radius: 10px;
-  background: rgba(248, 246, 239, .72);
-}
-
-.annotation-start-card > span {
-  color: var(--accent);
-  font-size: 22px;
-}
-
-.annotation-start-card > strong {
-  font-size: 14px;
-}
-
-.annotation-start-card > p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.annotation-start-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.annotation-start-actions > button:last-child {
-  color: #5d4300;
-  background: #ffe37a;
-}
-
-.annotation-start-actions > button:disabled {
-  cursor: default;
-  opacity: .42;
 }
 
 .highlight-text-preview {
@@ -6932,6 +6930,17 @@ select {
   border-radius: 8px;
   cursor: pointer;
   background: var(--white);
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+
+.must-read-toggle::before {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(105deg, transparent 22%, rgba(255, 255, 255, .72) 45%, transparent 68%);
+  content: "";
+  pointer-events: none;
+  transform: translateX(-110%);
 }
 
 .must-read-toggle input {
@@ -6944,20 +6953,9 @@ select {
 }
 
 .must-read-toggle div {
+  position: relative;
+  z-index: 1;
   display: grid;
-}
-
-.must-read-toggle > em {
-  margin-left: auto;
-  padding: 4px 7px;
-  color: #71510e;
-  border: 1px solid rgba(188, 137, 18, 0.28);
-  border-radius: 999px;
-  background: rgba(255, 248, 216, 0.62);
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 850;
-  letter-spacing: 0.06em;
 }
 
 .must-read-toggle small {
@@ -6971,7 +6969,29 @@ select {
   background: linear-gradient(120deg, rgba(244,217,137,.32), rgba(241,177,162,.24), rgba(196,220,213,.35), rgba(244,217,137,.32));
   background-size: 240% 100%;
   animation: must-read-shimmer 4s linear infinite;
-  box-shadow: 0 8px 22px rgba(154, 114, 32, 0.1);
+  box-shadow: 0 0 0 3px rgba(244, 217, 137, .16), 0 10px 28px rgba(154, 114, 32, .18);
+  transform: translateY(-1px);
+}
+
+.must-read-toggle.selected::before {
+  opacity: 1;
+  animation: must-read-sweep 2.8s ease-in-out infinite;
+}
+
+.must-read-toggle.selected > span {
+  position: relative;
+  z-index: 1;
+  color: #9b6b08;
+  animation: must-read-spark 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 2px 7px rgba(181, 122, 18, .36));
+}
+
+@keyframes must-read-sweep {
+  55%, 100% { transform: translateX(110%); }
+}
+
+@keyframes must-read-spark {
+  50% { transform: rotate(12deg) scale(1.24); }
 }
 
 .reader-review-form label > small {
@@ -7034,6 +7054,14 @@ select {
   animation: focus-rating-shine 3.8s linear infinite;
 }
 
+.focus-direct-rating.is-must-read {
+  border-color: rgba(244, 217, 137, .58);
+  background: linear-gradient(110deg, rgba(244, 217, 137, .08), rgba(241, 177, 162, .13), rgba(196, 220, 213, .1), rgba(244, 217, 137, .08));
+  background-size: 240% 100%;
+  animation: must-read-shimmer 4s linear infinite;
+  box-shadow: inset 0 0 18px rgba(244, 217, 137, .1), 0 0 22px rgba(244, 217, 137, .13);
+}
+
 .focus-direct-rating > strong {
   color: rgba(248, 246, 239, .72);
   font-size: 11px;
@@ -7087,6 +7115,11 @@ select {
 .focus-status .focus-direct-rating .focus-must-read:hover {
   color: #f4d989;
   transform: none;
+}
+
+.focus-status .focus-direct-rating .focus-must-read.selected {
+  animation: must-read-spark 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 7px rgba(244, 217, 137, .46));
 }
 
 .focus-status .focus-direct-rating .focus-rating-clear {
@@ -8480,7 +8513,12 @@ select {
   .must-read-rating,
   .reading-achievement-toast,
   .star-rating.rating-5 .rating-star.filled,
-  .focus-direct-rating.rating-5 {
+  .focus-direct-rating.rating-5,
+  .focus-direct-rating.is-must-read,
+  .focus-direct-rating .focus-must-read.selected,
+  .must-read-toggle.selected,
+  .must-read-toggle.selected::before,
+  .must-read-toggle.selected > span {
     animation: none;
   }
 

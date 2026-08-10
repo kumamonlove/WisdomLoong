@@ -587,6 +587,16 @@ type CommunityReview = {
   attachments: { id: number; reviewId: number; note: string }[];
 };
 
+function ratingReaction(rating: number | null, mustRead: boolean) {
+  if (mustRead) return "✦ 必读";
+  if (rating === 1) return "垃圾";
+  if (rating === 2) return "不太行";
+  if (rating === 3) return "还不错";
+  if (rating === 4) return "很推荐";
+  if (rating === 5) return "太好了";
+  return "未评分";
+}
+
 const pdfjsResourceOptions = {
   cMapPacked: true,
   cMapUrl: "/pdfjs/cmaps/",
@@ -1457,6 +1467,10 @@ export function ReviewComposer({
   const currentPageAnnotations = useMemo(
     () => viewingPartnerNote ? [] : communityAnnotations.filter((item) => item.page === page),
     [communityAnnotations, page, viewingPartnerNote],
+  );
+  const currentPageOwnAnnotations = useMemo(
+    () => notes.map((note, noteIndex) => ({ note, noteIndex })).filter(({ note }) => note.page === page),
+    [notes, page],
   );
   const currentAnnotationLayout = useMemo(() => currentPageAnnotations.map((annotation, index, items) => ({
     annotation,
@@ -2791,12 +2805,13 @@ export function ReviewComposer({
             }}
           >
             <div className="pdf-selection-action-buttons">
-              <button onClick={() => beginTextAnnotation(textSelection)} type="button">批注</button>
+              <button className="pdf-selection-primary is-annotation" onClick={() => beginTextAnnotation(textSelection)} type="button"><span aria-hidden="true">✎</span>批注</button>
               <button
+                className="pdf-selection-primary is-translation"
                 disabled={!translationEnabled || translating}
                 onClick={() => void translateSelectedText()}
                 type="button"
-              >{translating ? "翻译中…" : "翻译"}</button>
+              ><span aria-hidden="true">文</span>{translating ? "翻译中…" : "翻译"}</button>
               <button
                 aria-label="关闭翻译器"
                 className="pdf-selection-close"
@@ -2845,7 +2860,7 @@ export function ReviewComposer({
                   type="button"
                 >✦ 必读</button>
               </div>
-              <em>{ratingSaving ? "保存中" : mustRead ? "必读" : rating ? `${rating}.0` : "未评分"}</em>
+              <em aria-live="polite">{ratingSaving ? "保存中" : ratingReaction(rating, mustRead)}</em>
               {rating !== null && (
                 <button
                   className="focus-rating-clear"
@@ -3501,7 +3516,7 @@ export function ReviewComposer({
         </nav>
         <div className="context-panel annotation-workspace" hidden={contextTab !== "annotations"}>
           <section className={`other-annotation-workspace${otherAnnotationsExpanded ? " is-expanded" : " is-collapsed"}`}>
-          <header className="workbench-section-heading"><button aria-expanded={otherAnnotationsExpanded} className="annotation-section-toggle" onClick={() => setOtherAnnotationsExpanded((value) => !value)} type="button"><i aria-hidden="true">▾</i><div><strong>他人批注</strong><small>悬停临时查看，点击后在右侧展开</small></div><span>{currentPageAnnotations.length}</span></button></header>
+          <header className="workbench-section-heading"><button aria-expanded={otherAnnotationsExpanded} className="annotation-section-toggle" onClick={() => setOtherAnnotationsExpanded((value) => !value)} type="button"><i aria-hidden="true">▾</i><div><strong>本页他人批注</strong><small>第 {page} 页 · 悬停查看，点击展开</small></div><span>{currentPageAnnotations.length}</span></button></header>
           {viewingPartnerNote ? (
             <div className="current-page-discussion note-reading-notice">
               <h3>{activeNoteAuthor}的读书笔记</h3>
@@ -3557,8 +3572,8 @@ export function ReviewComposer({
           </section>
 
           <section className={`own-annotation-workspace${ownAnnotationsExpanded ? " is-expanded" : " is-collapsed"}`}>
-            <header className="workbench-section-heading"><button aria-expanded={ownAnnotationsExpanded} className="annotation-section-toggle" onClick={() => setOwnAnnotationsExpanded((value) => !value)} type="button"><i aria-hidden="true">▾</i><div><strong>我的批注</strong><small>文字批注保存原文，生成报告时自动翻译</small></div><span>{notes.length}</span></button></header>
-            {annotationRect ? (
+            <header className="workbench-section-heading"><button aria-expanded={ownAnnotationsExpanded} className="annotation-section-toggle" onClick={() => setOwnAnnotationsExpanded((value) => !value)} type="button"><i aria-hidden="true">▾</i><div><strong>本页我的批注</strong><small>第 {page} 页 · 从顶部工具栏添加</small></div><span>{currentPageOwnAnnotations.length}</span></button></header>
+            {annotationRect && (
               <section className="note-composer">
                 <header><span>新批注</span><div><strong>填写{annotationKind === "highlight" ? "文字" : "图片"}批注</strong><small>{annotationKind === "highlight" ? "所选原文和批注会一起保存" : "截图、位置和批注会一起保存"}</small></div></header>
                 {annotationKind === "highlight" && (
@@ -3572,12 +3587,6 @@ export function ReviewComposer({
                   <button className="cancel-pending-annotation" onClick={cancelPendingAnnotation} type="button">取消框选</button>
                   <button disabled={!noteDraft.trim()} onClick={addCurrentAnnotation} type="button">加入批注</button>
                 </footer>
-              </section>
-            ) : (
-              <section className="annotation-start-card">
-                <span>▣</span><strong>选择一个批注位置</strong>
-                <p>图片批注通过画框创建；文字批注通过选择 PDF 文字创建。</p>
-                {!viewingPartnerNote && <div className="annotation-start-actions"><button disabled={pdfLoading} onClick={() => startDrawingAnnotation("frame")} type="button">批注图片</button><button disabled={pdfLoading} onClick={() => startDrawingAnnotation("highlight")} type="button">批注文字</button></div>}
               </section>
             )}
             <div className="saved-notes">
@@ -3594,19 +3603,20 @@ export function ReviewComposer({
                     : "批注已实时保存"}</span>
                 {annotationSaveStatus === "error" && <button onClick={() => persistAnnotationDrafts(articleId, notes)} type="button">重新保存</button>}
               </div>
-              {notes.map((note, index) => (
+              {currentPageOwnAnnotations.length === 0 && !annotationRect && <p className="context-empty">本页还没有我的批注。</p>}
+              {currentPageOwnAnnotations.map(({ note, noteIndex }) => (
                 <div
-                  className={`${editingAnnotationIndex === index ? "is-editing" : ""}${activeOwnAnnotationIndex === index ? " is-active" : ""}`}
-                  key={`${note.page}-${index}`}
-                  onMouseEnter={() => setActiveOwnAnnotationIndex(index)}
+                  className={`${editingAnnotationIndex === noteIndex ? "is-editing" : ""}${activeOwnAnnotationIndex === noteIndex ? " is-active" : ""}`}
+                  key={`${note.page}-${noteIndex}`}
+                  onMouseEnter={() => setActiveOwnAnnotationIndex(noteIndex)}
                   onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
                 >
-                  {editingAnnotationIndex === index ? (
+                  {editingAnnotationIndex === noteIndex ? (
                     <div className="saved-note-editor">
-                      <label htmlFor={`annotation-edit-${index}`}>修改批注 {index + 1}</label>
+                      <label htmlFor={`annotation-edit-${noteIndex}`}>修改批注</label>
                       <textarea
                         autoFocus
-                        id={`annotation-edit-${index}`}
+                        id={`annotation-edit-${noteIndex}`}
                         maxLength={4000}
                         onChange={(event) => setEditingAnnotationContent(event.target.value)}
                         onKeyDown={(event) => {
@@ -3628,8 +3638,8 @@ export function ReviewComposer({
                         onClick={() => navigateToAnnotation(note)}
                         type="button"
                       ><span>{note.content}</span></button>
-                      <button aria-label={`编辑批注 ${index + 1}`} className="saved-note-edit" onClick={() => startEditingAnnotation(index)} title="编辑批注" type="button">✎</button>
-                      <button aria-label={`删除批注 ${index + 1}`} className="saved-note-delete" onClick={() => deleteAnnotation(index)} title="删除批注" type="button">⌫</button>
+                      <button aria-label="编辑批注" className="saved-note-edit" onClick={() => startEditingAnnotation(noteIndex)} title="编辑批注" type="button">✎</button>
+                      <button aria-label="删除批注" className="saved-note-delete" onClick={() => deleteAnnotation(noteIndex)} title="删除批注" type="button">⌫</button>
                     </>
                   )}
                 </div>
@@ -3641,7 +3651,7 @@ export function ReviewComposer({
         <form className="review-form reader-review-form" hidden={contextTab !== "publish"} onSubmit={submitReview}>
           <header className="workbench-section-heading"><div><strong>{selectedArticle?.ownReview ? "✓ 已发布" : "发布读书笔记与评论"}</strong><small>{selectedArticle?.ownReview ? "可以继续更新读书笔记、评分和评论" : "依次完成下面 3 个步骤"}</small></div></header>
           <section className="publish-step">
-            <header className="publish-step-heading"><span>1</span><div><strong>选择推荐等级</strong><small>必须评分，也可以直接标记为必读</small></div><em className={rating !== null ? "ready" : ""}>{rating !== null ? "已完成" : "待完成"}</em></header>
+            <header className="publish-step-heading"><span>1</span><div><strong>选择推荐等级</strong><small>选择 1–5 星，或直接标记为必读</small></div><em className={rating !== null ? "ready" : ""}>{rating !== null ? "已完成" : "待完成"}</em></header>
             <div className={`star-rating rating-${rating ?? "unrated"}${mustRead ? " is-must-read" : ""}${ratingSaving ? " is-saving" : ""}`}>
               <div>
                 {[1, 2, 3, 4, 5].map((value) => (
@@ -3655,7 +3665,7 @@ export function ReviewComposer({
                     type="button"
                   >★</button>
                 ))}
-                <strong aria-live="polite">{ratingSaving ? "保存中…" : mustRead ? "✦ 必读" : rating === null ? "请选择评分" : `${rating}.0`}</strong>
+                <strong aria-live="polite">{ratingSaving ? "保存中…" : rating === null ? "请选择评分" : ratingReaction(rating, mustRead)}</strong>
                 {rating !== null && (
                   <button
                     className="rating-clear"
@@ -3676,8 +3686,7 @@ export function ReviewComposer({
                 type="checkbox"
               />
               <span aria-hidden="true">✦</span>
-              <div><strong>必读</strong><small>高于五星 · 向团队重点推荐</small></div>
-              <em>五星之上</em>
+              <div><strong>必读</strong></div>
             </label>
           </section>
           <section className="publish-step">
