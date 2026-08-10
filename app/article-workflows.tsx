@@ -2188,6 +2188,14 @@ export function ReviewComposer({
       : "请在当前 PDF 页面上为图片或区域拖动画框。");
   }
 
+  function toggleDrawingAnnotation(kind: "frame" | "highlight") {
+    if (annotationKind === kind && (drawingAnnotation || annotationRect)) {
+      cancelPendingAnnotation();
+      return;
+    }
+    startDrawingAnnotation(kind);
+  }
+
   function addCurrentAnnotation() {
     if (!annotationRect || !noteDraft.trim()) return;
     const nextNotes = [...notes, {
@@ -2315,6 +2323,42 @@ export function ReviewComposer({
     setTextSelection(null);
     window.getSelection()?.removeAllRanges();
   }
+
+  useEffect(() => {
+    if (!focusMode) return;
+    const cancelWithEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const hasAnnotationAction = drawingAnnotation || Boolean(annotationStart) || Boolean(annotationRect);
+      const hasActiveAction = placingBookmark || hasAnnotationAction || Boolean(textSelection) || editingAnnotationIndex !== null;
+      if (!hasActiveAction) return;
+      event.preventDefault();
+      setPlacingBookmark(false);
+      if (hasAnnotationAction) {
+        setDrawingAnnotation(false);
+        setAnnotationStart(null);
+        setAnnotationRect(null);
+        setHighlightRects([]);
+        setQuoteDraft("");
+        setNoteDraft("");
+      }
+      if (textSelection) {
+        translationAbortRef.current?.abort();
+        translationAbortRef.current = null;
+        setTranslating(false);
+        setTranslation("");
+        setTranslationError("");
+        setTextSelection(null);
+      }
+      if (editingAnnotationIndex !== null) {
+        setEditingAnnotationIndex(null);
+        setEditingAnnotationContent("");
+      }
+      window.getSelection()?.removeAllRanges();
+      setMessage("已取消当前操作。");
+    };
+    window.addEventListener("keydown", cancelWithEscape);
+    return () => window.removeEventListener("keydown", cancelWithEscape);
+  }, [annotationRect, annotationStart, drawingAnnotation, editingAnnotationIndex, focusMode, placingBookmark, textSelection]);
 
   function beginTextAnnotation(selection: { text: string; page: number; rects: AnnotationRect[] }) {
     if (selection.rects.length === 0) return;
@@ -3206,7 +3250,7 @@ export function ReviewComposer({
                             ? "已取消放置书签。"
                             : "请在 PDF 中点击你当前读到的那一行。");
                         }}
-                        title="在 PDF 中精确放置阅读书签"
+                        title={placingBookmark ? "取消放置书签（Esc）" : "在 PDF 中精确放置阅读书签"}
                         type="button"
                       ><ReaderToolIcon name="bookmark" /><span className="reader-tool-label">{bookmarkSaving ? "保存中…" : placingBookmark ? "取消放置" : "加书签"}</span></button>
                       {bookmark && (
@@ -3252,11 +3296,11 @@ export function ReviewComposer({
                   {!viewingPartnerNote && (
                     <div className="reader-annotation-tools">
                       <span className="reader-tool-group-label">添加批注</span>
-                      <button aria-pressed={drawingAnnotation && annotationKind === "frame"} className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("frame")} type="button">
-                        <ReaderToolIcon name="image" /><span className="reader-tool-label">图片批注</span>
+                      <button aria-pressed={annotationKind === "frame" && (drawingAnnotation || Boolean(annotationRect))} className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={() => toggleDrawingAnnotation("frame")} title={annotationKind === "frame" && (drawingAnnotation || annotationRect) ? "取消图片批注（Esc）" : "添加图片批注"} type="button">
+                        <ReaderToolIcon name="image" /><span className="reader-tool-label">{annotationKind === "frame" && (drawingAnnotation || annotationRect) ? "取消图片批注" : "图片批注"}</span>
                       </button>
-                      <button aria-pressed={drawingAnnotation && annotationKind === "highlight"} className="text-annotation-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("highlight")} type="button">
-                        <ReaderToolIcon name="text" /><span className="reader-tool-label">文字批注</span>
+                      <button aria-pressed={annotationKind === "highlight" && (drawingAnnotation || Boolean(annotationRect))} className="text-annotation-button" disabled={!localPdfUrl || pdfLoading} onClick={() => toggleDrawingAnnotation("highlight")} title={annotationKind === "highlight" && (drawingAnnotation || annotationRect) ? "取消文字批注（Esc）" : "添加文字批注"} type="button">
+                        <ReaderToolIcon name="text" /><span className="reader-tool-label">{annotationKind === "highlight" && (drawingAnnotation || annotationRect) ? "取消文字批注" : "文字批注"}</span>
                       </button>
                     </div>
                   )}
