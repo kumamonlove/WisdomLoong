@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { getUserReviewProfile } from "@/lib/knowledge";
 import { UsernameForm } from "@/app/profile/username-form";
 import { MathTitle } from "@/app/math-title";
+import { MustReadMark, RatingMark } from "@/app/rating-mark";
 
 export default async function ProfilePage() {
   const user = await requireUser();
@@ -34,8 +35,8 @@ export default async function ProfilePage() {
             <div>
               <span>评论</span>
               {review.mustRead
-                ? <em className="must-read-badge">✦ 必读</em>
-                : <small>{review.rating === null ? "未评分" : `★ ${review.rating}`}</small>}
+                ? <MustReadMark className="must-read-badge" />
+                : review.rating !== null && <RatingMark rating={review.rating} />}
             </div>
             <h3><MathTitle title={review.title} /></h3>
             <p>{review.content}</p>

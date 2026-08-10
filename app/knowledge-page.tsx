@@ -4,6 +4,7 @@ import { ReadingNoteComments, ReadingNoteLikeButton } from "@/app/review-actions
 import { MarkReadButton } from "@/app/reading-actions";
 import { MathTitle } from "@/app/math-title";
 import { ArticleMetadataEditor } from "@/app/article-metadata-editor";
+import { MustReadMark, RatingMark } from "@/app/rating-mark";
 import type { ArticleCardData } from "@/lib/knowledge";
 
 const appVersion = `v${packageInfo.version}`;
@@ -45,13 +46,9 @@ export function ArticleGrid({
               ))}
             </div>
             {article.mustRead || article.recommendationSignals?.mustReadCount ? (
-              <span className="must-read-rating" aria-label="必读，优先于五星推荐">
-                ✦ 必读
-              </span>
+              <MustReadMark className="must-read-rating" />
             ) : article.rating !== null && (
-              <span className="rating" aria-label={`评分 ${article.rating}`}>
-                ★ {article.rating}
-              </span>
+              <RatingMark className="rating" rating={article.rating} />
             )}
           </div>
           <h3>
@@ -77,7 +74,7 @@ export function ArticleGrid({
                 <span><i aria-hidden="true">♥</i>读书笔记获得 {article.recommendationSignals.likeCount} 个赞</span>
               )}
               {article.rating !== null && (
-                <span><i aria-hidden="true">★</i>团队评分 {article.rating}</span>
+                <RatingMark rating={article.rating} />
               )}
             </div>
           )}
@@ -139,8 +136,8 @@ export function ArticleGrid({
                     </span>
                     <strong>{review.author}</strong>
                     {review.mustRead
-                      ? <em className="must-read-badge">✦ 必读</em>
-                      : <span>{review.rating === null ? "未评分" : `★ ${review.rating}`}</span>}
+                      ? <MustReadMark className="must-read-badge" />
+                      : review.rating !== null && <RatingMark rating={review.rating} />}
                     <small>{review.content.length} 字评论</small>
                   </summary>
                   <div>

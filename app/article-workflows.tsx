@@ -19,6 +19,7 @@ import { AnnotationComments, ReadingNoteComments, ReadingNoteLikeButton } from "
 import { DeleteArticleButton, MarkReadButton, ReadingListButton } from "@/app/reading-actions";
 import { ArticleMetadataEditor } from "@/app/article-metadata-editor";
 import { MathTitle } from "@/app/math-title";
+import { MustReadMark, RatingMark } from "@/app/rating-mark";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 
 type ArxivResult = {
@@ -1390,6 +1391,8 @@ export function ReviewComposer({
   const annotationSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const annotationSaveRevisions = useRef(new Map<number, number>());
   const annotationHoverTimer = useRef<number | null>(null);
+  const browserZoomAnchorRef = useRef<ReadingBookmark | null>(null);
+  const browserZoomTimersRef = useRef<number[]>([]);
   currentArticleIdRef.current = articleId;
 
   useEffect(() => () => translationAbortRef.current?.abort(), []);
@@ -2007,6 +2010,75 @@ export function ReviewComposer({
       observer.disconnect();
     };
   }, [fitPdfToWidth, activeReaderPdfUrl]);
+
+  useEffect(() => {
+    const clearRestoreTimers = () => {
+      browserZoomTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      browserZoomTimersRef.current = [];
+    };
+    const captureAnchor = () => {
+      const scroll = pdfFrameRef.current?.querySelector<HTMLElement>(".pdf-page-scroll");
+      if (!scroll) return null;
+      const scrollBounds = scroll.getBoundingClientRect();
+      const anchorY = scrollBounds.top + Math.min(60, scrollBounds.height * 0.12);
+      const pages = Array.from(scroll.querySelectorAll<HTMLElement>(".continuous-page"));
+      const target = pages.find((item) => {
+        const bounds = item.getBoundingClientRect();
+        return bounds.top <= anchorY && bounds.bottom >= anchorY;
+      }) ?? pages.reduce<HTMLElement | null>((closest, item) => {
+        if (!closest) return item;
+        const currentDistance = Math.abs(item.getBoundingClientRect().top - anchorY);
+        const closestDistance = Math.abs(closest.getBoundingClientRect().top - anchorY);
+        return currentDistance < closestDistance ? item : closest;
+      }, null);
+      if (!target) return null;
+      const bounds = target.getBoundingClientRect();
+      return {
+        page: Math.max(1, Number(target.dataset.page) || 1),
+        positionY: Math.max(0, Math.min(100, (anchorY - bounds.top) / Math.max(1, bounds.height) * 100)),
+      };
+    };
+    const restoreAnchor = () => {
+      const anchor = browserZoomAnchorRef.current;
+      const scroll = pdfFrameRef.current?.querySelector<HTMLElement>(".pdf-page-scroll");
+      const target = scroll?.querySelector<HTMLElement>(`.continuous-page[data-page="${anchor?.page ?? 0}"]`);
+      if (!anchor || !scroll || !target) return;
+      const scrollBounds = scroll.getBoundingClientRect();
+      const pageBounds = target.getBoundingClientRect();
+      const anchorOffset = Math.min(60, scrollBounds.height * 0.12);
+      const nextTop = scroll.scrollTop + pageBounds.top - scrollBounds.top +
+        pageBounds.height * anchor.positionY / 100 - anchorOffset;
+      scroll.scrollTo({ top: Math.max(0, nextTop) });
+      setPage(anchor.page);
+    };
+    const scheduleRestore = () => {
+      clearRestoreTimers();
+      for (const delay of [0, 60, 160, 320, 560]) {
+        browserZoomTimersRef.current.push(window.setTimeout(restoreAnchor, delay));
+      }
+      browserZoomTimersRef.current.push(window.setTimeout(() => {
+        restoreAnchor();
+        browserZoomAnchorRef.current = null;
+        browserZoomTimersRef.current = [];
+      }, 760));
+    };
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      browserZoomAnchorRef.current ??= captureAnchor();
+      if (browserZoomAnchorRef.current) scheduleRestore();
+    };
+    const handleResize = () => {
+      if (browserZoomAnchorRef.current) scheduleRestore();
+    };
+    window.addEventListener("wheel", handleWheel, { capture: true, passive: true });
+    window.addEventListener("resize", handleResize);
+    return () => {
+      clearRestoreTimers();
+      browserZoomAnchorRef.current = null;
+      window.removeEventListener("wheel", handleWheel, { capture: true });
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [activeReaderPdfUrl]);
 
   useEffect(() => {
     if (localCache.status === "ready") {
@@ -2638,7 +2710,12 @@ export function ReviewComposer({
       ? pageNotes.find((item) => item.noteIndex === pinnedAnnotation.index) ?? null
       : null;
     const pinnedItem = pinnedCommunity ?? pinnedOwn;
-    const pinnedRect = pinnedItem?.rect ?? null;
+    const hoveredCommunity = pinnedItem ? null : pageAnnotations.find((item) => item.id === activeAnnotationId) ?? null;
+    const hoveredOwn = pinnedItem ? null : pageNotes.find((item) => item.noteIndex === activeOwnAnnotationIndex) ?? null;
+    const displayedCommunity = pinnedCommunity ?? hoveredCommunity;
+    const displayedOwn = pinnedOwn ?? hoveredOwn;
+    const displayedItem = displayedCommunity ?? displayedOwn;
+    const displayedRect = displayedItem?.rect ?? null;
 
     return (
       <div
@@ -2738,11 +2815,6 @@ export function ReviewComposer({
               data-side={annotation.rect!.x + annotation.rect!.width / 2 > 50 ? "right" : "left"}
               type="button"
             >{number}</button>
-            <strong
-              className="pdf-annotation-tooltip"
-              data-align={annotation.rect!.x + annotation.rect!.width / 2 > 50 ? "right" : "left"}
-              data-placement={annotation.rect!.y < 25 ? "below" : "above"}
-            ><b>{annotation.author} · 批注 {number}</b>{annotation.content}</strong>
           </div>
         ))}
         {annotationsEnabled && pageLayout.filter(({ annotation }) => annotation.annotationKind === "highlight").map(({ annotation, number }) => {
@@ -2772,7 +2844,7 @@ export function ReviewComposer({
               data-side={anchor.x > 50 ? "right" : "left"}
               style={{ left: `${anchor.x > 50 ? Math.min(100, anchor.x + anchor.width + 1) : Math.max(0, anchor.x - 1)}%`, top: `${anchor.y + anchor.height / 2}%` }}
               type="button"
-            ><span>{number}</span><strong className="pdf-annotation-tooltip" data-placement={anchor.y < 25 ? "below" : "above"}><b>{annotation.author} · 文字批注 {number}</b>{annotation.content}</strong></button>
+            ><span>{number}</span></button>
           </Fragment>;
         })}
         {ownAnnotationsEnabled && pageNotes.filter((item) => item.annotationKind !== "highlight").map((item, index) => {
@@ -2806,11 +2878,7 @@ export function ReviewComposer({
               onMouseEnter={() => setActiveOwnAnnotationIndex(item.noteIndex)}
               onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
               type="button"
-            >我</button><strong
-              className="pdf-annotation-tooltip"
-              data-align={item.rect!.x + item.rect!.width / 2 > 50 ? "right" : "left"}
-              data-placement={item.rect!.y < 25 ? "below" : "above"}
-            ><b>我的批注</b>{item.content}</strong></span>
+            >我</button></span>
           );
         })}
         {ownAnnotationsEnabled && pageNotes.filter((item) => item.annotationKind === "highlight").map((item, index) => {
@@ -2828,26 +2896,26 @@ export function ReviewComposer({
             onMouseLeave={() => setActiveOwnAnnotationIndex(null)}
             style={{ left: `${anchor.x > 50 ? Math.min(100, anchor.x + anchor.width + 1) : Math.max(0, anchor.x - 1)}%`, top: `${anchor.y + anchor.height / 2}%` }}
             type="button"
-          ><span>我</span><strong className="pdf-annotation-tooltip" data-placement={anchor.y < 25 ? "below" : "above"}><b>我的批注</b>{item.content}</strong></button></Fragment> : null;
+          ><span>我</span></button></Fragment> : null;
         })}
-        {pinnedItem && pinnedRect && (
+        {displayedItem && displayedRect && (
           <section
-            aria-label={pinnedCommunity ? `${pinnedCommunity.author}的批注` : "我的批注"}
-            className={`pdf-annotation-popover${pinnedRect.y > 52 ? " is-above" : ""}`}
+            aria-label={displayedCommunity ? `${displayedCommunity.author}的批注` : "我的批注"}
+            className={`pdf-annotation-popover${displayedRect.y > 52 ? " is-above" : ""}${pinnedItem ? " is-pinned" : " is-preview"}`}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
             style={{
-              ...(pinnedRect.x + pinnedRect.width / 2 > 50 ? { right: "2%" } : { left: "2%" }),
-              top: `${pinnedRect.y > 52 ? pinnedRect.y : pinnedRect.y + pinnedRect.height}%`,
-              "--annotation-color": pinnedCommunity ? annotationColor(pinnedCommunity.author) : "var(--accent)",
+              ...(displayedRect.x + displayedRect.width / 2 > 50 ? { right: "2%" } : { left: "2%" }),
+              top: `${displayedRect.y > 52 ? displayedRect.y : displayedRect.y + displayedRect.height}%`,
+              "--annotation-color": displayedCommunity ? annotationColor(displayedCommunity.author) : "var(--accent)",
             } as CSSProperties & { "--annotation-color": string }}
           >
             <header>
               <div>
-                <strong>{pinnedCommunity ? pinnedCommunity.author : "我的批注"}</strong>
-                <small>{pinnedItem.annotationKind === "highlight" ? "文字批注" : "图片批注"} · 第 {pageNumber} 页</small>
+                <strong>{displayedCommunity ? displayedCommunity.author : "我的批注"}</strong>
+                <small>{displayedItem.annotationKind === "highlight" ? "文字批注" : "图片批注"} · 第 {pageNumber} 页</small>
               </div>
-              <button
+              {pinnedItem && <button
                 aria-label="关闭批注卡片"
                 onClick={() => {
                   if (pinnedOwn && editingAnnotationIndex === pinnedOwn.noteIndex) cancelEditingAnnotation();
@@ -2857,7 +2925,7 @@ export function ReviewComposer({
                 }}
                 title="关闭"
                 type="button"
-              >×</button>
+              >×</button>}
             </header>
             {pinnedOwn && editingAnnotationIndex === pinnedOwn.noteIndex ? (
               <div className="pdf-annotation-popover-editor">
@@ -2879,7 +2947,7 @@ export function ReviewComposer({
                 className={pinnedOwn ? "is-editable" : undefined}
                 onDoubleClick={pinnedOwn ? () => startEditingAnnotation(pinnedOwn.noteIndex) : undefined}
                 title={pinnedOwn ? "双击修改批注" : undefined}
-              >{pinnedItem.content}</p>
+              >{displayedItem.content}</p>
             )}
             {pinnedOwn && editingAnnotationIndex !== pinnedOwn.noteIndex && <small className="pdf-annotation-popover-hint">双击批注文字即可修改</small>}
             {pinnedCommunity && <AnnotationComments annotationId={pinnedCommunity.sourceId} source={pinnedCommunity.source} />}
@@ -2999,9 +3067,8 @@ export function ReviewComposer({
                   disabled={ratingSaving}
                   onClick={() => void (mustRead ? clearArticleRating() : saveArticleRating(5, true))}
                   type="button"
-                >✦ 必读</button>
+                >必读</button>
               </div>
-              <em aria-live="polite">{ratingSaving ? "保存中" : mustRead ? "✦ 必读" : rating === null ? "未评分" : `${rating}.0`}</em>
               {rating !== null && (
                 <button
                   className="focus-rating-clear"
@@ -3169,7 +3236,7 @@ export function ReviewComposer({
                 <span className={`reading-status is-${article.readingStatus}`}>
                   {article.readingStatus === "read" ? "已读" : article.readingStatus === "reading" ? "在读" : "未读"}
                 </span>
-                <span><i aria-hidden="true">★</i>{article.rating ?? "暂无评分"}</span>
+                {article.rating !== null && article.rating !== undefined && <RatingMark rating={article.rating} />}
                 <span><i aria-hidden="true">✓</i>{article.readCount ?? 0} 人读过</span>
                 <span className={(article.readingNowCount ?? 0) > 0 ? "is-live" : ""}>
                   <i aria-hidden="true">●</i>{article.readingNowCount ?? 0} 人正在读
@@ -3602,7 +3669,8 @@ export function ReviewComposer({
                       <article key={review.id}>
                         <span>{review.author.slice(0, 1).toUpperCase()}</span>
                         <div>
-                          <strong>{review.author} · {review.mustRead ? "✦ 必读" : review.rating === null ? "未评分" : `★ ${review.rating}`}</strong>
+                          <strong>{review.author}</strong>
+                          {review.mustRead ? <MustReadMark /> : review.rating !== null && <RatingMark rating={review.rating} />}
                           <p>{review.content}</p>
                         </div>
                       </article>
@@ -3777,7 +3845,6 @@ export function ReviewComposer({
                     type="button"
                   >★</button>
                 ))}
-                <strong aria-live="polite">{ratingSaving ? "保存中…" : mustRead ? "✦ 必读" : rating === null ? "请选择评分" : `${rating}.0`}</strong>
                 {rating !== null && (
                   <button
                     className="rating-clear"
@@ -3797,7 +3864,6 @@ export function ReviewComposer({
                 }}
                 type="checkbox"
               />
-              <span aria-hidden="true">✦</span>
               <div><strong>必读</strong></div>
             </label>
           </section>
