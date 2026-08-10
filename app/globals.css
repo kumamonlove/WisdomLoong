@@ -5037,6 +5037,10 @@ select {
   transform: translateY(calc(-100% - 10px));
 }
 
+.pdf-annotation-popover.is-inside {
+  transform: none;
+}
+
 .pdf-annotation-popover.is-preview {
   pointer-events: none;
 }
@@ -5192,8 +5196,8 @@ select {
 }
 
 .pdf-text-annotation-shape polygon {
-  fill: rgba(154, 69, 48, .035);
-  stroke: rgba(154, 69, 48, .82);
+  fill: color-mix(in srgb, var(--annotation-color, var(--accent)) 4%, transparent);
+  stroke: var(--annotation-color, var(--accent));
   stroke-width: 1.6;
   stroke-linejoin: round;
 }
@@ -5522,9 +5526,8 @@ select {
 .pdf-selection-actions {
   position: absolute;
   z-index: 90;
-  width: min(310px, 36%);
-  min-width: 190px;
-  padding: 8px;
+  width: min(460px, 55%);
+  padding: 12px;
   color: var(--ink);
   border: 1px solid rgba(24, 24, 22, .16);
   border-radius: 10px;
@@ -5541,18 +5544,18 @@ select {
 .pdf-selection-actions > .pdf-selection-action-buttons {
   display: grid;
   grid-template-columns: 1fr 1fr 30px;
-  gap: 6px;
+  gap: 8px;
 }
 
 .pdf-selection-actions button {
-  min-height: 30px;
-  padding: 6px 10px;
+  min-height: 36px;
+  padding: 8px 12px;
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--white);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 750;
 }
 
@@ -5642,15 +5645,15 @@ select {
 }
 
 .pdf-selection-actions > p {
-  max-height: 190px;
-  margin: 8px 0 0;
-  padding: 9px 10px;
+  max-height: 300px;
+  margin: 11px 0 0;
+  padding: 12px 13px;
   overflow: auto;
   color: var(--ink);
   border-top: 1px solid var(--line);
   background: transparent;
-  font-size: 14px;
-  line-height: 1.75;
+  font-size: 16px;
+  line-height: 1.8;
   white-space: pre-wrap;
 }
 
@@ -5658,7 +5661,7 @@ select {
   margin-bottom: 4px;
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: .06em;
 }
 
