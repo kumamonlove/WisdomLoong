@@ -3252,10 +3252,10 @@ export function ReviewComposer({
                   {!viewingPartnerNote && (
                     <div className="reader-annotation-tools">
                       <span className="reader-tool-group-label">添加批注</span>
-                      <button className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("frame")} type="button">
+                      <button aria-pressed={drawingAnnotation && annotationKind === "frame"} className="capture-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("frame")} type="button">
                         <ReaderToolIcon name="image" /><span className="reader-tool-label">图片批注</span>
                       </button>
-                      <button className="text-annotation-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("highlight")} type="button">
+                      <button aria-pressed={drawingAnnotation && annotationKind === "highlight"} className="text-annotation-button" disabled={!localPdfUrl || pdfLoading} onClick={() => startDrawingAnnotation("highlight")} type="button">
                         <ReaderToolIcon name="text" /><span className="reader-tool-label">文字批注</span>
                       </button>
                     </div>
