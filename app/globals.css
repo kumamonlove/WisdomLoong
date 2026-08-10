@@ -5296,15 +5296,15 @@ select {
 }
 
 .pdf-selection-actions .pdf-selection-primary.is-annotation {
-  color: #7f3f2c;
-  border-color: rgba(214, 95, 64, .28);
-  background: rgba(241, 177, 162, .28);
+  color: var(--ink);
+  border-color: rgba(214, 95, 64, .2);
+  background: rgba(214, 95, 64, .08);
 }
 
 .pdf-selection-actions .pdf-selection-primary.is-translation {
-  color: #315f58;
-  border-color: rgba(74, 131, 122, .28);
-  background: rgba(196, 220, 213, .4);
+  color: var(--ink);
+  border-color: rgba(24, 24, 22, .12);
+  background: rgba(248, 246, 239, .88);
 }
 
 .pdf-selection-actions .pdf-selection-primary:hover:not(:disabled) {
@@ -5313,13 +5313,13 @@ select {
 }
 
 .pdf-selection-actions .pdf-selection-primary.is-annotation:hover:not(:disabled) {
-  border-color: rgba(214, 95, 64, .48);
-  background: rgba(241, 177, 162, .42);
+  border-color: rgba(214, 95, 64, .36);
+  background: rgba(214, 95, 64, .13);
 }
 
 .pdf-selection-actions .pdf-selection-primary.is-translation:hover:not(:disabled) {
-  border-color: rgba(74, 131, 122, .48);
-  background: rgba(196, 220, 213, .58);
+  border-color: rgba(24, 24, 22, .24);
+  background: var(--white);
 }
 
 .pdf-selection-actions .pdf-selection-close {
