@@ -6,6 +6,13 @@
   --surface: #e7e4da;
   --white: #f8f6ef;
   --accent: #d65f40;
+  --interaction-border: rgba(24, 24, 22, .3);
+  --interaction-surface: rgba(255, 255, 255, .76);
+  --interaction-accent-surface: rgba(214, 95, 64, .09);
+  --interaction-shadow: 0 8px 20px rgba(24, 24, 22, .09);
+  --interaction-shadow-card: 0 14px 32px rgba(24, 24, 22, .1);
+  --interaction-focus: rgba(214, 95, 64, .72);
+  --interaction-speed: 160ms;
   --font-sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
     "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -492,7 +499,7 @@ select {
 
 .categories a:hover {
   transform: translateY(-2px);
-  border-color: #aeb8b4;
+  border-color: var(--interaction-border);
 }
 
 .categories a.selected {
@@ -858,9 +865,9 @@ select {
 
 .manual-graph-intro > strong {
   padding: 8px 11px;
-  color: #486355;
+  color: var(--ink);
   border-radius: 999px;
-  background: rgba(76, 104, 91, .1);
+  background: rgba(24, 24, 22, .07);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -977,8 +984,8 @@ select {
 
 .manual-graph-node.connect-target {
   border-style: dashed;
-  border-color: #5b7d6b;
-  box-shadow: 0 0 0 5px rgba(76, 104, 91, .11);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 5px rgba(214, 95, 64, .1);
 }
 
 .manual-node-drag-handle {
@@ -988,10 +995,10 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #486355;
-  border: 1px dashed rgba(76, 104, 91, .46);
+  color: var(--ink);
+  border: 1px dashed rgba(24, 24, 22, .3);
   border-radius: 8px;
-  background: rgba(76, 104, 91, .09);
+  background: rgba(24, 24, 22, .055);
   cursor: grab;
   font-size: 10px;
   font-weight: 800;
@@ -1000,7 +1007,7 @@ select {
 
 .manual-node-drag-handle:active {
   cursor: grabbing;
-  background: rgba(76, 104, 91, .16);
+  background: rgba(24, 24, 22, .1);
 }
 
 .manual-node-drag-handle i {
@@ -1092,8 +1099,8 @@ select {
 
 .graph-card-read-state.is-read {
   color: var(--white);
-  border-color: #5b7d6b;
-  background: #5b7d6b;
+  border-color: var(--ink);
+  background: var(--ink);
 }
 
 .manual-node-remove,
@@ -1133,7 +1140,7 @@ select {
   place-items: center;
   border: 0;
   border-radius: 50%;
-  background: rgba(76, 104, 91, .14);
+  background: rgba(214, 95, 64, .13);
   cursor: crosshair;
   transform: translateY(-50%);
 }
@@ -1143,8 +1150,8 @@ select {
   height: 10px;
   border: 3px solid var(--white);
   border-radius: 50%;
-  background: #5b7d6b;
-  box-shadow: 0 2px 8px rgba(55, 86, 69, .3);
+  background: var(--accent);
+  box-shadow: 0 2px 8px rgba(214, 95, 64, .24);
 }
 
 .manual-edge-delete {
@@ -1334,7 +1341,7 @@ select {
 
 .graph-waiting-reading-link > small {
   margin-top: auto;
-  color: #486355;
+  color: var(--ink);
   font-weight: 800;
 }
 
@@ -1345,10 +1352,10 @@ select {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  color: #486355;
-  border: 1px dashed rgba(76, 104, 91, .5);
+  color: var(--ink);
+  border: 1px dashed rgba(24, 24, 22, .3);
   border-radius: 9px;
-  background: rgba(76, 104, 91, .09);
+  background: rgba(24, 24, 22, .055);
   cursor: grab;
   font-size: 11px;
   font-weight: 820;
@@ -1356,7 +1363,7 @@ select {
 
 .graph-waiting-drag-handle:active {
   cursor: grabbing;
-  background: rgba(76, 104, 91, .16);
+  background: rgba(24, 24, 22, .1);
 }
 
 .graph-waiting-drag-handle i {
@@ -1440,7 +1447,7 @@ select {
   border-color: rgba(198, 145, 37, 0.5);
   background:
     radial-gradient(circle at 88% 8%, rgba(244, 217, 137, 0.32), transparent 28%),
-    linear-gradient(130deg, rgba(248, 246, 239, 0.82), rgba(241, 177, 162, 0.12), rgba(196, 220, 213, 0.18));
+    linear-gradient(130deg, rgba(248, 246, 239, 0.9), rgba(241, 177, 162, 0.12), rgba(248, 246, 239, 0.72));
   background-size: 100% 100%, 220% 220%;
   box-shadow:
     0 12px 36px rgba(170, 119, 22, 0.12),
@@ -1463,7 +1470,7 @@ select {
 
 .article-card:hover {
   transform: translateY(-2px);
-  border-color: #aeb8b4;
+  border-color: var(--interaction-border);
 }
 
 .article-card.must-read-card:hover {
@@ -2386,22 +2393,22 @@ select {
 }
 
 .mark-read-button.done {
-  color: #575a55;
-  border-color: #b8bbb5;
+  color: var(--muted);
+  border-color: var(--line);
   background: rgba(255, 255, 255, .68);
   box-shadow: none;
 }
 
 .mark-read-button.done:hover {
   color: var(--ink);
-  border-color: #8b8f88;
+  border-color: var(--interaction-border);
   background: var(--white);
 }
 
 .article-card.is-read {
-  color: #686b66;
-  border-color: #d2d4cf;
-  background: #edeeeb;
+  color: var(--muted);
+  border-color: rgba(24, 24, 22, .13);
+  background: #ebe8df;
   box-shadow: none;
   opacity: .78;
 }
@@ -2413,12 +2420,12 @@ select {
 .article-card.is-read .tag,
 .article-card.is-read .recommendation-hooks span,
 .article-card.is-read .card-metadata-editor > div {
-  border-color: #d0d2cd;
+  border-color: rgba(24, 24, 22, .12);
   background: rgba(255, 255, 255, .48);
 }
 
 .article-card.is-read .article-link {
-  color: #5e625c;
+  color: var(--muted);
 }
 
 .empty {
@@ -3011,7 +3018,7 @@ select {
 .reader-workspace {
   margin-top: 42px;
   display: grid;
-  grid-template-columns: 220px minmax(480px, 1fr) 300px;
+  grid-template-columns: 220px minmax(480px, 1fr) 42px;
   align-items: start;
   gap: 14px;
 }
@@ -3021,6 +3028,10 @@ select {
 }
 
 .reader-workspace:not(.focus-mode) .reader-notebook {
+  display: none;
+}
+
+.reader-workspace:not(.focus-mode) .notebook-hover-area {
   display: none;
 }
 
@@ -3123,6 +3134,84 @@ select {
   max-height: calc(100vh - 108px);
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+.notebook-hover-area {
+  position: sticky;
+  z-index: 34;
+  top: 90px;
+  width: 42px;
+  height: calc(100vh - 108px);
+  grid-column: 3;
+}
+
+.notebook-hover-trigger {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 0;
+  width: 38px;
+  min-height: 112px;
+  padding: 10px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 10px 0 0 10px;
+  background: rgba(248, 246, 239, .94);
+  box-shadow: 0 8px 22px rgba(24, 24, 22, .08);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.notebook-hover-trigger span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  line-height: 1.2;
+  writing-mode: vertical-rl;
+}
+
+.notebook-hover-trigger i {
+  color: var(--accent);
+  font-size: 18px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.notebook-hover-area .reader-notebook {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: 0;
+  width: 320px;
+  max-height: calc(100vh - 108px);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 18px 48px rgba(24, 24, 22, .18);
+  transform: translateX(12px);
+  transition: visibility 0s linear 180ms, opacity 180ms ease, transform 180ms ease;
+}
+
+.notebook-hover-area:hover .reader-notebook,
+.notebook-hover-area:focus-within .reader-notebook {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+  transition-delay: 0s;
+}
+
+.notebook-hover-area:hover .notebook-hover-trigger,
+.notebook-hover-area:focus-within .notebook-hover-trigger {
+  color: var(--ink);
+  border-color: rgba(214, 95, 64, .28);
+  background: var(--white);
+  box-shadow: inset -3px 0 0 rgba(214, 95, 64, .86), 0 10px 26px rgba(24, 24, 22, .11);
 }
 
 .article-library {
@@ -3676,12 +3765,12 @@ select {
 }
 
 .library-card-signals .is-live {
-  color: #24684f;
-  background: rgba(42, 140, 107, 0.09);
+  color: var(--ink);
+  background: rgba(24, 24, 22, .065);
 }
 
 .library-card-signals .is-live i {
-  color: #2a8c6b;
+  color: var(--accent);
   animation: graph-live-pulse 1.8s ease-in-out infinite;
 }
 
@@ -3987,25 +4076,6 @@ select {
   white-space: nowrap;
 }
 
-.reader-essential-meta {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.reader-essential-meta strong {
-  font-size: 11px;
-}
-
-.reader-essential-meta span {
-  padding-left: 8px;
-  color: var(--muted);
-  border-left: 1px solid var(--line);
-  font-size: 11px;
-  font-weight: 500;
-}
-
 .reader-titlebar a {
   flex: 0 0 auto;
   color: var(--ink);
@@ -4035,52 +4105,6 @@ select {
   border-radius: 8px;
   background: rgba(214, 95, 64, 0.05);
   font-size: 14px;
-}
-
-.reader-metadata-summary {
-  min-height: 37px;
-  padding: 7px 14px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(248, 246, 239, .5);
-}
-
-.reader-metadata-summary > div {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.reader-metadata-summary strong {
-  flex: 0 0 auto;
-  color: var(--muted);
-  font-size: 10px;
-  letter-spacing: .06em;
-}
-
-.reader-metadata-summary span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ink);
-  font-size: 11px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.paper-reader > .card-metadata-editor {
-  margin: 0;
-  padding: 7px 14px;
-  border-top: 0;
-  border-bottom: 1px solid var(--line);
-  background: rgba(248, 246, 239, .32);
-}
-
-.paper-reader > .card-metadata-editor > div {
-  margin: 8px 0 3px;
 }
 
 .article-reading-preview {
@@ -4117,20 +4141,20 @@ select {
 .translated-abstract {
   margin-top: 18px;
   padding: 15px 17px;
-  border: 1px solid rgba(59, 111, 93, .2);
+  border: 1px solid rgba(24, 24, 22, .13);
   border-radius: 10px;
-  background: rgba(59, 111, 93, .06);
+  background: rgba(24, 24, 22, .035);
 }
 
 .translated-abstract > strong {
-  color: #315f50;
+  color: var(--ink);
   font-size: 12px;
   letter-spacing: .08em;
 }
 
 .translated-abstract > p {
   margin: 8px 0 0;
-  color: #353c38;
+  color: var(--ink);
   font-size: 15px;
   line-height: 1.85;
 }
@@ -4411,7 +4435,7 @@ select {
 .note-reader-engagement .review-like.liked {
   color: #fff;
   border: 0;
-  background: linear-gradient(135deg, #bd4932, #8f3022);
+  background: var(--accent);
 }
 
 .note-reader-engagement .review-like > span {
@@ -4423,7 +4447,7 @@ select {
   grid-template-columns: auto auto;
   align-items: center;
   column-gap: 7px;
-  color: #1f6b50;
+  color: var(--ink);
 }
 
 .own-note-read-count > span {
@@ -4467,9 +4491,9 @@ select {
   align-items: center;
   gap: 8px;
   color: var(--ink);
-  border: 1px solid rgba(76, 104, 91, .2);
+  border: 1px solid rgba(24, 24, 22, .14);
   border-radius: 7px;
-  background: rgba(76, 104, 91, .06);
+  background: rgba(24, 24, 22, .04);
   cursor: pointer;
   text-align: left;
 }
@@ -4482,7 +4506,7 @@ select {
 
 .note-linked-annotations > button strong,
 .review-linked-annotations > button strong {
-  color: #486355;
+  color: var(--ink);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -4509,7 +4533,7 @@ select {
 .own-note-inline-reads {
   padding: 7px 9px;
   border-radius: 999px;
-  background: rgba(42, 140, 107, .1);
+  background: rgba(24, 24, 22, .065);
 }
 
 .reader-toolbar .reader-file-tools {
@@ -4814,8 +4838,8 @@ select {
 
 .pdf-annotation-box.is-community {
   padding: 0;
-  border-color: var(--annotation-color, #277da1);
-  background: color-mix(in srgb, var(--annotation-color, #277da1) 13%, transparent);
+  border-color: var(--annotation-color, var(--accent));
+  background: color-mix(in srgb, var(--annotation-color, var(--accent)) 13%, transparent);
   cursor: pointer;
   pointer-events: auto;
   transition: box-shadow 140ms ease, filter 140ms ease, opacity 140ms ease;
@@ -4825,7 +4849,7 @@ select {
 .pdf-annotation-box.is-community:focus-visible,
 .pdf-annotation-box.is-community.is-active {
   outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--annotation-color, #277da1) 24%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--annotation-color, var(--accent)) 24%, transparent);
   filter: saturate(1.25);
 }
 
@@ -4895,7 +4919,7 @@ select {
 .pdf-annotation-tooltip b {
   margin-bottom: 3px;
   display: block;
-  color: color-mix(in srgb, var(--annotation-color, #277da1) 70%, white);
+  color: color-mix(in srgb, var(--annotation-color, var(--accent)) 70%, white);
   font-size: 10px;
 }
 
@@ -5381,6 +5405,109 @@ select {
   letter-spacing: .06em;
 }
 
+.pdf-inline-note-composer {
+  position: absolute;
+  z-index: 95;
+  width: min(330px, 36%);
+  min-width: 240px;
+  padding: 10px;
+  color: var(--ink);
+  border: 1px solid rgba(24, 24, 22, .16);
+  border-radius: 11px;
+  background: rgba(255, 254, 250, .98);
+  box-shadow: 0 14px 34px rgba(24, 24, 22, .2);
+  pointer-events: auto;
+  transform: translateY(8px);
+}
+
+.pdf-inline-note-composer.is-above {
+  transform: translateY(calc(-100% - 8px));
+}
+
+.pdf-inline-note-composer > header,
+.pdf-inline-note-composer > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pdf-inline-note-composer > header > div {
+  display: grid;
+  gap: 1px;
+}
+
+.pdf-inline-note-composer > header strong {
+  font-size: 12px;
+}
+
+.pdf-inline-note-composer > header small,
+.pdf-inline-note-composer > footer > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.pdf-inline-note-composer > header button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.pdf-inline-note-composer > blockquote {
+  max-height: 74px;
+  margin: 8px 0 0;
+  padding: 7px 9px;
+  overflow: auto;
+  color: var(--muted);
+  border-left: 2px solid rgba(214, 95, 64, .34);
+  background: rgba(24, 24, 22, .035);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.pdf-inline-note-composer > textarea {
+  width: 100%;
+  margin: 8px 0;
+  padding: 9px 10px;
+  display: block;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+  background: var(--white);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.pdf-inline-note-composer > textarea:focus {
+  border-color: rgba(214, 95, 64, .46);
+  box-shadow: 0 0 0 3px rgba(214, 95, 64, .1);
+}
+
+.pdf-inline-note-composer > footer button {
+  padding: 7px 10px;
+  color: var(--white);
+  border: 1px solid var(--ink);
+  border-radius: 7px;
+  background: var(--ink);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.pdf-inline-note-composer > footer button:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+
 .server-connection {
   min-height: 26px;
   padding: 4px 8px;
@@ -5407,14 +5534,14 @@ select {
 }
 
 .server-connection.is-connected {
-  color: #276348;
-  border-color: rgba(42, 140, 107, .2);
-  background: rgba(42, 140, 107, .07);
+  color: var(--ink);
+  border-color: rgba(24, 24, 22, .16);
+  background: rgba(24, 24, 22, .055);
 }
 
 .server-connection.is-connected i {
-  background: #2a8c6b;
-  box-shadow: 0 0 0 3px rgba(42, 140, 107, .13);
+  background: var(--ink);
+  box-shadow: 0 0 0 3px rgba(24, 24, 22, .11);
 }
 
 .server-connection.is-disconnected {
@@ -6316,7 +6443,7 @@ select {
 }
 
 .annotation-publish-bar strong {
-  color: #1f6b50;
+  color: var(--ink);
   font-size: 12px;
 }
 
@@ -6619,7 +6746,7 @@ select {
 }
 
 .publish-step-heading em.ready {
-  color: #1f6b50;
+  color: var(--ink);
 }
 
 .reading-note-builder {
@@ -6652,9 +6779,9 @@ select {
 
 .reading-note-builder > header > span {
   padding: 3px 6px;
-  color: #1f6b50;
+  color: var(--ink);
   border-radius: 999px;
-  background: rgba(42, 140, 107, .1);
+  background: rgba(24, 24, 22, .065);
   font-size: 10px;
 }
 
@@ -7006,7 +7133,7 @@ select {
   inset: 0;
   margin: 0;
   padding: 56px 14px 14px;
-  grid-template-columns: 0 minmax(0, 1fr) 320px;
+  grid-template-columns: 0 minmax(0, 1fr) 42px;
   overflow: auto;
   background: var(--paper);
 }
@@ -7056,7 +7183,7 @@ select {
 
 .focus-direct-rating.is-must-read {
   border-color: rgba(244, 217, 137, .58);
-  background: linear-gradient(110deg, rgba(244, 217, 137, .08), rgba(241, 177, 162, .13), rgba(196, 220, 213, .1), rgba(244, 217, 137, .08));
+  background: linear-gradient(110deg, rgba(244, 217, 137, .08), rgba(241, 177, 162, .13), rgba(248, 246, 239, .08), rgba(244, 217, 137, .08));
   background-size: 240% 100%;
   animation: must-read-shimmer 4s linear infinite;
   box-shadow: inset 0 0 18px rgba(244, 217, 137, .1), 0 0 22px rgba(244, 217, 137, .13);
@@ -7764,8 +7891,8 @@ select {
 }
 
 .admin-activity-flags em.is-read {
-  color: #276348;
-  background: rgba(42, 140, 107, .1);
+  color: var(--ink);
+  background: rgba(24, 24, 22, .065);
 }
 
 .admin-activity-flags em.is-reviewed {
@@ -8125,12 +8252,6 @@ select {
     grid-column: auto;
   }
 
-  .reader-metadata-summary {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
-  }
-
   .lookup-form {
     grid-template-columns: 1fr;
   }
@@ -8256,6 +8377,37 @@ select {
     max-height: none;
   }
 
+  .notebook-hover-area {
+    position: fixed;
+    z-index: 62;
+    top: 76px;
+    right: 8px;
+    width: 38px;
+    height: calc(100vh - 88px);
+    grid-column: 1;
+  }
+
+  .notebook-hover-trigger {
+    width: 38px;
+  }
+
+  .notebook-hover-area .reader-notebook,
+  .reader-workspace.focus-mode .notebook-hover-area .reader-notebook {
+    position: fixed;
+    top: 68px;
+    right: 8px;
+    width: min(320px, calc(100vw - 24px));
+    max-height: calc(100vh - 80px);
+    overflow: auto;
+  }
+
+  .pdf-inline-note-composer {
+    right: 2%;
+    left: auto !important;
+    width: min(280px, 76%);
+    min-width: 200px;
+  }
+
   .paper-reader iframe {
     height: 70vh;
   }
@@ -8273,14 +8425,8 @@ select {
   }
 
   .reader-workspace.focus-mode .paper-reader,
-  .reader-workspace.focus-mode .reader-notebook {
+  .reader-workspace.focus-mode .notebook-hover-area {
     grid-column: 1;
-  }
-
-  .reader-workspace.focus-mode .reader-notebook {
-    display: block;
-    position: static;
-    max-height: none;
   }
 
   .reader-toolbar {
@@ -8500,6 +8646,344 @@ select {
   }
 }
 
+/* Unified interaction language: restrained lift, warm neutrals, and one accent. */
+:where(a[href], button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--interaction-focus);
+  outline-offset: 3px;
+}
+
+:where(button, input, select, textarea):disabled {
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+:is(
+  .write-review-button,
+  .heading-add-article,
+  .filter-form button,
+  .graph-narrative > button,
+  .note-comments-panel form button,
+  .lookup-form button,
+  .lookup-results button,
+  .review-form > button,
+  .pdf-upload-submit,
+  .pdf-page-error button,
+  .reader-paused button,
+  .reading-bookmark button,
+  .annotation-comments button,
+  .note-reading-notice > button,
+  .translation-assistant > button,
+  .note-composer footer button:not(.cancel-pending-annotation),
+  .crop-dialog footer .primary,
+  .annotation-publish-bar > button,
+  .saved-note-editor footer button:last-child,
+  .username-settings button,
+  .admin-login button,
+  .admin-dashboard button:not(.admin-delete-user),
+  .auth-form button
+) {
+  transition: color var(--interaction-speed) ease, border-color var(--interaction-speed) ease, background-color var(--interaction-speed) ease, box-shadow var(--interaction-speed) ease, transform var(--interaction-speed) ease;
+}
+
+:is(
+  .account-menu button,
+  .card-metadata-editor button,
+  .activity-page-key,
+  .note-comments-toggle,
+  .reading-page-import-heading > button,
+  .existing-tag-picker button,
+  .article-library-pagination button,
+  .server-connection,
+  .annotations-disabled,
+  .highlight-text-preview button,
+  .other-page-discussion button,
+  .partner-note-actions > button:first-child,
+  .translation-assistant > div button,
+  .note-composer footer .cancel-pending-annotation,
+  .crop-dialog button:not(.primary),
+  .reader-notebook > button,
+  .annotation-save-status button,
+  .saved-note-jump,
+  .saved-note-edit,
+  .saved-note-editor footer button:not(:last-child),
+  .reading-note-methods button,
+  .pdf-inline-note-composer button
+) {
+  transition: color var(--interaction-speed) ease, border-color var(--interaction-speed) ease, background-color var(--interaction-speed) ease, box-shadow var(--interaction-speed) ease, transform var(--interaction-speed) ease;
+}
+
+:is(
+  .graph-node-detail > a,
+  .manual-node-editor a,
+  .reading-note-actions > a,
+  .profile-note-link,
+  .reader-titlebar a,
+  .pdf-loading a,
+  .pdf-fallback-actions > a,
+  .reading-note-builder > a
+) {
+  transition: color var(--interaction-speed) ease, text-decoration-color var(--interaction-speed) ease, opacity var(--interaction-speed) ease;
+}
+
+.rating-options span,
+.manual-node-drag-handle,
+.graph-waiting-drag-handle,
+.account-menu summary > span,
+.pdf-loading a,
+.pdf-fallback-actions > a {
+  transition: color var(--interaction-speed) ease, border-color var(--interaction-speed) ease, background-color var(--interaction-speed) ease, box-shadow var(--interaction-speed) ease, transform var(--interaction-speed) ease;
+}
+
+:is(
+  .activity-sort button,
+  .import-method-switch button,
+  .library-chronology-switch button,
+  .library-read-filter button,
+  .library-tag-filter button,
+  .workspace-tabs button,
+  .review-type-switch button
+) {
+  transition: color var(--interaction-speed) ease, border-color var(--interaction-speed) ease, background-color var(--interaction-speed) ease, box-shadow var(--interaction-speed) ease;
+}
+
+:is(
+  .categories a,
+  .graph-domain-picker a,
+  .knowledge-tree-canvas > button,
+  .manual-graph-node,
+  .graph-waiting-cards > article,
+  .article-card,
+  .article-grid.is-team-reading .review-preview,
+  .best-reading-grid > a,
+  .waiting-reading-grid > article,
+  .article-search-results > article,
+  .pdf-drop-zone
+) {
+  transition: border-color var(--interaction-speed) ease, background-color var(--interaction-speed) ease, box-shadow var(--interaction-speed) ease, transform var(--interaction-speed) ease;
+}
+
+@media (hover: hover) {
+  nav a:not(.active):hover,
+  .account-menu summary:hover,
+  .card-metadata-editor > summary:hover,
+  .long-review summary:hover,
+  .community-overall-reviews summary:hover,
+  .reader-import summary:hover {
+    color: var(--ink);
+  }
+
+  :is(
+    .account-menu .profile-link,
+    .lookup-results footer a,
+    .reader-import-link,
+    .admin-dashboard > header a,
+    .auth-tabs a:not(.active),
+    .auth-switch a,
+    .pdf-download-hint a,
+    .graph-node-detail > a,
+    .manual-node-editor a,
+    .reading-note-actions > a,
+    .profile-note-link,
+    .reader-titlebar a,
+    .reading-note-builder > a
+  ):hover {
+    color: var(--accent);
+    text-decoration-color: currentColor;
+  }
+
+  :is(
+    .write-review-button,
+    .heading-add-article,
+    .filter-form button,
+    .graph-narrative > button,
+    .note-comments-panel form button,
+    .lookup-form button,
+    .lookup-results button,
+    .review-form > button,
+    .pdf-upload-submit,
+    .pdf-page-error button,
+    .reader-paused button,
+    .reading-bookmark button,
+    .annotation-comments button,
+    .note-reading-notice > button,
+    .translation-assistant > button,
+    .note-composer footer button:not(.cancel-pending-annotation),
+    .crop-dialog footer .primary,
+    .annotation-publish-bar > button,
+    .saved-note-editor footer button:last-child,
+    .username-settings button,
+    .admin-login button,
+    .admin-dashboard button:not(.admin-delete-user),
+    .auth-form button
+  ):not(:disabled):hover {
+    color: var(--white);
+    border-color: var(--ink);
+    background: #2d2d29;
+    box-shadow: var(--interaction-shadow);
+    transform: translateY(-1px);
+  }
+
+  :is(
+    .account-menu button,
+    .card-metadata-editor button,
+    .activity-page-key,
+    .note-comments-toggle,
+    .reading-page-import-heading > button,
+    .existing-tag-picker button,
+    .article-library-pagination button,
+    .article-reading-preview section > header button,
+    .pdf-loading button,
+    .server-connection,
+    .annotations-disabled,
+    .highlight-text-preview button,
+    .other-page-discussion button,
+    .partner-note-actions > button:first-child,
+    .translation-assistant > div button,
+    .note-composer footer .cancel-pending-annotation,
+    .crop-dialog button:not(.primary),
+    .reader-notebook > button,
+    .annotation-save-status button,
+    .saved-note-edit,
+    .saved-note-editor footer button:not(:last-child),
+    .reading-note-methods button
+  ):not(:disabled):hover {
+    color: var(--ink);
+    border-color: var(--interaction-border);
+    background: var(--interaction-surface);
+    box-shadow: 0 5px 14px rgba(24, 24, 22, .07);
+  }
+
+  :is(
+    .activity-sort button:not(.selected),
+    .import-method-switch button:not(.active),
+    .library-chronology-switch button:not(.selected),
+    .library-read-filter button:not(.selected),
+    .library-tag-filter button:not(.selected),
+    .workspace-tabs button:not(.selected),
+    .review-type-switch button:not(.selected)
+  ):hover {
+    color: var(--ink);
+    border-color: rgba(24, 24, 22, .1);
+    background: var(--interaction-surface);
+  }
+
+  :is(
+    .categories a,
+    .graph-domain-picker a,
+    .knowledge-tree-canvas > button,
+    .manual-graph-node,
+    .graph-waiting-cards > article,
+    .article-card,
+    .article-grid.is-team-reading .review-preview,
+    .best-reading-grid > a,
+    .waiting-reading-grid > article,
+    .article-search-results > article,
+    .pdf-drop-zone
+  ):hover {
+    border-color: var(--interaction-border);
+    box-shadow: var(--interaction-shadow-card);
+    transform: translateY(-2px);
+  }
+
+  .article-card.must-read-card:hover {
+    border-color: rgba(181, 122, 18, .58);
+    box-shadow: 0 16px 38px rgba(170, 119, 22, .16), inset 0 0 0 1px rgba(255, 247, 202, .62);
+  }
+
+  :is(
+    .manual-node-editor button,
+    .editable-tags button,
+    .tag-editor-row > button,
+    .library-search-meta button,
+    .library-card-secondary-actions .reading-list-button,
+    .library-card-secondary-actions .mark-read-button,
+    .capture-list button
+  ):not(:disabled):hover {
+    color: var(--accent);
+    border-color: rgba(214, 95, 64, .28);
+    background: var(--interaction-accent-surface);
+  }
+
+  :is(.annotation-section-toggle, .community-overall-reviews summary):hover {
+    background: rgba(24, 24, 22, .035);
+  }
+
+  .annotation-section-toggle:hover {
+    border-radius: 7px;
+  }
+
+  .saved-note-jump:hover {
+    background: var(--interaction-surface);
+    box-shadow: inset 0 0 0 1px rgba(24, 24, 22, .08);
+  }
+
+  .rating-options label:hover span {
+    color: var(--ink);
+    border-color: var(--interaction-border);
+    background: var(--interaction-surface);
+  }
+
+  .rating-options input:checked + span,
+  .rating-options label:hover input:checked + span {
+    color: var(--white);
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .must-read-toggle:hover {
+    border-color: rgba(181, 122, 18, .38);
+    box-shadow: 0 7px 18px rgba(24, 24, 22, .08);
+    transform: translateY(-1px);
+  }
+
+  :is(.manual-node-drag-handle, .graph-waiting-drag-handle):hover {
+    border-color: var(--interaction-border);
+    background: rgba(24, 24, 22, .08);
+  }
+
+  .account-menu summary:hover > span {
+    background: #2d2d29;
+    box-shadow: 0 4px 12px rgba(24, 24, 22, .14);
+  }
+
+  .focus-status-actions > button:not(:disabled):hover {
+    color: var(--white);
+    border-color: rgba(255, 255, 255, .46);
+    background: rgba(255, 255, 255, .12);
+  }
+
+  .pdf-loading a:hover,
+  .pdf-fallback-actions > a:hover {
+    color: var(--white);
+    background: #2d2d29;
+    box-shadow: var(--interaction-shadow);
+  }
+
+  .pdf-inline-note-composer > header button:hover {
+    color: var(--ink);
+    border-color: var(--line);
+    background: var(--surface);
+  }
+
+  .pdf-inline-note-composer > footer button:not(:disabled):hover {
+    background: #2d2d29;
+    box-shadow: var(--interaction-shadow);
+    transform: translateY(-1px);
+  }
+
+  :is(.reading-achievement-toast button, .crop-dialog header > button, .focus-rating-clear):hover {
+    color: var(--ink);
+    background: rgba(255, 255, 255, .1);
+  }
+
+  :is(.manual-node-remove, .manual-edge-delete, .delete-article-action button, .saved-note-delete, .admin-dashboard button.admin-delete-user):not(:disabled):hover {
+    color: var(--white);
+    border-color: var(--accent);
+    background: var(--accent);
+    box-shadow: 0 6px 16px rgba(214, 95, 64, .18);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .wordmark,
   .wordmark-tail,
@@ -8527,5 +9011,9 @@ select {
   .focus-direct-rating,
   .focus-direct-rating .rating-star {
     transition: none;
+  }
+
+  :where(a[href], button, summary, label, [role="button"]) {
+    transition-duration: 0.01ms !important;
   }
 }

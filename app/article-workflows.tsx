@@ -812,7 +812,7 @@ async function generateReadingNotePdf({
   return new File([new Uint8Array(bytes).buffer], `${safeTitle}-读书笔记.pdf`, { type: "application/pdf" });
 }
 
-const annotationColors = ["#277da1", "#7b5ea7", "#2a8c6b", "#c06a32", "#b14366", "#56733f"];
+const annotationColors = ["#d65f40", "#a84f3b", "#c06a32", "#8f5b46", "#b14366", "#7a6256"];
 
 function annotationColor(author: string) {
   let hash = 0;
@@ -1637,6 +1637,7 @@ export function ReviewComposer({
     setExpandedCommunityAnnotationId(annotationId);
     window.requestAnimationFrame(() => {
       const card = document.querySelector<HTMLElement>(`[data-community-annotation-id="${annotationId}"]`);
+      card?.focus({ preventScroll: true });
       card?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
   }
@@ -2228,6 +2229,7 @@ export function ReviewComposer({
     setTranslation("");
     setAnnotationRect(null);
     setHighlightRects([]);
+    setMessage(`已加入第 ${annotationPage} 页批注。`);
   }
 
   function cancelPendingAnnotation() {
@@ -2399,7 +2401,7 @@ export function ReviewComposer({
     setDrawingAnnotation(false);
     setTextSelection(null);
     setContextTab("annotations");
-    setMessage(`已选中第 ${selection.page} 页文字，请填写批注；不需要时可以取消框选。`);
+    setMessage(`已选中第 ${selection.page} 页文字，请在选区旁填写批注。`);
     window.getSelection()?.removeAllRanges();
   }
 
@@ -2643,7 +2645,7 @@ export function ReviewComposer({
           setPage(pageNumber);
           setAnnotationRect(nextRect);
           setAnnotationPage(pageNumber);
-          setMessage(`已框选第 ${pageNumber} 页图片，请在右侧填写批注并加入。`);
+          setMessage(`已框选第 ${pageNumber} 页图片，请在选区旁填写批注。`);
         }}
       >
         {bookmark?.page === pageNumber && (
@@ -2790,6 +2792,36 @@ export function ReviewComposer({
           <svg aria-hidden="true" className="pdf-text-annotation-shape is-pending" preserveAspectRatio="none" viewBox="0 0 100 100">
             <polygon points={textAnnotationPolygon(highlightRects)} vectorEffect="non-scaling-stroke" />
           </svg>
+        )}
+        {annotationRect && annotationPage === pageNumber && (
+          <section
+            aria-label="填写新批注"
+            className={`pdf-inline-note-composer${annotationRect.y > 68 ? " is-above" : ""}`}
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            style={{
+              left: `${Math.min(62, Math.max(2, annotationRect.x + annotationRect.width))}%`,
+              top: `${annotationRect.y > 68 ? annotationRect.y : annotationRect.y + annotationRect.height}%`,
+            }}
+          >
+            <header>
+              <div><strong>{annotationKind === "highlight" ? "文字批注" : "图片批注"}</strong><small>第 {pageNumber} 页</small></div>
+              <button aria-label="取消这次批注" onClick={cancelPendingAnnotation} title="取消（Esc）" type="button">×</button>
+            </header>
+            {annotationKind === "highlight" && <blockquote>{quoteDraft}</blockquote>}
+            <textarea
+              autoFocus
+              maxLength={4000}
+              onChange={(event) => setNoteDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.ctrlKey || event.metaKey) && event.key === "Enter") addCurrentAnnotation();
+              }}
+              placeholder={`写下你对这段${annotationKind === "highlight" ? "文字" : "图片"}的理解…`}
+              rows={4}
+              value={noteDraft}
+            />
+            <footer><span>Esc 取消 · Ctrl/⌘ + Enter 保存</span><button disabled={!noteDraft.trim()} onClick={addCurrentAnnotation} type="button">加入批注</button></footer>
+          </section>
         )}
         {textSelection && selectionAnchor && (
           <section
@@ -3160,16 +3192,8 @@ export function ReviewComposer({
           <>
             <header className="reader-titlebar">
               <div>
-                {selectedArticle.publisher !== "机构待补充" &&
-                  selectedArticle.publisher.toLocaleLowerCase() !== "arxiv" && (
-                    <span>{selectedArticle.publisher}</span>
-                  )}
                 <h2><MathTitle title={selectedArticle.title} /></h2>
                 <p>{selectedArticle.authors.join(", ")}</p>
-                <div className="reader-essential-meta">
-                  <strong>{selectedArticle.publishedAt ?? "日期暂无"}</strong>
-                  <span>{selectedArticle.tags.join(" · ")}</span>
-                </div>
               </div>
               <div className="reader-title-actions">
                 {!selectedArticle.sourceUrl.startsWith("/api/") && (
@@ -3177,21 +3201,6 @@ export function ReviewComposer({
                 )}
               </div>
             </header>
-            <div className="reader-metadata-summary" aria-label="文章信息">
-              <div><strong>标签</strong><span>{selectedArticle.tags.join(" · ")}</span></div>
-              <div><strong>发布机构</strong><span>{selectedArticle.publisher === "机构待补充" || selectedArticle.publisher.toLocaleLowerCase() === "arxiv" ? "" : selectedArticle.publisher}</span></div>
-              <div><strong>发布日期</strong><span>{selectedArticle.publishedAt ?? "暂无"}</span></div>
-            </div>
-            <ArticleMetadataEditor
-              articleId={selectedArticle.id}
-              initialPublishedAt={selectedArticle.publishedAt}
-              initialPublisher={selectedArticle.publisher}
-              initialTags={selectedArticle.tags}
-              key={selectedArticle.id}
-              onSaved={(update) => setAvailableArticles((current) => current.map((article) =>
-                article.id === selectedArticle.id ? { ...article, ...update } : article
-              ))}
-            />
             {focusMode ? (
               <>
                 <div className="reader-toolbar">
@@ -3492,7 +3501,9 @@ export function ReviewComposer({
         )}
       </section>
 
-      <aside className="reader-notebook">
+      <div className="notebook-hover-area">
+        <button aria-controls="reader-workbench" aria-label="展开阅读工作台" className="notebook-hover-trigger" type="button"><span>工作台</span><i aria-hidden="true">‹</i></button>
+        <aside className="reader-notebook" id="reader-workbench">
         <div className="notebook-heading">
           <div><span>阅读工作台</span><small>阅读、理解、整理、发布</small></div>
           <div className="notebook-heading-status">
@@ -3573,22 +3584,6 @@ export function ReviewComposer({
 
           <section className={`own-annotation-workspace${ownAnnotationsExpanded ? " is-expanded" : " is-collapsed"}`}>
             <header className="workbench-section-heading"><button aria-expanded={ownAnnotationsExpanded} className="annotation-section-toggle" onClick={() => setOwnAnnotationsExpanded((value) => !value)} type="button"><i aria-hidden="true">▾</i><div><strong>本页我的批注</strong><small>第 {page} 页 · 从顶部工具栏添加</small></div><span>{currentPageOwnAnnotations.length}</span></button></header>
-            {annotationRect && (
-              <section className="note-composer">
-                <header><span>新批注</span><div><strong>填写{annotationKind === "highlight" ? "文字" : "图片"}批注</strong><small>{annotationKind === "highlight" ? "所选原文和批注会一起保存" : "截图、位置和批注会一起保存"}</small></div></header>
-                {annotationKind === "highlight" && (
-                  <div className="highlight-text-preview">
-                    <strong>所选原文</strong>
-                    <blockquote>{quoteDraft}</blockquote>
-                  </div>
-                )}
-                <textarea onChange={(event) => setNoteDraft(event.target.value)} placeholder={`写下你对这段${annotationKind === "highlight" ? "文字" : "图片"}的理解…`} rows={5} value={noteDraft} />
-                <footer>
-                  <button className="cancel-pending-annotation" onClick={cancelPendingAnnotation} type="button">取消框选</button>
-                  <button disabled={!noteDraft.trim()} onClick={addCurrentAnnotation} type="button">加入批注</button>
-                </footer>
-              </section>
-            )}
             <div className="saved-notes">
               <div className="annotation-publish-bar">
                 <button disabled={notes.length === 0 || annotationPublishing || annotationSaveStatus === "saving"} onClick={() => void publishAnnotations()} type="button">
@@ -3603,7 +3598,7 @@ export function ReviewComposer({
                     : "批注已实时保存"}</span>
                 {annotationSaveStatus === "error" && <button onClick={() => persistAnnotationDrafts(articleId, notes)} type="button">重新保存</button>}
               </div>
-              {currentPageOwnAnnotations.length === 0 && !annotationRect && <p className="context-empty">本页还没有我的批注。</p>}
+              {currentPageOwnAnnotations.length === 0 && <p className="context-empty">本页还没有我的批注。</p>}
               {currentPageOwnAnnotations.map(({ note, noteIndex }) => (
                 <div
                   className={`${editingAnnotationIndex === noteIndex ? "is-editing" : ""}${activeOwnAnnotationIndex === noteIndex ? " is-active" : ""}`}
@@ -3750,7 +3745,8 @@ export function ReviewComposer({
                 : "发布读书笔记与评论"}
           </button>
         </form>
-      </aside>
+        </aside>
+      </div>
     </div>
   );
 }
