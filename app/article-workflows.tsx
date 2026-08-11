@@ -629,19 +629,28 @@ async function generateReadingNotePdf({
   title,
   author,
   notes,
+  signal,
+  onProgress,
 }: {
   pdfUrl: string;
   basePdfUrl?: string;
   title: string;
   author: string;
   notes: ReadingNote[];
+  signal: AbortSignal;
+  onProgress: (message: string) => void;
 }) {
   const framedNotes = notes.filter((note) => note.rect);
   if (!pdfUrl || framedNotes.length === 0) throw new Error("没有尚未加入读书笔记的批注");
   const [{ jsPDF }, pdfjs] = await Promise.all([import("jspdf"), import("pdfjs-dist")]);
+  if (signal.aborted) throw new DOMException("已取消生成读书笔记", "AbortError");
   const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
   pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.30`;
-  const pdfDocument = await pdfjs.getDocument({ url: pdfUrl, ...pdfjsResourceOptions }).promise;
+  onProgress("正在读取论文 PDF…");
+  const loadingTask = pdfjs.getDocument({ url: pdfUrl, ...pdfjsResourceOptions });
+  const cancelLoading = () => void loadingTask.destroy();
+  signal.addEventListener("abort", cancelLoading, { once: true });
+  const pdfDocument = await loadingTask.promise.finally(() => signal.removeEventListener("abort", cancelLoading));
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
 
@@ -653,6 +662,8 @@ async function generateReadingNotePdf({
 
   try {
     for (const [index, note] of framedNotes.entries()) {
+      if (signal.aborted) throw new DOMException("已取消生成读书笔记", "AbortError");
+      onProgress(`正在排版第 ${index + 1}/${framedNotes.length} 条批注…`);
       if (note.annotationKind === "highlight") {
         const sections = [
           { label: "文字原文", text: note.quote },
@@ -712,7 +723,10 @@ async function generateReadingNotePdf({
       source.height = Math.ceil(viewport.height);
       const sourceContext = source.getContext("2d");
       if (!sourceContext) throw new Error("无法创建截图画布");
-      await pdfPage.render({ canvas: source, canvasContext: sourceContext, viewport }).promise;
+      const renderTask = pdfPage.render({ canvas: source, canvasContext: sourceContext, viewport });
+      const cancelRender = () => renderTask.cancel();
+      signal.addEventListener("abort", cancelRender, { once: true });
+      await renderTask.promise.finally(() => signal.removeEventListener("abort", cancelRender));
       const rect = note.rect!;
       const cropX = Math.max(0, Math.floor(source.width * rect.x / 100));
       const cropY = Math.max(0, Math.floor(source.height * rect.y / 100));
@@ -787,7 +801,8 @@ async function generateReadingNotePdf({
   if (!basePdfUrl) {
     return new File([additions], `${safeTitle}-读书笔记.pdf`, { type: "application/pdf" });
   }
-  const baseResponse = await fetch(basePdfUrl, { cache: "no-store" });
+  onProgress("正在合并已发布的读书笔记…");
+  const baseResponse = await fetch(basePdfUrl, { cache: "no-store", signal });
   if (!baseResponse.ok) throw new Error("无法读取原读书笔记");
   const { PDFDocument } = await import("pdf-lib");
   const [baseDocument, additionsDocument] = await Promise.all([
@@ -1328,6 +1343,7 @@ export function ReviewComposer({
   const [notePdfPreviewUrl, setNotePdfPreviewUrl] = useState("");
   const [notePdfIncludedNotes, setNotePdfIncludedNotes] = useState<ReadingNote[]>(startingReview?.annotations ?? []);
   const [generatingNotePdf, setGeneratingNotePdf] = useState(false);
+  const [noteGenerationStatus, setNoteGenerationStatus] = useState("");
   const [partnerNoteReviewId, setPartnerNoteReviewId] = useState<number | null>(initialPartnerNoteReviewId ?? null);
   const [partnerNoteError, setPartnerNoteError] = useState(false);
   const [localCache, setLocalCache] = useState<{
@@ -1350,6 +1366,7 @@ export function ReviewComposer({
   const [translating, setTranslating] = useState(false);
   const [translationError, setTranslationError] = useState("");
   const translationAbortRef = useRef<AbortController | null>(null);
+  const noteGenerationAbortRef = useRef<AbortController | null>(null);
   const [textSelection, setTextSelection] = useState<{
     text: string;
     page: number;
@@ -1395,7 +1412,10 @@ export function ReviewComposer({
   const browserZoomTimersRef = useRef<number[]>([]);
   currentArticleIdRef.current = articleId;
 
-  useEffect(() => () => translationAbortRef.current?.abort(), []);
+  useEffect(() => () => {
+    translationAbortRef.current?.abort();
+    noteGenerationAbortRef.current?.abort();
+  }, []);
 
   const selectedArticle = availableArticles.find((item) => item.id === articleId);
   const activePartnerNote = communityReviews.find((review) => review.id === partnerNoteReviewId && review.noteFileName) ?? null;
@@ -2554,11 +2574,12 @@ export function ReviewComposer({
     return true;
   }
 
-  async function translateForReadingNote(text: string) {
+  async function translateForReadingNote(text: string, signal: AbortSignal) {
     const response = await fetch("/api/translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(100_000)]),
     });
     if (!response.ok) {
       const data = (await response.json().catch(() => ({}))) as { error?: string };
@@ -2571,15 +2592,20 @@ export function ReviewComposer({
 
   async function buildNotePdf() {
     if (!selectedArticle) return;
+    const controller = new AbortController();
+    noteGenerationAbortRef.current?.abort();
+    noteGenerationAbortRef.current = controller;
     setGeneratingNotePdf(true);
+    setNoteGenerationStatus("正在准备全部批注…");
     setMessage("");
     let temporaryBaseUrl = "";
     try {
       const translatedNotes: ReadingNote[] = [];
-      for (const note of notes) {
+      for (const [index, note] of notes.entries()) {
+        if (controller.signal.aborted) throw new DOMException("已取消生成读书笔记", "AbortError");
         if (note.annotationKind === "highlight" && note.quote.trim() && !note.translation.trim()) {
-          setMessage(`正在自动翻译第 ${note.page} 页的文字批注…`);
-          translatedNotes.push({ ...note, translation: await translateForReadingNote(note.quote) });
+          setNoteGenerationStatus(`正在翻译第 ${index + 1}/${notes.length} 条批注（原文第 ${note.page} 页）…`);
+          translatedNotes.push({ ...note, translation: await translateForReadingNote(note.quote, controller.signal) });
         } else {
           translatedNotes.push(note);
         }
@@ -2601,15 +2627,25 @@ export function ReviewComposer({
         title: selectedArticle.title,
         author: username,
         notes: newNotes,
+        signal: controller.signal,
+        onProgress: setNoteGenerationStatus,
       });
       if (useNotePdf(file, "generated", translatedNotes)) {
         setMessage(basePdfUrl ? "已经更新读书笔记，新批注已追加在原 PDF 下方。" : "读书笔记 PDF 已生成，可预览后发布。");
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "读书笔记生成失败");
+      const aborted = controller.signal.aborted || error instanceof DOMException && error.name === "AbortError";
+      const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+      setMessage(aborted
+        ? "已取消生成读书笔记。"
+        : timedOut
+          ? "批注自动翻译超时，请稍后重试。已有批注不会丢失。"
+          : error instanceof Error ? error.message : "读书笔记生成失败");
     } finally {
       if (temporaryBaseUrl) URL.revokeObjectURL(temporaryBaseUrl);
+      if (noteGenerationAbortRef.current === controller) noteGenerationAbortRef.current = null;
       setGeneratingNotePdf(false);
+      setNoteGenerationStatus("");
     }
   }
 
@@ -3759,8 +3795,9 @@ export function ReviewComposer({
             <header className="workbench-section-heading"><button aria-expanded={ownAnnotationsExpanded} className="annotation-section-toggle" onClick={() => setOwnAnnotationsExpanded((value) => !value)} type="button"><i aria-hidden="true">▾</i><div><strong>本页我的批注</strong><small>第 {page} 页 · 从顶部工具栏添加</small></div><span>{currentPageOwnAnnotations.length}</span></button></header>
             <div className="saved-notes">
               <div className="annotation-publish-bar">
+                <div><strong>提交整篇批注</strong><small>将公开全文共 {notes.length} 条，不只是当前页</small></div>
                 <button disabled={notes.length === 0 || annotationPublishing || annotationSaveStatus === "saving"} onClick={() => void publishAnnotations()} type="button">
-                  {annotationPublishing ? "正在提交…" : "提交批注"}
+                  {annotationPublishing ? "正在提交…" : `提交全部 ${notes.length} 条`}
                 </button>
               </div>
               <div className={`annotation-save-status is-${annotationSaveStatus}`} role="status">
@@ -3870,11 +3907,18 @@ export function ReviewComposer({
                   <strong>{generatingNotePdf ? "正在更新…" : hasReadingNote ? "更新读书笔记" : "从我的批注生成"}</strong>
                   <small>{pendingNoteCount > 0 ? `${pendingNoteCount} 条新批注待加入` : "已经更新读书笔记"}</small>
                 </button>
+                {generatingNotePdf && (
+                  <button className="note-generation-cancel" onClick={() => noteGenerationAbortRef.current?.abort()} type="button">
+                    <strong>取消生成</strong>
+                    <small>批注已保存，可稍后重试</small>
+                  </button>
+                )}
                 <button onClick={() => notePdfInput.current?.click()} type="button">
                   <strong>上传本地读书笔记 PDF</strong>
                   <small>从电脑选择 · 最大 30 MB</small>
                 </button>
               </div>
+              {generatingNotePdf && <p className="note-generation-status" role="status">{noteGenerationStatus}</p>}
               <input
                 accept="application/pdf,.pdf"
                 className="visually-hidden"

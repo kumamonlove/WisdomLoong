@@ -7084,6 +7084,18 @@ select {
   font-size: 11px;
 }
 
+.reading-note-methods .note-generation-cancel {
+  color: var(--danger, #a33b2d);
+  border-color: currentColor;
+}
+
+.note-generation-status {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .context-inline-message {
   margin: 3px 0 0;
   padding: 8px 0;

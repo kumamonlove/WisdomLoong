@@ -21,7 +21,6 @@ function sanitizeAnnotationText(value: string | undefined, maxLength: number) {
 
 function normalizeAnnotations(value: unknown) {
   return (Array.isArray(value) ? value : [])
-    .slice(0, 50)
     .map((item) => {
       const annotation = item as AnnotationInput;
       const rect = annotation.rect;

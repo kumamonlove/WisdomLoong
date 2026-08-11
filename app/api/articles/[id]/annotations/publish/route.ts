@@ -17,7 +17,7 @@ function text(value: string | undefined, max: number) {
 }
 
 function normalize(value: unknown) {
-  return (Array.isArray(value) ? value : []).slice(0, 50).map((item) => {
+  return (Array.isArray(value) ? value : []).map((item) => {
     const annotation = item as AnnotationInput;
     const rect = annotation.rect;
     if (!rect || ![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) return null;

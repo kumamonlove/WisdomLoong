@@ -52,7 +52,6 @@ export async function POST(request: Request) {
     };
   }
   const annotations = (Array.isArray(body.annotations) ? body.annotations : [])
-    .slice(0, 50)
     .map((annotation) => {
       const rect = annotation.rect;
       const normalizedRect = rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)
