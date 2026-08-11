@@ -16,6 +16,8 @@ type TranslationStreamChunk = {
   choices?: { delta?: { content?: string }; message?: { content?: string } }[];
 };
 
+type BatchTranslationItem = { index?: number; translation?: string };
+
 const translationCache = new Map<string, string>();
 const MAX_CACHE_ENTRIES = 100;
 
@@ -28,11 +30,112 @@ function cacheTranslation(key: string, translation: string) {
   }
 }
 
+function parseBatchTranslations(content: string, expectedIndexes: number[]) {
+  const unfenced = content.trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  const arrayStart = unfenced.indexOf("[");
+  const arrayEnd = unfenced.lastIndexOf("]");
+  if (arrayStart < 0 || arrayEnd <= arrayStart) throw new Error("batch translation is not JSON");
+  const parsed = JSON.parse(unfenced.slice(arrayStart, arrayEnd + 1)) as BatchTranslationItem[];
+  const translations = new Map<number, string>();
+  for (const item of parsed) {
+    const index = Number(item.index);
+    const translation = item.translation?.trim();
+    if (Number.isInteger(index) && translation) translations.set(index, translation);
+  }
+  if (expectedIndexes.some((index) => !translations.has(index))) {
+    throw new Error("batch translation result is incomplete");
+  }
+  return translations;
+}
+
+async function translateBatch(
+  texts: string[],
+  config: ReturnType<typeof getAcademicTranslationConfig>,
+) {
+  const results = new Array<string>(texts.length);
+  const missing: { index: number; text: string }[] = [];
+  for (const [index, text] of texts.entries()) {
+    const cacheKey = `${config.model}\n${text}`;
+    const cached = translationCache.get(cacheKey);
+    if (cached) {
+      cacheTranslation(cacheKey, cached);
+      results[index] = cached;
+    } else {
+      missing.push({ index, text });
+    }
+  }
+  if (missing.length === 0) return results;
+
+  const upstreamBody = JSON.stringify({
+    model: config.model,
+    temperature: 0,
+    stream: false,
+    max_tokens: Math.min(6_000, Math.max(512, Math.ceil(missing.reduce((sum, item) => sum + item.text.length, 0) * 1.25))),
+    messages: [
+      {
+        role: "system",
+        content: `${academicTranslationSystemPrompt} You will receive a JSON array of independent excerpts. Translate every excerpt independently. Return only a JSON array with exactly one object per input, preserving each index, in this format: [{"index":0,"translation":"..."}]. Do not merge, omit, reorder, summarize, or add commentary.`,
+      },
+      { role: "user", content: JSON.stringify(missing) },
+    ],
+  });
+  const requestTranslation = () => fetch(`${config.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: upstreamBody,
+    signal: AbortSignal.timeout(45_000),
+  });
+  let response = await requestTranslation();
+  if ([408, 429, 500, 502, 503, 504].includes(response.status)) {
+    await response.body?.cancel().catch(() => undefined);
+    response = await requestTranslation();
+  }
+  const data = (await response.json().catch(() => ({}))) as TranslationResponse;
+  if (!response.ok) throw new Error(`batch translation gateway failed (${response.status}): ${data.error?.message ?? "unknown error"}`);
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("batch translation returned an empty result");
+  const translated = parseBatchTranslations(content, missing.map((item) => item.index));
+  for (const item of missing) {
+    const translation = translated.get(item.index)!;
+    results[item.index] = translation;
+    cacheTranslation(`${config.model}\n${item.text}`, translation);
+  }
+  return results;
+}
+
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
 
-  const body = (await request.json()) as { text?: string };
+  const body = (await request.json()) as { text?: string; texts?: unknown };
+  if (body.texts !== undefined) {
+    if (!Array.isArray(body.texts)) {
+      return NextResponse.json({ error: "批量翻译内容格式不正确" }, { status: 400 });
+    }
+    const texts = body.texts.map((item) => typeof item === "string" ? item.trim() : "");
+    const totalLength = texts.reduce((sum, item) => sum + item.length, 0);
+    if (texts.length === 0 || texts.length > 12 || texts.some((item) => !item || item.length > 12_000) || totalLength > 12_000) {
+      return NextResponse.json({ error: "每批最多 12 条且总长度不得超过 12000 个字符" }, { status: 400 });
+    }
+    const config = getAcademicTranslationConfig();
+    if (!config.apiKey) {
+      return NextResponse.json({ error: "论文翻译尚未配置 API Key，请联系管理员" }, { status: 503 });
+    }
+    try {
+      const translations = await translateBatch(texts, config);
+      return NextResponse.json({ translations }, {
+        headers: { "Cache-Control": "private, no-store" },
+      });
+    } catch (error) {
+      console.error("Batch paper translation failed", error);
+      return NextResponse.json({ error: "批量翻译服务暂时不可用，请稍后重试" }, { status: 502 });
+    }
+  }
   const text = body.text?.trim();
   if (!text || text.length > 12_000) {
     return NextResponse.json(

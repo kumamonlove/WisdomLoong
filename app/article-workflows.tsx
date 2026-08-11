@@ -1344,6 +1344,7 @@ export function ReviewComposer({
   const [notePdfIncludedNotes, setNotePdfIncludedNotes] = useState<ReadingNote[]>(startingReview?.annotations ?? []);
   const [generatingNotePdf, setGeneratingNotePdf] = useState(false);
   const [noteGenerationStatus, setNoteGenerationStatus] = useState("");
+  const [translateReadingNotes, setTranslateReadingNotes] = useState(false);
   const [partnerNoteReviewId, setPartnerNoteReviewId] = useState<number | null>(initialPartnerNoteReviewId ?? null);
   const [partnerNoteError, setPartnerNoteError] = useState(false);
   const [localCache, setLocalCache] = useState<{
@@ -2574,20 +2575,42 @@ export function ReviewComposer({
     return true;
   }
 
-  async function translateForReadingNote(text: string, signal: AbortSignal) {
+  async function translateReadingNoteBatch(texts: string[], signal: AbortSignal) {
     const response = await fetch("/api/translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ texts }),
       signal: AbortSignal.any([signal, AbortSignal.timeout(100_000)]),
     });
+    const data = (await response.json().catch(() => ({}))) as { error?: string; translations?: unknown };
     if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? "文字批注自动翻译失败");
+      throw new Error(data.error ?? "文字批注批量翻译失败");
     }
-    const translated = (await response.text()).trim();
-    if (!translated) throw new Error("文字批注自动翻译没有返回内容");
-    return translated;
+    const translations = Array.isArray(data.translations)
+      ? data.translations.map((item) => typeof item === "string" ? item.trim() : "")
+      : [];
+    if (translations.length !== texts.length || translations.some((item) => !item)) {
+      throw new Error("批量翻译结果与批注无法一一对应");
+    }
+    return translations;
+  }
+
+  function readingNoteTranslationBatches(indexes: number[]) {
+    const batches: number[][] = [];
+    let current: number[] = [];
+    let currentLength = 0;
+    for (const index of indexes) {
+      const length = notes[index].quote.trim().length;
+      if (current.length > 0 && (current.length >= 12 || currentLength + length > 12_000)) {
+        batches.push(current);
+        current = [];
+        currentLength = 0;
+      }
+      current.push(index);
+      currentLength += length;
+    }
+    if (current.length > 0) batches.push(current);
+    return batches;
   }
 
   async function buildNotePdf() {
@@ -2600,21 +2623,30 @@ export function ReviewComposer({
     setMessage("");
     let temporaryBaseUrl = "";
     try {
-      const translatedNotes: ReadingNote[] = [];
-      for (const [index, note] of notes.entries()) {
+      const translatedNotes = notes.map((note) => ({ ...note }));
+      const translationIndexes = translateReadingNotes
+        ? notes.flatMap((note, index) =>
+            note.annotationKind === "highlight" && note.quote.trim() && !note.translation.trim() ? [index] : []
+          )
+        : [];
+      const batches = readingNoteTranslationBatches(translationIndexes);
+      for (const [batchIndex, indexes] of batches.entries()) {
         if (controller.signal.aborted) throw new DOMException("已取消生成读书笔记", "AbortError");
-        if (note.annotationKind === "highlight" && note.quote.trim() && !note.translation.trim()) {
-          setNoteGenerationStatus(`正在翻译第 ${index + 1}/${notes.length} 条批注（原文第 ${note.page} 页）…`);
-          translatedNotes.push({ ...note, translation: await translateForReadingNote(note.quote, controller.signal) });
-        } else {
-          translatedNotes.push(note);
-        }
+        setNoteGenerationStatus(`正在批量翻译第 ${batchIndex + 1}/${batches.length} 组（${indexes.length} 条批注）…`);
+        const translations = await translateReadingNoteBatch(
+          indexes.map((index) => notes[index].quote.trim()),
+          controller.signal,
+        );
+        indexes.forEach((noteIndex, translationIndex) => {
+          translatedNotes[noteIndex].translation = translations[translationIndex];
+        });
       }
       if (translatedNotes.some((note, index) => note.translation !== notes[index]?.translation)) {
         setNotes(translatedNotes);
         persistAnnotationDrafts(articleId, translatedNotes);
       }
-      const newNotes = annotationsNotYetIncluded(translatedNotes, notePdfIncludedNotes);
+      const newNotes = annotationsNotYetIncluded(translatedNotes, notePdfIncludedNotes)
+        .map((note) => translateReadingNotes ? note : { ...note, translation: "" });
       if (newNotes.length === 0) throw new Error("当前批注都已经加入读书笔记");
       const basePdfUrl = notePdfFile
         ? (temporaryBaseUrl = URL.createObjectURL(notePdfFile))
@@ -3795,9 +3827,8 @@ export function ReviewComposer({
             <header className="workbench-section-heading"><button aria-expanded={ownAnnotationsExpanded} className="annotation-section-toggle" onClick={() => setOwnAnnotationsExpanded((value) => !value)} type="button"><i aria-hidden="true">▾</i><div><strong>本页我的批注</strong><small>第 {page} 页 · 从顶部工具栏添加</small></div><span>{currentPageOwnAnnotations.length}</span></button></header>
             <div className="saved-notes">
               <div className="annotation-publish-bar">
-                <div><strong>提交整篇批注</strong><small>将公开全文共 {notes.length} 条，不只是当前页</small></div>
                 <button disabled={notes.length === 0 || annotationPublishing || annotationSaveStatus === "saving"} onClick={() => void publishAnnotations()} type="button">
-                  {annotationPublishing ? "正在提交…" : `提交全部 ${notes.length} 条`}
+                  {annotationPublishing ? "正在提交…" : `提交全部批注（${notes.length}）`}
                 </button>
               </div>
               <div className={`annotation-save-status is-${annotationSaveStatus}`} role="status">
@@ -3898,6 +3929,15 @@ export function ReviewComposer({
                 <div><strong>选择一种方式</strong><small>新文件会随这次评论一起发布</small></div>
                 {selectedArticle?.ownReview?.noteFileName && !notePdfFile && <span>已有笔记</span>}
               </header>
+              <label className="reading-note-translation-option">
+                <input
+                  checked={translateReadingNotes}
+                  disabled={generatingNotePdf}
+                  onChange={(event) => setTranslateReadingNotes(event.target.checked)}
+                  type="checkbox"
+                />
+                <span><strong>自动翻译文字批注</strong><small>可选；开启后会批量翻译并与原文一一对应</small></span>
+              </label>
               <div className="reading-note-methods">
                 <button
                   disabled={generatingNotePdf || !localPdfUrl || pendingNoteCount === 0}
