@@ -653,6 +653,17 @@ async function generateReadingNotePdf({
   const pdfDocument = await loadingTask.promise.finally(() => signal.removeEventListener("abort", cancelLoading));
   const output = new jsPDF({ unit: "px", format: [1240, 1754], compress: true, hotfixes: ["px_scaling"] });
   let outputPage = 0;
+  const pageWidth = 1240;
+  const pageHeight = 1754;
+  const pageMargin = 72;
+  const pageBottom = 1682;
+  const cardWidth = pageWidth - pageMargin * 2;
+  const cardPadding = 36;
+  const cardInnerWidth = cardWidth - cardPadding * 2;
+  const cardGap = 28;
+  let pageCanvas: HTMLCanvasElement | null = null;
+  let pageContext: CanvasRenderingContext2D | null = null;
+  let cursorY = pageMargin;
 
   function addCanvas(canvas: HTMLCanvasElement) {
     if (outputPage > 0) output.addPage([1240, 1754], "portrait");
@@ -660,60 +671,162 @@ async function generateReadingNotePdf({
     outputPage += 1;
   }
 
+  function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+    const resolvedRadius = Math.min(radius, width / 2, height / 2);
+    context.beginPath();
+    context.moveTo(x + resolvedRadius, y);
+    context.lineTo(x + width - resolvedRadius, y);
+    context.quadraticCurveTo(x + width, y, x + width, y + resolvedRadius);
+    context.lineTo(x + width, y + height - resolvedRadius);
+    context.quadraticCurveTo(x + width, y + height, x + width - resolvedRadius, y + height);
+    context.lineTo(x + resolvedRadius, y + height);
+    context.quadraticCurveTo(x, y + height, x, y + height - resolvedRadius);
+    context.lineTo(x, y + resolvedRadius);
+    context.quadraticCurveTo(x, y, x + resolvedRadius, y);
+    context.closePath();
+  }
+
+  function beginPage() {
+    pageCanvas = window.document.createElement("canvas");
+    pageCanvas.width = pageWidth;
+    pageCanvas.height = pageHeight;
+    pageContext = pageCanvas.getContext("2d");
+    if (!pageContext) throw new Error("无法排版读书笔记");
+    pageContext.fillStyle = "#f4f5f2";
+    pageContext.fillRect(0, 0, pageWidth, pageHeight);
+    cursorY = pageMargin;
+
+    // An existing note already owns the document title page. Appended pages should
+    // flow straight into the new cards instead of starting another cover section.
+    if (!basePdfUrl && outputPage === 0) {
+      pageContext.fillStyle = "#202421";
+      pageContext.font = "600 44px sans-serif";
+      const titleLines = canvasLines(pageContext, title, cardWidth).slice(0, 3);
+      titleLines.forEach((line, lineIndex) => pageContext!.fillText(line, pageMargin, 104 + lineIndex * 56));
+      cursorY = 104 + titleLines.length * 56 + 38;
+      pageContext.fillStyle = "#cfd4cf";
+      pageContext.fillRect(pageMargin, cursorY - 15, 72, 2);
+      cursorY += 18;
+    }
+  }
+
+  function finishPage() {
+    if (!pageCanvas) return;
+    addCanvas(pageCanvas);
+    pageCanvas = null;
+    pageContext = null;
+  }
+
+  function nextPage() {
+    finishPage();
+    beginPage();
+  }
+
+  function ensurePage(minimumHeight: number) {
+    if (!pageCanvas) beginPage();
+    if (cursorY + minimumHeight > pageBottom && cursorY > pageMargin) nextPage();
+  }
+
+  function drawCardShell(height: number) {
+    const context = pageContext!;
+    context.fillStyle = "#e7e9e5";
+    roundedRect(context, pageMargin, cursorY + 4, cardWidth, height, 22);
+    context.fill();
+    context.fillStyle = "#ffffff";
+    roundedRect(context, pageMargin, cursorY, cardWidth, height, 22);
+    context.fill();
+    context.strokeStyle = "#daddd8";
+    context.lineWidth = 1.5;
+    context.stroke();
+  }
+
+  function drawCardNumber(index: number) {
+    const context = pageContext!;
+    const label = String(index + 1).padStart(2, "0");
+    context.fillStyle = "#e9eeea";
+    roundedRect(context, pageMargin + cardPadding, cursorY + cardPadding, 58, 34, 17);
+    context.fill();
+    context.fillStyle = "#466052";
+    context.font = "600 18px sans-serif";
+    context.textAlign = "center";
+    context.fillText(label, pageMargin + cardPadding + 29, cursorY + cardPadding + 23);
+    context.textAlign = "start";
+  }
+
+  function drawDivider(y: number) {
+    const context = pageContext!;
+    context.fillStyle = "#e7e9e6";
+    context.fillRect(pageMargin + cardPadding, y, cardInnerWidth, 1);
+  }
+
+  type NoteTextBlock = { lines: string[]; font: string; color: string; lineHeight: number };
+
+  function drawTextCard(index: number, sourceBlocks: NoteTextBlock[]) {
+    const blocks = sourceBlocks
+      .map((block) => ({ ...block, lines: [...block.lines] }))
+      .filter((block) => block.lines.length > 0);
+
+    while (blocks.length > 0) {
+      ensurePage(250);
+      const availableHeight = pageBottom - cursorY;
+      const fixedHeight = cardPadding + 34 + 24 + cardPadding;
+      let contentBudget = availableHeight - fixedHeight;
+      const chunk: NoteTextBlock[] = [];
+
+      while (blocks.length > 0 && contentBudget > 0) {
+        const block = blocks[0];
+        const separatorHeight = chunk.length > 0 ? 31 : 0;
+        const lineCapacity = Math.floor((contentBudget - separatorHeight) / block.lineHeight);
+        if (lineCapacity <= 0) break;
+        const lines = block.lines.splice(0, lineCapacity);
+        chunk.push({ ...block, lines });
+        contentBudget -= separatorHeight + lines.length * block.lineHeight;
+        if (block.lines.length === 0) blocks.shift();
+      }
+
+      if (chunk.length === 0) {
+        nextPage();
+        continue;
+      }
+
+      const textHeight = chunk.reduce((height, block, blockIndex) =>
+        height + block.lines.length * block.lineHeight + (blockIndex > 0 ? 31 : 0), 0);
+      const cardHeight = fixedHeight + textHeight;
+      drawCardShell(cardHeight);
+      drawCardNumber(index);
+      let y = cursorY + cardPadding + 34 + 24;
+      chunk.forEach((block, blockIndex) => {
+        if (blockIndex > 0) {
+          drawDivider(y + 2);
+          y += 31;
+        }
+        const context = pageContext!;
+        context.fillStyle = block.color;
+        context.font = block.font;
+        block.lines.forEach((line, lineIndex) => context.fillText(line, pageMargin + cardPadding, y + 28 + lineIndex * block.lineHeight));
+        y += block.lines.length * block.lineHeight;
+      });
+      cursorY += cardHeight + cardGap;
+      if (blocks.length > 0) nextPage();
+    }
+  }
+
   try {
     for (const [index, note] of framedNotes.entries()) {
       if (signal.aborted) throw new DOMException("已取消生成读书笔记", "AbortError");
       onProgress(`正在排版第 ${index + 1}/${framedNotes.length} 条批注…`);
       if (note.annotationKind === "highlight") {
-        const sections = [
-          { label: "文字原文", text: note.quote },
-          { label: "翻译", text: note.translation },
-          { label: "批注", text: note.content },
-        ].filter((section) => section.text.trim());
-        let sectionIndex = 0;
-        let remainingLines: string[] = [];
-        let continuation = false;
-        while (sectionIndex < sections.length || remainingLines.length > 0) {
-          const pageCanvas = window.document.createElement("canvas");
-          pageCanvas.width = 1240;
-          pageCanvas.height = 1754;
-          const context = pageCanvas.getContext("2d");
-          if (!context) throw new Error("无法排版文字批注");
-          context.fillStyle = "#f8f6ef";
-          context.fillRect(0, 0, 1240, 1754);
-          context.fillStyle = "#e1b72f";
-          context.fillRect(0, 0, 24, 1754);
-          context.fillStyle = "#181816";
-          context.font = "700 40px sans-serif";
-          const titleLines = canvasLines(context, title, 1080).slice(0, 3);
-          titleLines.forEach((line, lineIndex) => context.fillText(line, 80, 105 + lineIndex * 52));
-          let y = 105 + titleLines.length * 52 + 28;
-          context.fillStyle = "#766f62";
-          context.font = "24px sans-serif";
-          context.fillText(`${author} · 文字批注 ${index + 1} · 原文第 ${note.page} 页${continuation ? "（续）" : ""}`, 80, y);
-          y += 58;
-
-          while (y < 1620 && (sectionIndex < sections.length || remainingLines.length > 0)) {
-            const section = sections[sectionIndex];
-            if (remainingLines.length === 0) {
-              context.fillStyle = "#9a7100";
-              context.font = "700 22px sans-serif";
-              context.fillText(section.label, 80, y);
-              y += 42;
-              context.fillStyle = "#181816";
-              context.font = "28px sans-serif";
-              remainingLines = canvasLines(context, section.text, 1080);
-            }
-            const capacity = Math.max(1, Math.floor((1660 - y) / 43));
-            const chunk = remainingLines.slice(0, capacity);
-            chunk.forEach((line, lineIndex) => context.fillText(line, 80, y + lineIndex * 43));
-            y += chunk.length * 43 + 34;
-            remainingLines = remainingLines.slice(chunk.length);
-            if (remainingLines.length === 0) sectionIndex += 1;
-          }
-          addCanvas(pageCanvas);
-          continuation = true;
-        }
+        if (!pageCanvas) beginPage();
+        const context = pageContext!;
+        const blocks = [
+          { text: note.quote, font: "400 26px sans-serif", color: "#4e5651", lineHeight: 39 },
+          { text: note.translation, font: "400 25px sans-serif", color: "#737a75", lineHeight: 38 },
+          { text: note.content, font: "500 28px sans-serif", color: "#202421", lineHeight: 42 },
+        ].filter((block) => block.text.trim()).map((block) => {
+          context.font = block.font;
+          return { ...block, lines: canvasLines(context, block.text.trim(), cardInnerWidth) };
+        });
+        drawTextCard(index, blocks);
         continue;
       }
       const pdfPage = await pdfDocument.getPage(note.page);
@@ -733,65 +846,53 @@ async function generateReadingNotePdf({
       const cropWidth = Math.max(1, Math.min(source.width - cropX, Math.ceil(source.width * rect.width / 100)));
       const cropHeight = Math.max(1, Math.min(source.height - cropY, Math.ceil(source.height * rect.height / 100)));
 
-      const pageCanvas = window.document.createElement("canvas");
-      pageCanvas.width = 1240;
-      pageCanvas.height = 1754;
-      const context = pageCanvas.getContext("2d");
-      if (!context) throw new Error("无法排版读书笔记");
-      context.fillStyle = "#f8f6ef";
-      context.fillRect(0, 0, 1240, 1754);
-      context.fillStyle = "#d65f40";
-      context.fillRect(0, 0, 24, 1754);
-      context.fillStyle = "#181816";
-      context.font = "700 40px sans-serif";
-      const titleLines = canvasLines(context, title, 1080).slice(0, 3);
-      titleLines.forEach((line, lineIndex) => context.fillText(line, 80, 105 + lineIndex * 52));
-      let y = 105 + titleLines.length * 52 + 28;
-      context.fillStyle = "#766f62";
-      context.font = "24px sans-serif";
-      context.fillText(`${author} · 批注 ${index + 1} · 原文第 ${note.page} 页`, 80, y);
-      y += 45;
-
-      const imageMaxWidth = 1080;
-      const imageMaxHeight = 720;
+      if (!pageCanvas) beginPage();
+      const measureContext = pageContext!;
+      measureContext.font = "500 28px sans-serif";
+      const lines = canvasLines(measureContext, note.content.trim(), cardInnerWidth);
+      const imageMaxWidth = cardInnerWidth;
+      const imageMaxHeight = 560;
       const scale = Math.min(imageMaxWidth / cropWidth, imageMaxHeight / cropHeight, 1.8);
       const imageWidth = cropWidth * scale;
       const imageHeight = cropHeight * scale;
-      context.fillStyle = "#ffffff";
-      context.fillRect(70, y - 10, imageWidth + 20, imageHeight + 20);
-      context.drawImage(source, cropX, cropY, cropWidth, cropHeight, 80, y, imageWidth, imageHeight);
-      y += imageHeight + 58;
-      context.fillStyle = "#d65f40";
-      context.font = "700 22px sans-serif";
-      context.fillText("批注", 80, y);
-      y += 42;
-      context.fillStyle = "#181816";
-      context.font = "28px sans-serif";
-      const lines = canvasLines(context, note.content, 1080);
-      const firstPageCapacity = Math.max(1, Math.floor((1660 - y) / 43));
-      lines.slice(0, firstPageCapacity).forEach((line, lineIndex) => context.fillText(line, 80, y + lineIndex * 43));
-      addCanvas(pageCanvas);
+      const imageBlockHeight = cardPadding + 34 + 24 + imageHeight;
+      const completeHeight = imageBlockHeight + (lines.length > 0 ? 31 + lines.length * 42 : 0) + cardPadding;
+      const minimumFirstCardHeight = imageBlockHeight + (lines.length > 0 ? 31 + 42 : 0) + cardPadding;
+      ensurePage(Math.min(completeHeight, minimumFirstCardHeight));
+      const availableHeight = pageBottom - cursorY;
+      const firstFixedHeight = imageBlockHeight + (lines.length > 0 ? 31 : 0) + cardPadding;
+      const firstLineCapacity = Math.max(0, Math.floor((availableHeight - firstFixedHeight) / 42));
+      const firstLines = lines.splice(0, firstLineCapacity);
+      const cardHeight = firstFixedHeight + firstLines.length * 42;
+      drawCardShell(cardHeight);
+      drawCardNumber(index);
+      let y = cursorY + cardPadding + 34 + 24;
+      const context = pageContext!;
+      context.fillStyle = "#f7f8f6";
+      const imageX = pageMargin + cardPadding + (cardInnerWidth - imageWidth) / 2;
+      roundedRect(context, imageX, y, imageWidth, imageHeight, 12);
+      context.fill();
+      context.save();
+      roundedRect(context, imageX, y, imageWidth, imageHeight, 12);
+      context.clip();
+      context.drawImage(source, cropX, cropY, cropWidth, cropHeight, imageX, y, imageWidth, imageHeight);
+      context.restore();
+      y += imageHeight;
+      if (firstLines.length > 0) {
+        drawDivider(y + 17);
+        y += 31;
+        context.fillStyle = "#202421";
+        context.font = "500 28px sans-serif";
+        firstLines.forEach((line, lineIndex) => context.fillText(line, pageMargin + cardPadding, y + 28 + lineIndex * 42));
+      }
+      cursorY += cardHeight + cardGap;
 
-      let remaining = lines.slice(firstPageCapacity);
-      while (remaining.length > 0) {
-        const continuation = window.document.createElement("canvas");
-        continuation.width = 1240;
-        continuation.height = 1754;
-        const continuationContext = continuation.getContext("2d")!;
-        continuationContext.fillStyle = "#f8f6ef";
-        continuationContext.fillRect(0, 0, 1240, 1754);
-        continuationContext.fillStyle = "#d65f40";
-        continuationContext.fillRect(0, 0, 24, 1754);
-        continuationContext.fillStyle = "#181816";
-        continuationContext.font = "700 30px sans-serif";
-        continuationContext.fillText(`批注 ${index + 1}（续）`, 80, 100);
-        continuationContext.font = "28px sans-serif";
-        const chunk = remaining.slice(0, 35);
-        chunk.forEach((line, lineIndex) => continuationContext.fillText(line, 80, 165 + lineIndex * 43));
-        addCanvas(continuation);
-        remaining = remaining.slice(chunk.length);
+      if (lines.length > 0) {
+        nextPage();
+        drawTextCard(index, [{ lines, font: "500 28px sans-serif", color: "#202421", lineHeight: 42 }]);
       }
     }
+    finishPage();
   } finally {
     await pdfDocument.destroy();
   }
