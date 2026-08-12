@@ -74,6 +74,7 @@ export function ReadingArticlePage({
 }) {
   const [importerOpen, setImporterOpen] = useState(false);
   const [pageArticles, setPageArticles] = useState(articles);
+  const [requestedArticleId, setRequestedArticleId] = useState(initialArticleId);
   const [achievement, setAchievement] = useState<{ count: number; title: string; unlocked: boolean } | null>(null);
   const journey = readingJourney(pageArticles);
   const recentReading = [...pageArticles]
@@ -98,6 +99,8 @@ export function ReadingArticlePage({
         ...current.filter((item) => item.id !== article.id),
       ];
     });
+    setRequestedArticleId(article.id);
+    setImporterOpen(false);
   }
 
   function updateReadStatus(articleId: number, isRead: boolean, readAt: string | null) {
@@ -245,7 +248,7 @@ export function ReadingArticlePage({
 
       <ReviewComposer
         articles={pageArticles}
-        initialArticleId={initialArticleId}
+        initialArticleId={requestedArticleId}
         initialPartnerNoteReviewId={initialPartnerNoteReviewId}
         startFocused={startFocused}
         translationEnabled={translationEnabled}

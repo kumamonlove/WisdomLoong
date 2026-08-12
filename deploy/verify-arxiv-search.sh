@@ -9,8 +9,8 @@ session_hash="$(printf '%s' "$session_token" | sha256sum | cut -d ' ' -f 1)"
 
 cleanup() {
   sudo -u postgres psql --dbname="$database_name" --set=ON_ERROR_STOP=1 \
-    --set=session_hash="$session_hash" \
-    --command="DELETE FROM sessions WHERE token_hash = :'session_hash'" >/dev/null
+    --command="DELETE FROM articles WHERE external_id = 'smoke-${session_hash}';
+      DELETE FROM sessions WHERE token_hash = '${session_hash}'" >/dev/null
 }
 trap cleanup EXIT
 
@@ -22,9 +22,8 @@ if [[ ! "$user_id" =~ ^[0-9]+$ ]]; then
 fi
 
 sudo -u postgres psql --dbname="$database_name" --set=ON_ERROR_STOP=1 \
-  --set=session_hash="$session_hash" --set=user_id="$user_id" \
   --command="INSERT INTO sessions (token_hash, user_id, expires_at)
-    VALUES (:'session_hash', :'user_id', NOW() + INTERVAL '10 minutes')" >/dev/null
+    VALUES ('${session_hash}', ${user_id}, NOW() + INTERVAL '10 minutes')" >/dev/null
 
 queries=(
   "attention is all you need"
@@ -79,3 +78,26 @@ if (( success_count < minimum_success )); then
   echo "arXiv production success rate is below 95%" >&2
   exit 1
 fi
+
+import_file="$(mktemp)"
+import_status="$(curl --silent --show-error --max-time 15 \
+  --cookie "wisdomloong_session=$session_token" \
+  --header 'Content-Type: application/json' \
+  --data "$(printf '{\"title\":\"arXiv production smoke %s\",\"abstract\":\"This non-empty abstract verifies that translation never blocks article creation.\",\"authors\":[\"WisdomLoong smoke test\"],\"publisher\":\"机构待补充\",\"publishedAt\":\"2026-08-12\",\"sourceUrl\":\"https://arxiv.org/abs/1706.03762\",\"externalId\":\"smoke-%s\",\"addToReadingList\":false,\"tags\":[\"VLA\"]}' "$session_hash" "$session_hash")" \
+  --output "$import_file" --write-out '%{http_code}' \
+  http://127.0.0.1:3000/api/articles/import || true)"
+article_id="$(sed -n 's/.*\"articleId\":\([0-9][0-9]*\).*/\1/p' "$import_file")"
+unlink "$import_file"
+
+if [[ "$import_status" != "200" || ! "$article_id" =~ ^[0-9]+$ ]]; then
+  echo "Article import production verification failed (HTTP ${import_status})" >&2
+  exit 1
+fi
+
+stored_id="$(sudo -u postgres psql --dbname="$database_name" --tuples-only --no-align \
+  --command="SELECT id FROM articles WHERE external_id = 'smoke-${session_hash}'")"
+if [[ "$stored_id" != "$article_id" ]]; then
+  echo "Article import response was not persisted" >&2
+  exit 1
+fi
+echo "Article import production verification: persisted article ${article_id} and received readable ID"

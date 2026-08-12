@@ -127,7 +127,7 @@ function ArxivLookup({
       return;
     }
     setImportingId(article.externalId);
-    setMessage("");
+    setMessage("正在添加文章并准备阅读…");
     try {
       const response = await fetch("/api/articles/import", {
         method: "POST",
@@ -1977,6 +1977,13 @@ export function ReviewComposer({
   }, [articles]);
 
   useEffect(() => {
+    if (!initialArticleId || initialArticleId === currentArticleIdRef.current) return;
+    if (!articles.some((article) => article.id === initialArticleId)) return;
+    selectArticle(initialArticleId);
+    setFocusMode(true);
+  }, [articles, initialArticleId]);
+
+  useEffect(() => {
     if (!incompleteAbstractIds) return;
     let cancelled = false;
 
@@ -2248,7 +2255,8 @@ export function ReviewComposer({
   }, []);
 
   function selectArticle(id: number) {
-    const article = availableArticles.find((item) => item.id === id);
+    const article = availableArticles.find((item) => item.id === id)
+      ?? articles.find((item) => item.id === id);
     setArticleId(id);
     setPdfLoading(true);
     setArticlePdfReady(false);

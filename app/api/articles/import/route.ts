@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { translateAcademicText } from "@/lib/academic-translation";
 import { database } from "@/lib/db";
 import { articleCategories, normalizeTags } from "@/lib/knowledge-types";
 import { warmPdfCache } from "@/lib/pdf-cache";
@@ -56,20 +55,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "原文链接格式不正确" }, { status: 400 });
   }
 
-  let abstractZh = "";
-  let abstractTranslationError = "";
-  if (abstract) {
-    try {
-      abstractZh = await translateAcademicText(abstract);
-    } catch (error) {
-      abstractTranslationError = error instanceof Error ? error.message : String(error);
-      console.warn("Imported article abstract translation failed", error);
-    }
-  }
+  // Import first; the existing background repair job translates the abstract.
+  // A slow translation provider must never block the user's add action.
+  const abstractZh = "";
 
   const client = await database.connect();
   try {
     await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      body.externalId?.trim() || normalizeTitle(title),
+    ]);
     const existing = await client.query<{ id: number }>(
       `SELECT id
        FROM articles
@@ -128,24 +123,6 @@ export async function POST(request: Request) {
              )
          WHERE id = $1`,
         [articleId, publisher, tags, abstract, abstractZh],
-      );
-    }
-
-    if (abstract && !abstractZh) {
-      await client.query(
-        `UPDATE articles
-         SET abstract_translation_attempts = abstract_translation_attempts + 1,
-             abstract_translation_next_attempt_at = NOW() + CASE abstract_translation_attempts
-               WHEN 0 THEN INTERVAL '15 minutes'
-               WHEN 1 THEN INTERVAL '30 minutes'
-               WHEN 2 THEN INTERVAL '60 minutes'
-               WHEN 3 THEN INTERVAL '120 minutes'
-               ELSE INTERVAL '360 minutes'
-             END,
-             abstract_translation_last_error = $2
-         WHERE id = $1
-           AND abstract_zh = ''`,
-        [articleId, abstractTranslationError.slice(0, 1_000)],
       );
     }
 
