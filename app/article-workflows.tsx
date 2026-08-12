@@ -1362,7 +1362,7 @@ function PdfContinuousCanvas({
   );
 }
 
-type ReaderToolIconName = "bookmark" | "return" | "trash" | "eye" | "image" | "text" | "note" | "download";
+type ReaderToolIconName = "bookmark" | "return" | "trash" | "eye" | "image" | "text" | "note" | "download" | "fit";
 
 function ReaderToolIcon({ name }: { name: ReaderToolIconName }) {
   const content = {
@@ -1374,6 +1374,7 @@ function ReaderToolIcon({ name }: { name: ReaderToolIconName }) {
     text: <><path d="M5 5h14M12 5v14M8 19h8" /><path d="M4 9V5h4m8 0h4v4" /></>,
     note: <><path d="M5 3.5h11l3 3V21H5z" /><path d="M16 3.5V7h3M8 11h8M8 15h8M8 19h5" /></>,
     download: <><path d="M12 3v12m-4-4 4 4 4-4" /><path d="M5 20h14" /></>,
+    fit: <><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" /><path d="M3 8 8 3m13 5-5-5M3 16l5 5m13-5-5 5" /></>,
   }[name];
   return <span aria-hidden="true" className="reader-tool-icon"><svg fill="none" viewBox="0 0 24 24"><g stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8">{content}</g></svg></span>;
 }
@@ -1419,6 +1420,7 @@ export function ReviewComposer({
       1,
   );
   const [zoom, setZoom] = useState(100);
+  const [autoFitPdf, setAutoFitPdf] = useState(true);
   const [focusMode, setFocusMode] = useState(startFocused);
   const [contextTab, setContextTab] = useState<"annotations" | "publish">("annotations");
   const [workbenchExpanded, setWorkbenchExpanded] = useState(false);
@@ -1600,13 +1602,14 @@ export function ReviewComposer({
       : 0,
   })), [currentPageAnnotations]);
   const fitPdfToWidth = useCallback(() => {
+    if (!autoFitPdf) return;
     const frame = pdfFrameRef.current;
     const scroll = frame?.querySelector<HTMLElement>(".pdf-page-scroll");
     if (!scroll || pdfNaturalWidth <= 0) return;
     const availableWidth = Math.max(1, scroll.clientWidth - 2);
     const nextZoom = Math.floor(availableWidth / pdfNaturalWidth * 1000) / 10;
     setZoom(Math.max(30, Math.min(250, nextZoom)));
-  }, [pdfNaturalWidth]);
+  }, [autoFitPdf, pdfNaturalWidth]);
   const handlePdfDocumentReady = useCallback((pageCount: number, naturalPageWidth: number) => {
     setPdfPageCount(pageCount);
     setPdfNaturalWidth(naturalPageWidth);
@@ -3635,6 +3638,35 @@ export function ReviewComposer({
                       href={`/api/articles/${selectedArticle.id}/pdf?download=1`}
                       title="把当前论文 PDF 下载到本地"
                     ><ReaderToolIcon name="download" /><span>下载 PDF</span></a>
+                  </div>
+                  <div className="reader-size-tools">
+                    <span className="reader-tool-group-label">页面大小</span>
+                    <button
+                      aria-pressed={autoFitPdf}
+                      className={`pdf-auto-fit-toggle${autoFitPdf ? " enabled" : ""}`}
+                      onClick={() => setAutoFitPdf((current) => !current)}
+                      title={autoFitPdf ? "关闭后可自由调节 PDF 大小" : "自动让 PDF 适合阅读区宽度"}
+                      type="button"
+                    >
+                      <ReaderToolIcon name="fit" /><span className="reader-tool-label">自适应</span><i aria-hidden="true" className="reader-tool-status">{autoFitPdf ? "开" : "关"}</i>
+                    </button>
+                    <button
+                      aria-label="缩小 PDF"
+                      className="pdf-zoom-step"
+                      disabled={autoFitPdf || zoom <= 30}
+                      onClick={() => setZoom((current) => Math.max(30, current - 10))}
+                      title={autoFitPdf ? "请先关闭自适应" : "缩小 PDF"}
+                      type="button"
+                    >−</button>
+                    <output aria-label={`PDF 缩放 ${Math.round(zoom)}%`} className="pdf-zoom-value">{Math.round(zoom)}%</output>
+                    <button
+                      aria-label="放大 PDF"
+                      className="pdf-zoom-step"
+                      disabled={autoFitPdf || zoom >= 250}
+                      onClick={() => setZoom((current) => Math.min(250, current + 10))}
+                      title={autoFitPdf ? "请先关闭自适应" : "放大 PDF"}
+                      type="button"
+                    >+</button>
                   </div>
                   {!viewingPartnerNote && (
                     <div className="reader-view-tools">
