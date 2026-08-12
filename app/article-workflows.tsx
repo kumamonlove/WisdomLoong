@@ -93,8 +93,22 @@ function ArxivLookup({
     setBusy(true);
     setMessage("");
     try {
-      const response = await fetch(`/api/arxiv?title=${encodeURIComponent(query)}`);
-      const data = await responseJson(response);
+      let data: Awaited<ReturnType<typeof responseJson>> | undefined;
+      let lastError: unknown;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await fetch(`/api/arxiv?title=${encodeURIComponent(query)}`);
+          data = await responseJson(response);
+          break;
+        } catch (error) {
+          lastError = error;
+          if (!(error instanceof ApiResponseError) || ![429, 502, 503, 504].includes(error.status) || attempt === 1) {
+            throw error;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        }
+      }
+      if (!data) throw lastError instanceof Error ? lastError : new Error("检索失败");
       const nextResults = data.results as ArxivResult[];
       setResults(nextResults);
       if (nextResults.length === 0) {

@@ -1,6 +1,6 @@
 {
   "name": "wisdomloong-knowledge-hub",
-  "version": "2.3.12",
+  "version": "2.3.13",
   "private": true,
   "scripts": {
     "predev": "node scripts/prepare-pdfjs-assets.mjs",
@@ -8,6 +8,7 @@
     "prebuild": "node scripts/prepare-pdfjs-assets.mjs",
     "build": "next build --webpack",
     "start": "next start",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build"
   },
