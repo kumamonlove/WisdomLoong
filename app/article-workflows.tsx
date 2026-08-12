@@ -20,6 +20,7 @@ import { DeleteArticleButton, MarkReadButton, ReadingListButton } from "@/app/re
 import { ArticleMetadataEditor } from "@/app/article-metadata-editor";
 import { MathTitle } from "@/app/math-title";
 import { MustReadMark, RatingMark } from "@/app/rating-mark";
+import { LoadingKnowledge } from "@/app/loading-knowledge";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 
 type ArxivResult = {
@@ -189,6 +190,7 @@ function ArxivLookup({
           />
         </label>
       </form>
+      {busy && <LoadingKnowledge compact />}
       <div className="tag-editor">
         <span>文章标签（至少 1 个；新标签会自动进入知识图谱）</span>
         {existingTags.some((tag) => !tags.includes(tag)) && (
@@ -548,6 +550,7 @@ function PdfDropImporter({
       <button className="pdf-upload-submit" disabled={busy || !file || tags.length === 0} type="submit">
         {busy ? "正在上传并添加…" : "推荐给团队"}
       </button>
+      {busy && <LoadingKnowledge compact />}
     </form>
   );
 }
@@ -3190,6 +3193,7 @@ export function ReviewComposer({
             </div>
             {!translationEnabled && <small>翻译服务暂不可用</small>}
             {translationError && <small className="is-error" role="alert">{translationError}</small>}
+            {translating && <LoadingKnowledge compact />}
             {translation && <p><strong>中文译文</strong>{translation}</p>}
           </section>
         )}
@@ -3474,7 +3478,7 @@ export function ReviewComposer({
                       <span>{inlineCommunityReviews.length} 条</span>
                     </div>
                     {inlineDiscussionLoading ? (
-                      <p>正在加载评论…</p>
+                      <LoadingKnowledge compact />
                     ) : inlineCommunityReviews.length > 0 ? (
                       <div>
                         {inlineCommunityReviews.slice(0, 3).map((review) => (
@@ -3776,6 +3780,7 @@ export function ReviewComposer({
                           <i style={{ width: `${displayedPdfProgress}%` }} />
                         </div>
                       )}
+                      {!partnerNoteError && (viewingPartnerNote || (localCache.status !== "error" && localCache.status !== "timeout")) && <LoadingKnowledge />}
                       {viewingPartnerNote ? (
                         partnerNoteError ? (
                           <div className="pdf-fallback-actions">
@@ -3864,6 +3869,7 @@ export function ReviewComposer({
                       </article>
                     ))}
                     {!discussionLoading && communityReviews.length === 0 && <p>还没有伙伴评论，开始阅读后可以留下第一条。</p>}
+                    {discussionLoading && <LoadingKnowledge compact />}
                   </div>
                 </section>
               </div>
@@ -3915,7 +3921,7 @@ export function ReviewComposer({
                       <span>{annotation.content}</span>
                     </button>
                   ))}
-                  {!activePartnerNote.isOwn && communityAnnotations.filter((annotation) => annotation.reviewId === activePartnerNote.id || (annotation.reviewId === 0 && annotation.author === activePartnerNote.author)).length === 0 && <small>正在加载批注…</small>}
+                  {!activePartnerNote.isOwn && communityAnnotations.filter((annotation) => annotation.reviewId === activePartnerNote.id || (annotation.reviewId === 0 && annotation.author === activePartnerNote.author)).length === 0 && <LoadingKnowledge compact />}
                 </div>
               )}
               <button onClick={returnToArticle} type="button">返回论文</button>
@@ -3923,7 +3929,7 @@ export function ReviewComposer({
           ) : !articlePdfReady ? (
             <p className="context-empty">论文页面加载完成后显示批注。</p>
           ) : annotationsLoading ? (
-            <p className="context-empty">正在加载当前论文的批注…</p>
+            <LoadingKnowledge compact />
           ) : annotationsEnabled ? (
             <div className="current-page-discussion">
               {currentAnnotationLayout.map(({ annotation, number }) => (
@@ -3972,6 +3978,7 @@ export function ReviewComposer({
                     : "批注已实时保存"}</span>
                 {annotationSaveStatus === "error" && <button onClick={() => persistAnnotationDrafts(articleId, notes)} type="button">重新保存</button>}
               </div>
+              {(annotationPublishing || annotationSaveStatus === "saving") && <LoadingKnowledge compact />}
               {currentPageOwnAnnotations.length === 0 && <p className="context-empty">本页还没有我的批注。</p>}
               {currentPageOwnAnnotations.map(({ note, noteIndex }) => (
                 <div
@@ -4091,7 +4098,7 @@ export function ReviewComposer({
                   <small>从电脑选择 · 最大 30 MB</small>
                 </button>
               </div>
-              {generatingNotePdf && <p className="note-generation-status" role="status">{noteGenerationStatus}</p>}
+              {generatingNotePdf && <><p className="note-generation-status" role="status">{noteGenerationStatus}</p><LoadingKnowledge /></>}
               <input
                 accept="application/pdf,.pdf"
                 className="visually-hidden"
@@ -4124,6 +4131,7 @@ export function ReviewComposer({
             </label>
           </section>
           {message && <p className="context-inline-message" role="status">{message}</p>}
+          {busy && <LoadingKnowledge compact />}
           <button disabled={busy || articleId === 0 || rating === null || !content.trim() || !hasReadingNote} type="submit">
             {busy
               ? "正在保存…"

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { normalizeTags } from "@/lib/knowledge-types";
+import { LoadingKnowledge } from "@/app/loading-knowledge";
 
 export type ArticleMetadataUpdate = {
   publishedAt?: string | null;
@@ -148,6 +149,7 @@ export function ArticleMetadataEditor({
           </label>
         </section>
         {message && <p role="status">{message}</p>}
+        {busy && <LoadingKnowledge compact />}
       </div>
     </details>
   );

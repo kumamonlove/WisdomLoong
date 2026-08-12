@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { LoadingKnowledge } from "@/app/loading-knowledge";
 
 export function ReadingNoteLikeButton({
   reviewId,
@@ -118,7 +119,7 @@ export function AnnotationComments({
 
   return (
     <div className="annotation-comments" onClick={(event) => event.stopPropagation()}>
-      {loading ? <p>正在加载评论…</p> : comments.length > 0 ? (
+      {loading ? <LoadingKnowledge compact /> : comments.length > 0 ? (
         <div className="annotation-comment-list">
           {comments.map((comment) => <article key={comment.id}>
             <strong>{comment.author}{comment.isOwn ? " · 我" : ""}</strong>
@@ -130,6 +131,7 @@ export function AnnotationComments({
         <textarea maxLength={1000} onChange={(event) => setDraft(event.target.value)} placeholder="评论这条批注…" rows={2} value={draft} />
         <button disabled={busy || !draft.trim()} type="submit">{busy ? "发布中…" : "评论"}</button>
       </form>
+      {busy && <LoadingKnowledge compact />}
       {message && <small role="alert">{message}</small>}
     </div>
   );
@@ -206,7 +208,7 @@ export function ReadingNoteComments({
       </button>
       {open && (
         <div className="note-comments-panel">
-          {loading ? <p>正在加载评论…</p> : comments.length > 0 ? (
+          {loading ? <LoadingKnowledge compact /> : comments.length > 0 ? (
             <div className="note-comment-list">
               {comments.map((comment) => (
                 <article key={comment.id}>
@@ -226,6 +228,7 @@ export function ReadingNoteComments({
             />
             <button disabled={busy || !draft.trim()} type="submit">{busy ? "发布中…" : "发布评论"}</button>
           </form>
+          {busy && <LoadingKnowledge compact />}
           {message && <small role="alert">{message}</small>}
         </div>
       )}

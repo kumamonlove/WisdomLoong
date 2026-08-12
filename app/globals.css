@@ -5432,6 +5432,140 @@ select {
   to { transform: rotate(360deg); }
 }
 
+.loading-knowledge {
+  width: min(620px, 100%);
+  margin-top: 24px;
+  padding: 22px 24px 20px;
+  box-sizing: border-box;
+  color: #29302c;
+  border: 1px solid rgba(47, 67, 56, .16);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 16px 44px rgba(39, 48, 42, .08);
+  text-align: left;
+  backdrop-filter: blur(14px);
+}
+
+.loading-knowledge-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.loading-knowledge-heading span,
+.loading-knowledge-profile > span {
+  color: #627067;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.loading-knowledge-heading strong {
+  color: #294738;
+  font-family: Georgia, "Times New Roman", "Noto Serif SC", serif;
+  font-size: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.loading-knowledge > p {
+  margin: 14px 0 16px;
+  color: #252b27;
+  font-family: Georgia, "Times New Roman", "Noto Serif SC", serif;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.loading-knowledge-profile {
+  padding-top: 13px;
+  border-top: 1px solid rgba(47, 67, 56, .12);
+}
+
+.loading-knowledge-profile p {
+  margin: 6px 0 0;
+  color: #59635d;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.loading-knowledge > a,
+.pdf-loading .loading-knowledge > a {
+  margin: 12px 0 0;
+  padding: 0;
+  display: inline-block;
+  color: #557064;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.loading-knowledge > a:hover,
+.pdf-loading .loading-knowledge > a:hover {
+  color: #294738;
+  text-decoration: underline;
+}
+
+.loading-knowledge.is-compact {
+  width: 100%;
+  margin: 10px 0 0;
+  padding: 14px 15px 13px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.loading-knowledge.is-compact .loading-knowledge-heading {
+  align-items: center;
+}
+
+.loading-knowledge.is-compact .loading-knowledge-heading strong {
+  font-size: 15px;
+}
+
+.loading-knowledge.is-compact > p {
+  margin: 9px 0 10px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.loading-knowledge.is-compact .loading-knowledge-profile {
+  padding-top: 9px;
+}
+
+.loading-knowledge.is-compact .loading-knowledge-profile p {
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.route-loading {
+  min-height: 100vh;
+  padding: 72px 24px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  box-sizing: border-box;
+  background: linear-gradient(145deg, #f7f7f3, #ecefe9);
+}
+
+.route-loading h1 {
+  margin: 15px 0 0;
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.route-loading-spinner {
+  width: 38px;
+  height: 38px;
+  border: 2px solid rgba(41, 71, 56, .16);
+  border-top-color: #466052;
+  border-radius: 50%;
+  animation: pdf-loading-spin 700ms linear infinite;
+}
+
 .reading-progress {
   padding: 10px 14px;
   border-top: 1px solid var(--line);

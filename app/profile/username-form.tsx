@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { LoadingKnowledge } from "@/app/loading-knowledge";
 
 export function UsernameForm({ username }: { username: string }) {
   const router = useRouter();
@@ -39,6 +40,7 @@ export function UsernameForm({ username }: { username: string }) {
         <input maxLength={32} minLength={2} onChange={(event) => setValue(event.target.value)} required value={value} />
       </label>
       <button disabled={busy || value.trim() === username} type="submit">{busy ? "保存中…" : "保存用户名"}</button>
+      {busy && <LoadingKnowledge compact />}
       {message && <p role="status">{message}</p>}
     </form>
   );
