@@ -92,6 +92,7 @@ jobs:
             deploy/backfill-abstracts.sh \
             deploy/prepare-database.sh \
             deploy/prewarm-pdfs.sh \
+            deploy/verify-arxiv-search.sh \
             deploy/schema.sql \
             deploy/wisdomloong-abstract-repair.service \
             deploy/wisdomloong-abstract-repair.timer \
@@ -138,5 +139,7 @@ jobs:
             sudo systemctl is-active --quiet wisdomloong-abstract-repair.timer
             sudo systemctl reload nginx
             sudo systemctl is-active --quiet nginx
+            chmod +x /tmp/verify-arxiv-search.sh
+            /tmp/verify-arxiv-search.sh
             sudo journalctl -u wisdomloong --since '6 hours ago' --no-pager -n 300 || true
           "
