@@ -1149,7 +1149,7 @@ function ContinuousPdfPage({
     const scrollRoot = container.closest(".pdf-page-scroll");
     const preloadObserver = new IntersectionObserver(([entry]) => {
       setNearViewport(entry.isIntersecting);
-    }, { root: scrollRoot, rootMargin: "1200px 0px" });
+    }, { root: scrollRoot, rootMargin: "200px 0px" });
     const visibilityObserver = new IntersectionObserver(([entry]) => {
       if (entry.intersectionRatio >= 0.3) onVisible(page);
     }, { root: scrollRoot, threshold: 0.3 });
@@ -1314,8 +1314,10 @@ function PdfContinuousCanvas({
         loadingTask = pdfjs.getDocument({
           url,
           ...pdfjsResourceOptions,
+          disableAutoFetch: true,
+          disableStream: true,
           isEvalSupported: false,
-          rangeChunkSize: 512 * 1024,
+          rangeChunkSize: 1024 * 1024,
         });
         loadingTask.onProgress = ({ loaded, total }: { loaded: number; total: number }) => onProgress(loaded, total);
         const cancelLoading = () => void loadingTask?.destroy();
@@ -1364,7 +1366,7 @@ function PdfContinuousCanvas({
     <div className="pdf-page-scroll is-continuous" ref={scrollRef}>
       {pdfDocument && Array.from({ length: pdfDocument.numPages }, (_, index) => index + 1).map((page) => (
         <ContinuousPdfPage
-          eager={page <= 2 || Math.abs(page - initialPositionRef.current.page) <= 1}
+          eager={page === initialPositionRef.current.page}
           key={page}
           onLoad={onLoad}
           onTextSelect={onTextSelect}
