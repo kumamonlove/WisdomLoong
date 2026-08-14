@@ -56,6 +56,10 @@ jobs:
           page.on('pageerror', (error) => console.error(`PAGE_ERROR ${error.message}`));
           page.on('requestfailed', (request) => console.error(`REQUEST_FAILED ${request.failure()?.errorText} ${request.url()}`));
           page.on('response', (response) => {
+            if (/\/api\/articles\/\d+\/pdf-preview(?:\?|$)/.test(response.url())) {
+              const headers = response.headers();
+              console.log(`PDF_PREVIEW_RESPONSE status=${response.status()} bytes=${headers['content-length'] ?? 'stream'}`);
+            }
             if (/\/api\/articles\/\d+\/pdf(?:\?|$)/.test(response.url())) {
               const headers = response.headers();
               console.log(`PDF_RESPONSE status=${response.status()} bytes=${headers['content-length'] ?? 'stream'} range=${headers['content-range'] ?? 'full'} cache=${headers['x-wisdomloong-cache'] ?? 'unknown'} delivery=${headers['x-wisdomloong-delivery'] ?? 'unknown'}`);

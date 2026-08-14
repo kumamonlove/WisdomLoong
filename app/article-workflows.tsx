@@ -1348,6 +1348,7 @@ function PdfContinuousCanvas({
     }
     setPdfLoadAllowed(false);
     let cancelled = false;
+    let fullLoadTimer: number | undefined;
     const image = new Image();
     const fallback = window.setTimeout(() => setPdfLoadAllowed(true), 1500);
     image.onload = () => {
@@ -1355,7 +1356,7 @@ function PdfContinuousCanvas({
       window.clearTimeout(fallback);
       setPreview({ source: image.src, width: image.naturalWidth, height: image.naturalHeight });
       onLoad();
-      setPdfLoadAllowed(true);
+      fullLoadTimer = window.setTimeout(() => setPdfLoadAllowed(true), 2000);
     };
     image.onerror = () => {
       if (!cancelled) setPdfLoadAllowed(true);
@@ -1364,6 +1365,7 @@ function PdfContinuousCanvas({
     return () => {
       cancelled = true;
       window.clearTimeout(fallback);
+      if (fullLoadTimer !== undefined) window.clearTimeout(fullLoadTimer);
       image.src = "";
     };
   }, [url, onLoad]);
