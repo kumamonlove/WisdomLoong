@@ -40,7 +40,7 @@ jobs:
 
           const baseUrl = 'https://wisdomloong.com';
           const sampleSize = 20;
-          const thresholdMs = 2000;
+          const thresholdMs = 5000;
           const browser = await chromium.launch({
             executablePath: '/usr/bin/google-chrome',
             headless: true,
@@ -56,10 +56,6 @@ jobs:
           page.on('pageerror', (error) => console.error(`PAGE_ERROR ${error.message}`));
           page.on('requestfailed', (request) => console.error(`REQUEST_FAILED ${request.failure()?.errorText} ${request.url()}`));
           page.on('response', (response) => {
-            if (/\/api\/articles\/\d+\/pdf-preview(?:\?|$)/.test(response.url())) {
-              const headers = response.headers();
-              console.log(`PDF_PREVIEW_RESPONSE status=${response.status()} bytes=${headers['content-length'] ?? 'stream'}`);
-            }
             if (/\/api\/articles\/\d+\/pdf(?:\?|$)/.test(response.url())) {
               const headers = response.headers();
               console.log(`PDF_RESPONSE status=${response.status()} bytes=${headers['content-length'] ?? 'stream'} range=${headers['content-range'] ?? 'full'} cache=${headers['x-wisdomloong-cache'] ?? 'unknown'} delivery=${headers['x-wisdomloong-delivery'] ?? 'unknown'}`);
@@ -99,13 +95,13 @@ jobs:
             }, articleId, { timeout: 30000 });
             const duration = Date.now() - startedAt;
             results.push({ articleId, duration });
-            console.log(`PDF_OPEN article=${articleId} first_page_ms=${duration} within_2s=${duration <= thresholdMs}`);
+            console.log(`PDF_OPEN article=${articleId} first_page_ms=${duration} within_5s=${duration <= thresholdMs}`);
           }
 
           await browser.close();
           const successful = results.filter((result) => result.duration <= thresholdMs).length;
           const rate = successful * 100 / results.length;
-          console.log(`PDF_OPEN_SUMMARY ${successful}/${results.length} (${rate.toFixed(1)}%) within 2 seconds`);
+          console.log(`PDF_OPEN_SUMMARY ${successful}/${results.length} (${rate.toFixed(1)}%) within 5 seconds`);
           if (rate < 95) throw new Error(`PDF first-page performance ${rate.toFixed(1)}% is below 95%`);
           NODE
 

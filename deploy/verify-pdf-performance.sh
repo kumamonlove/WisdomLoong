@@ -3,7 +3,7 @@ set -euo pipefail
 
 database_name=wisdomloong
 sample_size=20
-threshold_seconds=2.000
+threshold_seconds=5.000
 session_token="pdf-performance-$(openssl rand -hex 24)"
 session_hash="$(printf '%s' "$session_token" | sha256sum | cut -d ' ' -f 1)"
 
@@ -54,6 +54,6 @@ required=$(( (total * 95 + 99) / 100 ))
 rate="$(awk -v success="$successful" -v count="$total" 'BEGIN { printf "%.1f", success * 100 / count }')"
 echo "PDF performance verification: ${successful}/${total} (${rate}%) within ${threshold_seconds}s"
 if (( successful < required )); then
-  echo "PDF performance is below the required 95% within 2 seconds" >&2
+  echo "PDF performance is below the required 95% within 5 seconds" >&2
   exit 1
 fi

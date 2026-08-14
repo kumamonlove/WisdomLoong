@@ -4,24 +4,6 @@ set -u
 cache_directory="${PDF_CACHE_DIR:-/srv/wisdomloong/pdf-cache}"
 max_parallel=4
 active_jobs=0
-mkdir -p "${cache_directory}/previews"
-
-generate_preview() {
-  local article_id="$1"
-  local target="$2"
-  local preview="${cache_directory}/previews/${article_id}-v2.jpg"
-  local preview_base="${cache_directory}/previews/${article_id}-v2.generating"
-  if [ -s "$preview" ]; then
-    return 0
-  fi
-  if pdftoppm -f 1 -l 1 -singlefile -r 72 -jpeg -jpegopt quality=60 \
-    "$target" "$preview_base" && [ -s "${preview_base}.jpg" ]; then
-    mv "${preview_base}.jpg" "$preview"
-  else
-    unlink "${preview_base}.jpg" 2>/dev/null || true
-    echo "PDF first-page preview skipped: article ${article_id}" >&2
-  fi
-}
 
 download_pdf() {
   local article_id="$1"
@@ -43,7 +25,6 @@ download_pdf() {
         echo "PDF fast-web optimization skipped: article ${article_id}" >&2
       fi
     fi
-    generate_preview "$article_id" "$target"
     echo "PDF cache hit: article ${article_id}"
     return 0
   fi
@@ -69,7 +50,6 @@ download_pdf() {
       unlink "$optimized" 2>/dev/null || true
       mv "$temporary" "$target"
     fi
-    generate_preview "$article_id" "$target"
     echo "PDF cached: article ${article_id}"
   else
     unlink "$temporary" 2>/dev/null || true

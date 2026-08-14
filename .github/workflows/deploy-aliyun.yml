@@ -116,9 +116,9 @@ jobs:
             /tmp/prepare-database.sh
             sudo install -d -o ${ALIYUN_USER} -g ${ALIYUN_USER} \
               /srv/wisdomloong/pdf-cache
-            if ! command -v qpdf >/dev/null 2>&1 || ! command -v pdftoppm >/dev/null 2>&1; then
+            if ! command -v qpdf >/dev/null 2>&1; then
               sudo apt-get update
-              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y qpdf poppler-utils
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y qpdf
             fi
             chmod +x /tmp/prewarm-pdfs.sh
             PDF_CACHE_DIR=/srv/wisdomloong/pdf-cache /tmp/prewarm-pdfs.sh
