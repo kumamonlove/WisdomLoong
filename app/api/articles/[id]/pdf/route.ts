@@ -89,6 +89,36 @@ function cachedResponse(
   });
 }
 
+async function uncachedStreamingResponse(remoteUrl: string, rangeHeader: string | null) {
+  const headers: Record<string, string> = {
+    Accept: "application/pdf",
+    "User-Agent": "WisdomLoong/2.3 interactive PDF reader",
+  };
+  if (rangeHeader) headers.Range = rangeHeader;
+  const response = await fetch(remoteUrl, {
+    cache: "no-store",
+    headers,
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`PDF source returned ${response.status}`);
+
+  const responseHeaders: Record<string, string> = {
+    "Accept-Ranges": response.headers.get("accept-ranges") ?? "bytes",
+    "Cache-Control": "private, max-age=300",
+    "Content-Type": "application/pdf",
+    "X-WisdomLoong-Cache": "MISS",
+    "X-WisdomLoong-Delivery": "upstream-stream",
+  };
+  for (const name of ["content-length", "content-range"]) {
+    const value = response.headers.get(name);
+    if (value) responseHeaders[name] = value;
+  }
+  return new NextResponse(response.body, {
+    status: response.status,
+    headers: responseHeaders,
+  });
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -121,7 +151,7 @@ export async function GET(
   }
 
   const activeDownload = activePdfDownloads.get(articleId);
-  if (activeDownload) {
+  if (activeDownload && wantsDownload) {
     try {
       await activeDownload;
       const completedSize = await validPdfCacheSize(articleId);
@@ -146,8 +176,18 @@ export async function GET(
     );
   }
 
+  const warming = activeDownload ?? warmPdfCache(articleId, sourceUrl);
+  if (!wantsDownload) {
+    void warming.catch((error) => console.error("Background PDF cache warm failed", error));
+    try {
+      return await uncachedStreamingResponse(remoteUrl, request.headers.get("range"));
+    } catch {
+      // If direct range streaming is unavailable, fall back to the completed cache.
+    }
+  }
+
   try {
-    await warmPdfCache(articleId, sourceUrl);
+    await warming;
     const completedSize = await validPdfCacheSize(articleId);
     if (!completedSize) throw new Error("PDF cache validation failed");
     return cachedResponse(articleId, filePath, completedSize, request.headers.get("range"), disposition);

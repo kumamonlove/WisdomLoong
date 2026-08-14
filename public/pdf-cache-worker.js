@@ -12,6 +12,23 @@ function cacheKey(url) {
   return new Request(url.origin + url.pathname);
 }
 
+async function cachedRangeResponse(response, rangeHeader) {
+  if (!response) return null;
+  const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
+  if (!match) return null;
+  const buffer = await response.arrayBuffer();
+  const size = buffer.byteLength;
+  const start = match[1] ? Number(match[1]) : 0;
+  const end = Math.min(match[2] ? Number(match[2]) : size - 1, size - 1);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start > end) return null;
+  const headers = new Headers(response.headers);
+  headers.set("Accept-Ranges", "bytes");
+  headers.set("Content-Length", String(end - start + 1));
+  headers.set("Content-Range", `bytes ${start}-${end}/${size}`);
+  headers.set("Content-Type", "application/pdf");
+  return new Response(buffer.slice(start, end + 1), { status: 206, headers });
+}
+
 function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -86,7 +103,10 @@ self.addEventListener("fetch", (event) => {
     const cache = await caches.open(cacheName);
     const key = cacheKey(url);
     const range = event.request.headers.get("range");
-    if (range) return fetch(event.request);
+    if (range) {
+      const cached = await cache.match(key);
+      return cachedRangeResponse(cached, range).then((response) => response ?? fetch(event.request));
+    }
     if (url.searchParams.has("retry")) await cache.delete(key);
     const cached = await cache.match(key);
     if (cached) return cached;

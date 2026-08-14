@@ -1090,67 +1090,6 @@ function arxivPageUrl(sourceUrl: string) {
   }
 }
 
-async function downloadPdfData(
-  url: string,
-  onProgress: (loaded: number, total: number) => void,
-  signal: AbortSignal,
-) {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await fetch(url, { signal });
-      if (!response.ok) throw new Error(`PDF download failed (${response.status})`);
-      const total = Number(response.headers.get("content-length")) || 0;
-      if (!response.body) {
-        const data = new Uint8Array(await response.arrayBuffer());
-        onProgress(data.byteLength, data.byteLength);
-        return data;
-      }
-
-      if (total > 100 * 1024 * 1024) throw new Error("PDF is larger than 100 MB");
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      const allocated = total > 0 ? new Uint8Array(total) : null;
-      let loaded = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (allocated && loaded + value.byteLength <= allocated.byteLength) {
-          allocated.set(value, loaded);
-        } else {
-          chunks.push(value);
-        }
-        loaded += value.byteLength;
-        if (loaded > 100 * 1024 * 1024) throw new Error("PDF is larger than 100 MB");
-        onProgress(loaded, total);
-      }
-      let data: Uint8Array;
-      if (allocated && loaded === allocated.byteLength && chunks.length === 0) {
-        data = allocated;
-      } else {
-        data = new Uint8Array(loaded);
-        const chunkBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-        let offset = allocated ? Math.min(loaded - chunkBytes, allocated.byteLength) : 0;
-        if (allocated) data.set(allocated.subarray(0, offset));
-        for (const chunk of chunks) {
-          data.set(chunk, offset);
-          offset += chunk.byteLength;
-        }
-      }
-      if (new TextDecoder("ascii").decode(data.subarray(0, 5)) !== "%PDF-") {
-        throw new Error("Downloaded file is not a PDF");
-      }
-      onProgress(loaded, loaded);
-      return data;
-    } catch (error) {
-      lastError = error;
-      if (signal.aborted || attempt === 3) break;
-      await new Promise((resolve) => window.setTimeout(resolve, attempt * 450));
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("PDF download failed");
-}
-
 function ContinuousPdfPage({
   pdfDocument,
   page,
@@ -1368,20 +1307,24 @@ function PdfContinuousCanvas({
     setPdfDocument(null);
     void (async () => {
       try {
-        const [data, pdfjs] = await Promise.all([
-          downloadPdfData(url, onProgress, controller.signal),
-          import("pdfjs-dist"),
-        ]);
-        window.clearTimeout(timeout);
+        const pdfjs = await import("pdfjs-dist");
         if (cancelled) return;
         const workerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
         pdfjs.GlobalWorkerOptions.workerSrc = `${workerUrl}?v=1.14.30`;
         loadingTask = pdfjs.getDocument({
-          data,
+          url,
           ...pdfjsResourceOptions,
+          disableAutoFetch: true,
+          disableStream: true,
           isEvalSupported: false,
+          rangeChunkSize: 512 * 1024,
         });
+        loadingTask.onProgress = ({ loaded, total }: { loaded: number; total: number }) => onProgress(loaded, total);
+        const cancelLoading = () => void loadingTask?.destroy();
+        controller.signal.addEventListener("abort", cancelLoading, { once: true });
         const document = await loadingTask.promise;
+        controller.signal.removeEventListener("abort", cancelLoading);
+        window.clearTimeout(timeout);
         if (!cancelled) {
           const firstPage = await document.getPage(1);
           const naturalPageWidth = firstPage.getViewport({ scale: 96 / 72 }).width;
@@ -3285,7 +3228,10 @@ export function ReviewComposer({
   }
 
   return (
-    <div className={`reader-workspace${focusMode ? " focus-mode" : ""}`}>
+    <div
+      className={`reader-workspace${focusMode ? " focus-mode" : ""}`}
+      data-active-article-id={articleId || undefined}
+    >
       {focusMode && (
         <div className="focus-status">
           <span><i />扩展算法组知识库</span>
@@ -3327,7 +3273,7 @@ export function ReviewComposer({
             {viewingPartnerNote
               ? `正在阅读 ${activeNoteAuthor} 的读书笔记`
               : localCache.status === "loading"
-              ? `正在完整下载论文 ${displayedPdfProgress}%`
+              ? `正在加载论文 ${displayedPdfProgress}%`
               : localCache.status === "ready"
                 ? "论文已打开 · 后续页面按需加载"
                 : "点击右侧结束阅读"}
@@ -3842,7 +3788,7 @@ export function ReviewComposer({
                             ? "读书笔记暂时无法加载"
                             : `正在打开 ${activeNoteAuthor} 的读书笔记`
                           : localCache.status === "loading"
-                          ? `正在完整下载论文 ${displayedPdfProgress}%`
+                          ? `正在加载论文首屏 ${displayedPdfProgress}%`
                           : localCache.status === "timeout"
                             ? "下载超时"
                           : localCache.status === "error"
@@ -3891,7 +3837,7 @@ export function ReviewComposer({
                           </div>
                         </>
                       ) : (
-                        <small>先完整下载并校验论文，再稳定连续显示；再次打开会使用浏览器缓存。</small>
+                        <small>正在按需读取第一页；其余页面会在阅读时继续加载。</small>
                       )}
                     </div>
                   )}

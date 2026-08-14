@@ -1,0 +1,112 @@
+name: Verify PDF opening performance
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser driver
+        run: npm install --no-save --package-lock=false playwright-core@1.55.0
+
+      - name: Configure cleanup access
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_SSH_KEY: ${{ secrets.ALIYUN_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$ALIYUN_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$ALIYUN_HOST" >> ~/.ssh/known_hosts
+
+      - name: Measure 20 previously unopened papers
+        env:
+          PERF_INVITE_CODE: ${{ secrets.REGISTRATION_INVITE_CODE }}
+          PERF_PASSWORD: Pdf-${{ github.run_id }}-${{ github.run_attempt }}!
+          PERF_USERNAME: pdf_perf_${{ github.run_id }}_${{ github.run_attempt }}
+        run: |
+          node <<'NODE'
+          const { chromium } = await import('playwright-core');
+
+          const baseUrl = 'https://wisdomloong.com';
+          const sampleSize = 20;
+          const thresholdMs = 2000;
+          const browser = await chromium.launch({
+            executablePath: '/usr/bin/google-chrome',
+            headless: true,
+            args: ['--no-sandbox', '--disable-dev-shm-usage'],
+          });
+          const context = await browser.newContext({
+            locale: 'zh-CN',
+            serviceWorkers: 'block',
+            viewport: { width: 1440, height: 1000 },
+          });
+          const page = await context.newPage();
+
+          await page.goto(`${baseUrl}/register`, { waitUntil: 'domcontentloaded' });
+          await page.locator('input[name="username"]').fill(process.env.PERF_USERNAME);
+          await page.locator('input[name="password"]').fill(process.env.PERF_PASSWORD);
+          await page.locator('input[name="invitationCode"]').fill(process.env.PERF_INVITE_CODE);
+          await Promise.all([
+            page.waitForURL(`${baseUrl}/`, { timeout: 30000 }),
+            page.getByRole('button', { name: '创建账号' }).click(),
+          ]);
+
+          await page.goto(`${baseUrl}/reviews/new`, { waitUntil: 'domcontentloaded' });
+          await page.waitForSelector('[data-article-library-id]');
+          await page.waitForFunction(() => {
+            const canvas = document.querySelector('.pdf-page-canvas canvas');
+            return !document.querySelector('.pdf-loading')
+              && canvas instanceof HTMLCanvasElement && canvas.width > 0 && canvas.height > 0;
+          }, { timeout: 45000 });
+
+          const initialId = await page.locator('.reader-workspace').getAttribute('data-active-article-id');
+          const articleIds = (await page.locator('[data-article-library-id]').evaluateAll((cards) =>
+            cards.map((card) => card.getAttribute('data-article-library-id')).filter(Boolean)
+          )).filter((id) => id !== initialId).slice(0, sampleSize);
+          if (articleIds.length < sampleSize) {
+            throw new Error(`Need ${sampleSize} unique papers, found ${articleIds.length}`);
+          }
+
+          const results = [];
+          for (const articleId of articleIds) {
+            const startedAt = Date.now();
+            await page.locator(`[data-article-library-id="${articleId}"]`).evaluate((card) => card.click());
+            await page.waitForFunction((id) => {
+              const workspace = document.querySelector('.reader-workspace');
+              const canvas = document.querySelector('.pdf-page-canvas canvas');
+              return workspace?.getAttribute('data-active-article-id') === id
+                && !document.querySelector('.pdf-loading')
+                && canvas instanceof HTMLCanvasElement && canvas.width > 0 && canvas.height > 0;
+            }, articleId, { timeout: 30000 });
+            const duration = Date.now() - startedAt;
+            results.push({ articleId, duration });
+            console.log(`PDF_OPEN article=${articleId} first_page_ms=${duration} within_2s=${duration <= thresholdMs}`);
+          }
+
+          await browser.close();
+          const successful = results.filter((result) => result.duration <= thresholdMs).length;
+          const rate = successful * 100 / results.length;
+          console.log(`PDF_OPEN_SUMMARY ${successful}/${results.length} (${rate.toFixed(1)}%) within 2 seconds`);
+          if (rate < 95) throw new Error(`PDF first-page performance ${rate.toFixed(1)}% is below 95%`);
+          NODE
+
+      - name: Remove temporary performance account
+        if: always()
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
+          PERF_USERNAME: pdf_perf_${{ github.run_id }}_${{ github.run_attempt }}
+        run: |
+          ssh "${ALIYUN_USER}@${ALIYUN_HOST}" \
+            "sudo -u postgres psql --dbname=wisdomloong --set=ON_ERROR_STOP=1 --command=\"DELETE FROM users WHERE username_key = '${PERF_USERNAME}';\""
