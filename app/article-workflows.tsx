@@ -86,7 +86,18 @@ function ArxivLookup({
   const [busy, setBusy] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [tagRequired, setTagRequired] = useState(false);
+  const tagInput = useRef<HTMLInputElement>(null);
   const existingTags = useExistingTags();
+
+  function showTagRequired() {
+    setTagRequired(true);
+    setMessage("");
+    requestAnimationFrame(() => {
+      tagInput.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      tagInput.current?.focus({ preventScroll: true });
+    });
+  }
 
   async function search(event: FormEvent) {
     event.preventDefault();
@@ -123,7 +134,7 @@ function ArxivLookup({
 
   async function importArticle(article: ArxivResult) {
     if (tags.length === 0) {
-      setMessage("请至少添加一个文章标签。");
+      showTagRequired();
       return;
     }
     setImportingId(article.externalId);
@@ -205,8 +216,20 @@ function ArxivLookup({
         </label>
       </form>
       {busy && <LoadingKnowledge compact />}
-      <div className="tag-editor">
-        <span>文章标签（至少 1 个；新标签会自动进入知识图谱）</span>
+      <div className={`tag-editor${tagRequired ? " has-error" : ""}`}>
+        <div className="tag-editor-heading">
+          <span>文章标签（新标签会自动进入知识图谱）</span>
+          <strong>必选</strong>
+        </div>
+        {tagRequired && (
+          <div className="tag-required-alert" role="alert">
+            <span aria-hidden="true">!</span>
+            <div>
+              <strong>还差一步：请选择文章标签</strong>
+              <small>点击一个已有标签，或在下方输入新标签后按 Enter。</small>
+            </div>
+          </div>
+        )}
         {existingTags.some((tag) => !tags.includes(tag)) && (
           <div className="existing-tag-picker">
             <small>点击添加已有标签</small>
@@ -216,7 +239,10 @@ function ArxivLookup({
                 .map((tag) => (
                   <button
                     key={tag}
-                    onClick={() => setTags((current) => normalizeTags([...current, tag]))}
+                    onClick={() => {
+                      setTags((current) => normalizeTags([...current, tag]));
+                      setTagRequired(false);
+                    }}
                     type="button"
                   >
                     ＋ {tag}
@@ -244,14 +270,18 @@ function ArxivLookup({
               if (event.key !== "Enter" && event.key !== ",") return;
               event.preventDefault();
               setTags((current) => normalizeTags([...current, tagDraft]));
+              if (tagDraft.trim()) setTagRequired(false);
               setTagDraft("");
             }}
+            aria-invalid={tagRequired}
             placeholder="输入标签后按 Enter"
+            ref={tagInput}
             value={tagDraft}
           />
           <button
             onClick={() => {
               setTags((current) => normalizeTags([...current, tagDraft]));
+              if (tagDraft.trim()) setTagRequired(false);
               setTagDraft("");
             }}
             type="button"
@@ -357,7 +387,18 @@ function PdfDropImporter({
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [tagRequired, setTagRequired] = useState(false);
+  const tagInput = useRef<HTMLInputElement>(null);
   const existingTags = useExistingTags();
+
+  function showTagRequired() {
+    setTagRequired(true);
+    setMessage("");
+    requestAnimationFrame(() => {
+      tagInput.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      tagInput.current?.focus({ preventScroll: true });
+    });
+  }
 
   function chooseFile(nextFile?: File) {
     if (!nextFile) return;
@@ -372,6 +413,7 @@ function PdfDropImporter({
 
   function addTag() {
     setTags((current) => normalizeTags([...current, tagDraft]));
+    if (tagDraft.trim()) setTagRequired(false);
     setTagDraft("");
   }
 
@@ -382,7 +424,7 @@ function PdfDropImporter({
       return;
     }
     if (tags.length === 0) {
-      setMessage("请至少添加一个文章标签。");
+      showTagRequired();
       return;
     }
 
@@ -513,8 +555,20 @@ function PdfDropImporter({
         </label>
       </div>
 
-      <div className="tag-editor">
-        <span>文章标签（至少 1 个；新标签会自动进入知识图谱）</span>
+      <div className={`tag-editor${tagRequired ? " has-error" : ""}`}>
+        <div className="tag-editor-heading">
+          <span>文章标签（新标签会自动进入知识图谱）</span>
+          <strong>必选</strong>
+        </div>
+        {tagRequired && (
+          <div className="tag-required-alert" role="alert">
+            <span aria-hidden="true">!</span>
+            <div>
+              <strong>还差一步：请选择文章标签</strong>
+              <small>点击一个已有标签，或在下方输入新标签后按 Enter。</small>
+            </div>
+          </div>
+        )}
         {existingTags.some((tag) => !tags.includes(tag)) && (
           <div className="existing-tag-picker">
             <small>点击添加已有标签</small>
@@ -524,7 +578,10 @@ function PdfDropImporter({
                 .map((tag) => (
                   <button
                     key={tag}
-                    onClick={() => setTags((current) => normalizeTags([...current, tag]))}
+                    onClick={() => {
+                      setTags((current) => normalizeTags([...current, tag]));
+                      setTagRequired(false);
+                    }}
                     type="button"
                   >
                     ＋ {tag}
@@ -547,6 +604,7 @@ function PdfDropImporter({
             ))}
           </div>
           <input
+            aria-invalid={tagRequired}
             onChange={(event) => setTagDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key !== "Enter" && event.key !== ",") return;
@@ -554,6 +612,7 @@ function PdfDropImporter({
               addTag();
             }}
             placeholder="输入标签后按 Enter"
+            ref={tagInput}
             value={tagDraft}
           />
           <button onClick={addTag} type="button">添加</button>
@@ -561,7 +620,7 @@ function PdfDropImporter({
       </div>
 
       {message && <p className="workflow-message" role="status">{message}</p>}
-      <button className="pdf-upload-submit" disabled={busy || !file || tags.length === 0} type="submit">
+      <button className="pdf-upload-submit" disabled={busy || !file} type="submit">
         {busy ? "正在上传并添加…" : "推荐给团队"}
       </button>
       {busy && <LoadingKnowledge compact />}

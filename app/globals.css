@@ -2672,12 +2672,80 @@ select {
 
 .tag-editor {
   margin-top: 16px;
+  padding: 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 
-.tag-editor > span {
+.tag-editor-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag-editor-heading > span {
   color: var(--muted);
   font-size: 14px;
   font-weight: 650;
+}
+
+.tag-editor-heading > strong {
+  padding: 2px 7px;
+  color: var(--accent);
+  border-radius: 999px;
+  background: rgba(214, 95, 64, 0.1);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.tag-editor.has-error {
+  border-color: rgba(214, 95, 64, 0.58);
+  background: rgba(214, 95, 64, 0.06);
+  box-shadow: 0 0 0 3px rgba(214, 95, 64, 0.1);
+}
+
+.tag-required-alert {
+  margin-top: 10px;
+  padding: 11px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #8f2f1b;
+  border: 1px solid rgba(214, 95, 64, 0.34);
+  border-radius: 8px;
+  background: rgba(255, 247, 243, 0.96);
+}
+
+.tag-required-alert > span {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--white);
+  border-radius: 50%;
+  background: var(--accent);
+  font-weight: 850;
+}
+
+.tag-required-alert > div {
+  display: grid;
+  gap: 2px;
+}
+
+.tag-required-alert strong {
+  font-size: 14px;
+}
+
+.tag-required-alert small {
+  color: #7c5148;
+  font-size: 12px;
+}
+
+.tag-editor.has-error .tag-editor-row input {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(214, 95, 64, 0.12);
 }
 
 .existing-tag-picker {
