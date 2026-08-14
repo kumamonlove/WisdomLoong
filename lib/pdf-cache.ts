@@ -1,5 +1,9 @@
 import { mkdir, open, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 export const pdfCacheDirectory =
   process.env.PDF_CACHE_DIR ??
@@ -88,6 +92,7 @@ export async function warmPdfCache(articleId: number, sourceUrl: string) {
   }
 
   const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const optimizedPath = `${temporaryPath}.linearized`;
   const download = (async () => {
     let lastError: unknown;
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -102,11 +107,24 @@ export async function warmPdfCache(articleId: number, sourceUrl: string) {
         const buffer = Buffer.from(await response.arrayBuffer());
         validatePdf(buffer, Number(response.headers.get("content-length")) || 0);
         await writeFile(temporaryPath, buffer);
-        await rename(temporaryPath, filePath);
+        try {
+          await execFileAsync("qpdf", ["--linearize", temporaryPath, optimizedPath], {
+            timeout: 90_000,
+          });
+          await rename(optimizedPath, filePath);
+          await unlink(temporaryPath).catch(() => undefined);
+        } catch (error) {
+          await unlink(optimizedPath).catch(() => undefined);
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            console.warn("PDF linearization unavailable; retaining validated source", error);
+          }
+          await rename(temporaryPath, filePath);
+        }
         return;
       } catch (error) {
         lastError = error;
         await unlink(temporaryPath).catch(() => undefined);
+        await unlink(optimizedPath).catch(() => undefined);
         if (attempt < 1) {
           await new Promise((resolve) => setTimeout(resolve, 600 * (attempt + 1)));
         }

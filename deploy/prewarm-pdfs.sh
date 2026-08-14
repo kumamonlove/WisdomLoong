@@ -11,8 +11,20 @@ download_pdf() {
   local arxiv_id
   local target="${cache_directory}/${article_id}.pdf"
   local temporary="${cache_directory}/${article_id}.pdf.download"
+  local optimized="${cache_directory}/${article_id}.pdf.linearized"
+  local marker="${cache_directory}/${article_id}.pdf.fast-web-view"
 
   if [ -s "$target" ]; then
+    if [ ! -e "$marker" ]; then
+      echo "Optimizing cached PDF for first-page display: article ${article_id}"
+      if qpdf --linearize "$target" "$optimized" && [ "$(head -c 5 "$optimized")" = "%PDF-" ]; then
+        mv "$optimized" "$target"
+        touch "$marker"
+      else
+        unlink "$optimized" 2>/dev/null || true
+        echo "PDF fast-web optimization skipped: article ${article_id}" >&2
+      fi
+    fi
     echo "PDF cache hit: article ${article_id}"
     return 0
   fi
@@ -30,7 +42,14 @@ download_pdf() {
     --output "$temporary" \
     "https://arxiv.org/pdf/${arxiv_id}.pdf" &&
     [ "$(head -c 5 "$temporary")" = "%PDF-" ]; then
-    mv "$temporary" "$target"
+    if qpdf --linearize "$temporary" "$optimized" && [ "$(head -c 5 "$optimized")" = "%PDF-" ]; then
+      mv "$optimized" "$target"
+      touch "$marker"
+      unlink "$temporary" 2>/dev/null || true
+    else
+      unlink "$optimized" 2>/dev/null || true
+      mv "$temporary" "$target"
+    fi
     echo "PDF cached: article ${article_id}"
   else
     unlink "$temporary" 2>/dev/null || true

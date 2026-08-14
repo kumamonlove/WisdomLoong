@@ -1314,10 +1314,8 @@ function PdfContinuousCanvas({
         loadingTask = pdfjs.getDocument({
           url,
           ...pdfjsResourceOptions,
-          disableAutoFetch: true,
-          disableStream: true,
           isEvalSupported: false,
-          rangeChunkSize: 1024 * 1024,
+          rangeChunkSize: 512 * 1024,
         });
         loadingTask.onProgress = ({ loaded, total }: { loaded: number; total: number }) => onProgress(loaded, total);
         const cancelLoading = () => void loadingTask?.destroy();
