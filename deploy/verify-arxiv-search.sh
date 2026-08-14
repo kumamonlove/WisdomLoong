@@ -3,7 +3,7 @@ set -euo pipefail
 
 database_name=wisdomloong
 sample_size=20
-minimum_success=19
+minimum_success=20
 session_token="arxiv-smoke-$(openssl rand -hex 24)"
 session_hash="$(printf '%s' "$session_token" | sha256sum | cut -d ' ' -f 1)"
 
@@ -59,7 +59,7 @@ for query in "${queries[@]}"; do
       --get --data-urlencode "title=$query" \
       --output "$response_file" --write-out '%{http_code}' \
       http://127.0.0.1:3000/api/arxiv || true)"
-    if [[ "$status" == "200" ]] && grep -q '"results"' "$response_file"; then
+    if [[ "$status" == "200" ]] && grep -q '"results":\[{' "$response_file"; then
       printf '1\n' >> "$results_file"
     else
       printf '0\n' >> "$results_file"
@@ -75,7 +75,7 @@ success_rate="$(awk -v success="$success_count" -v total="$sample_size" \
 echo "arXiv production verification: ${success_count}/${sample_size} (${success_rate}%)"
 
 if (( success_count < minimum_success )); then
-  echo "arXiv production success rate is below 95%" >&2
+  echo "arXiv production success rate is below 100%" >&2
   exit 1
 fi
 
