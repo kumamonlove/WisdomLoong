@@ -52,6 +52,15 @@ jobs:
             viewport: { width: 1440, height: 1000 },
           });
           const page = await context.newPage();
+          page.on('console', (message) => console.log(`BROWSER_${message.type().toUpperCase()} ${message.text()}`));
+          page.on('pageerror', (error) => console.error(`PAGE_ERROR ${error.message}`));
+          page.on('requestfailed', (request) => console.error(`REQUEST_FAILED ${request.failure()?.errorText} ${request.url()}`));
+          page.on('response', (response) => {
+            if (/\/api\/articles\/\d+\/pdf(?:\?|$)/.test(response.url())) {
+              const headers = response.headers();
+              console.log(`PDF_RESPONSE status=${response.status()} bytes=${headers['content-length'] ?? 'stream'} range=${headers['content-range'] ?? 'full'} cache=${headers['x-wisdomloong-cache'] ?? 'unknown'} delivery=${headers['x-wisdomloong-delivery'] ?? 'unknown'}`);
+            }
+          });
 
           await page.goto(`${baseUrl}/register`, { waitUntil: 'domcontentloaded' });
           await page.locator('input[name="username"]').fill(process.env.PERF_USERNAME);
@@ -68,7 +77,7 @@ jobs:
             const canvas = document.querySelector('.pdf-page-canvas canvas');
             return !document.querySelector('.pdf-loading')
               && canvas instanceof HTMLCanvasElement && canvas.width > 0 && canvas.height > 0;
-          }, { timeout: 45000 });
+          }, null, { timeout: 45000 });
 
           const initialId = await page.locator('.reader-workspace').getAttribute('data-active-article-id');
           const articleIds = (await page.locator('[data-article-library-id]').evaluateAll((cards) =>
