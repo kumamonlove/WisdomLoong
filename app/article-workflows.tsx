@@ -1270,6 +1270,36 @@ function ContinuousPdfPage({
   );
 }
 
+function PdfFirstPagePreview({
+  preview,
+  zoom,
+}: {
+  preview: { source: string; width: number; height: number };
+  zoom: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const image = new Image();
+    image.onload = () => canvas.getContext("2d")?.drawImage(image, 0, 0);
+    image.src = preview.source;
+    return () => { image.src = ""; };
+  }, [preview]);
+  return (
+    <div
+      className="pdf-page-canvas continuous-page pdf-first-page-preview"
+      data-page="1"
+      style={{
+        width: preview.width * 96 / 110 * zoom / 100,
+        height: preview.height * 96 / 110 * zoom / 100,
+      }}
+    >
+      <canvas height={preview.height} ref={canvasRef} width={preview.width} />
+    </div>
+  );
+}
+
 function PdfContinuousCanvas({
   url,
   zoom,
@@ -1296,8 +1326,30 @@ function PdfContinuousCanvas({
   children: (page: number) => ReactNode;
 }) {
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
+  const [preview, setPreview] = useState<{ source: string; width: number; height: number } | null>(null);
+  const [fullFirstPageReady, setFullFirstPageReady] = useState(false);
   const initialPositionRef = useRef({ page: initialPage, positionY: initialPositionY });
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setPreview(null);
+    setFullFirstPageReady(false);
+    if (initialPositionRef.current.page !== 1) return;
+    const match = url.match(/^(.*\/api\/articles\/\d+)\/pdf(?:\?.*)?$/);
+    if (!match) return;
+    let cancelled = false;
+    const image = new Image();
+    image.onload = () => {
+      if (cancelled) return;
+      setPreview({ source: image.src, width: image.naturalWidth, height: image.naturalHeight });
+      onLoad();
+    };
+    image.src = `${match[1]}/pdf-preview`;
+    return () => {
+      cancelled = true;
+      image.src = "";
+    };
+  }, [url, onLoad]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1362,11 +1414,17 @@ function PdfContinuousCanvas({
 
   return (
     <div className="pdf-page-scroll is-continuous" ref={scrollRef}>
+      {preview && !fullFirstPageReady && (
+        <PdfFirstPagePreview preview={preview} zoom={zoom} />
+      )}
       {pdfDocument && Array.from({ length: pdfDocument.numPages }, (_, index) => index + 1).map((page) => (
         <ContinuousPdfPage
           eager={page === initialPositionRef.current.page}
           key={page}
-          onLoad={onLoad}
+          onLoad={() => {
+            if (page === initialPositionRef.current.page) setFullFirstPageReady(true);
+            onLoad();
+          }}
           onTextSelect={onTextSelect}
           onVisible={onVisiblePage}
           page={page}

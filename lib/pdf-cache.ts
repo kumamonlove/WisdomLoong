@@ -13,14 +13,57 @@ export const pdfCacheDirectory =
 
 const globalForPdfCache = globalThis as typeof globalThis & {
   wisdomLoongPdfDownloads?: Map<number, Promise<void>>;
+  wisdomLoongPdfPreviews?: Map<number, Promise<boolean>>;
 };
 
 export const activePdfDownloads =
   globalForPdfCache.wisdomLoongPdfDownloads ?? new Map<number, Promise<void>>();
 globalForPdfCache.wisdomLoongPdfDownloads = activePdfDownloads;
 
+const activePdfPreviews =
+  globalForPdfCache.wisdomLoongPdfPreviews ?? new Map<number, Promise<boolean>>();
+globalForPdfCache.wisdomLoongPdfPreviews = activePdfPreviews;
+
 export function pdfCachePath(articleId: number) {
   return join(pdfCacheDirectory, `${articleId}.pdf`);
+}
+
+export function pdfPreviewCachePath(articleId: number) {
+  return join(pdfCacheDirectory, "previews", `${articleId}.jpg`);
+}
+
+export async function ensurePdfPreview(articleId: number) {
+  const previewPath = pdfPreviewCachePath(articleId);
+  try {
+    if ((await stat(previewPath)).size >= 1024) return true;
+  } catch {
+    // Generate a missing preview below.
+  }
+  const existing = activePdfPreviews.get(articleId);
+  if (existing) return existing;
+
+  const generation = (async () => {
+    if (!await validPdfCacheSize(articleId)) return false;
+    await mkdir(join(pdfCacheDirectory, "previews"), { recursive: true });
+    const temporaryBase = `${previewPath}.${process.pid}.${Date.now()}`;
+    const temporaryPath = `${temporaryBase}.jpg`;
+    try {
+      await execFileAsync("pdftoppm", [
+        "-f", "1", "-l", "1", "-singlefile", "-r", "110",
+        "-jpeg", "-jpegopt", "quality=76", pdfCachePath(articleId), temporaryBase,
+      ], { timeout: 90_000 });
+      if ((await stat(temporaryPath)).size < 1024) return false;
+      await rename(temporaryPath, previewPath);
+      return true;
+    } catch (error) {
+      console.warn("PDF first-page preview unavailable", error);
+      return false;
+    } finally {
+      await unlink(temporaryPath).catch(() => undefined);
+    }
+  })().finally(() => activePdfPreviews.delete(articleId));
+  activePdfPreviews.set(articleId, generation);
+  return generation;
 }
 
 export function arxivPdfUrl(sourceUrl: string) {
@@ -120,6 +163,7 @@ export async function warmPdfCache(articleId: number, sourceUrl: string) {
           }
           await rename(temporaryPath, filePath);
         }
+        await ensurePdfPreview(articleId);
         return;
       } catch (error) {
         lastError = error;
