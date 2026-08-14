@@ -1328,30 +1328,48 @@ function PdfContinuousCanvas({
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [preview, setPreview] = useState<{ source: string; width: number; height: number } | null>(null);
   const [fullFirstPageReady, setFullFirstPageReady] = useState(false);
+  const [pdfLoadAllowed, setPdfLoadAllowed] = useState(() =>
+    !/\/api\/articles\/\d+\/pdf(?:\?.*)?$/.test(url) || initialPage !== 1
+  );
   const initialPositionRef = useRef({ page: initialPage, positionY: initialPositionY });
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setPreview(null);
     setFullFirstPageReady(false);
-    if (initialPositionRef.current.page !== 1) return;
+    if (initialPositionRef.current.page !== 1) {
+      setPdfLoadAllowed(true);
+      return;
+    }
     const match = url.match(/^(.*\/api\/articles\/\d+)\/pdf(?:\?.*)?$/);
-    if (!match) return;
+    if (!match) {
+      setPdfLoadAllowed(true);
+      return;
+    }
+    setPdfLoadAllowed(false);
     let cancelled = false;
     const image = new Image();
+    const fallback = window.setTimeout(() => setPdfLoadAllowed(true), 1500);
     image.onload = () => {
       if (cancelled) return;
+      window.clearTimeout(fallback);
       setPreview({ source: image.src, width: image.naturalWidth, height: image.naturalHeight });
       onLoad();
+      setPdfLoadAllowed(true);
+    };
+    image.onerror = () => {
+      if (!cancelled) setPdfLoadAllowed(true);
     };
     image.src = `${match[1]}/pdf-preview`;
     return () => {
       cancelled = true;
+      window.clearTimeout(fallback);
       image.src = "";
     };
   }, [url, onLoad]);
 
   useEffect(() => {
+    if (!pdfLoadAllowed) return;
     let cancelled = false;
     let loadingTask: PDFDocumentLoadingTask | undefined;
     const controller = new AbortController();
@@ -1393,7 +1411,7 @@ function PdfContinuousCanvas({
       controller.abort();
       void loadingTask?.destroy();
     };
-  }, [url, onError, onDocumentReady, onProgress]);
+  }, [url, onError, onDocumentReady, onProgress, pdfLoadAllowed]);
 
   useEffect(() => {
     if (!pdfDocument) return;
