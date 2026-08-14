@@ -1291,8 +1291,8 @@ function PdfFirstPagePreview({
       className="pdf-page-canvas continuous-page pdf-first-page-preview"
       data-page="1"
       style={{
-        width: preview.width * 96 / 110 * zoom / 100,
-        height: preview.height * 96 / 110 * zoom / 100,
+        width: preview.width * 96 / 72 * zoom / 100,
+        height: preview.height * 96 / 72 * zoom / 100,
       }}
     >
       <canvas height={preview.height} ref={canvasRef} width={preview.width} />
@@ -1350,7 +1350,7 @@ function PdfContinuousCanvas({
     let cancelled = false;
     let fullLoadTimer: number | undefined;
     const image = new Image();
-    const fallback = window.setTimeout(() => setPdfLoadAllowed(true), 1500);
+    const fallback = window.setTimeout(() => setPdfLoadAllowed(true), 5000);
     image.onload = () => {
       if (cancelled) return;
       window.clearTimeout(fallback);

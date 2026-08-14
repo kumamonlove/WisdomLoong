@@ -29,7 +29,7 @@ export function pdfCachePath(articleId: number) {
 }
 
 export function pdfPreviewCachePath(articleId: number) {
-  return join(pdfCacheDirectory, "previews", `${articleId}.jpg`);
+  return join(pdfCacheDirectory, "previews", `${articleId}-v2.jpg`);
 }
 
 export async function ensurePdfPreview(articleId: number) {
@@ -49,8 +49,8 @@ export async function ensurePdfPreview(articleId: number) {
     const temporaryPath = `${temporaryBase}.jpg`;
     try {
       await execFileAsync("pdftoppm", [
-        "-f", "1", "-l", "1", "-singlefile", "-r", "110",
-        "-jpeg", "-jpegopt", "quality=76", pdfCachePath(articleId), temporaryBase,
+        "-f", "1", "-l", "1", "-singlefile", "-r", "72",
+        "-jpeg", "-jpegopt", "quality=60", pdfCachePath(articleId), temporaryBase,
       ], { timeout: 90_000 });
       if ((await stat(temporaryPath)).size < 1024) return false;
       await rename(temporaryPath, previewPath);

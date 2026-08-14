@@ -9,12 +9,12 @@ mkdir -p "${cache_directory}/previews"
 generate_preview() {
   local article_id="$1"
   local target="$2"
-  local preview="${cache_directory}/previews/${article_id}.jpg"
-  local preview_base="${cache_directory}/previews/${article_id}.generating"
+  local preview="${cache_directory}/previews/${article_id}-v2.jpg"
+  local preview_base="${cache_directory}/previews/${article_id}-v2.generating"
   if [ -s "$preview" ]; then
     return 0
   fi
-  if pdftoppm -f 1 -l 1 -singlefile -r 110 -jpeg -jpegopt quality=76 \
+  if pdftoppm -f 1 -l 1 -singlefile -r 72 -jpeg -jpegopt quality=60 \
     "$target" "$preview_base" && [ -s "${preview_base}.jpg" ]; then
     mv "${preview_base}.jpg" "$preview"
   else

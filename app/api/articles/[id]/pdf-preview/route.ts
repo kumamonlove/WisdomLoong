@@ -27,7 +27,7 @@ export async function GET(
       headers: {
         "Cache-Control": "private, max-age=2592000, immutable",
         "Content-Type": "image/jpeg",
-        "X-Accel-Redirect": `/_pdf_preview_internal/${articleId}.jpg`,
+        "X-Accel-Redirect": `/_pdf_preview_internal/${articleId}-v2.jpg`,
       },
     });
   }
