@@ -1314,8 +1314,6 @@ function PdfContinuousCanvas({
         loadingTask = pdfjs.getDocument({
           url,
           ...pdfjsResourceOptions,
-          disableAutoFetch: true,
-          disableStream: true,
           isEvalSupported: false,
           rangeChunkSize: 512 * 1024,
         });
@@ -1332,7 +1330,8 @@ function PdfContinuousCanvas({
           setPdfDocument(document);
           onDocumentReady(document.numPages, naturalPageWidth);
         }
-      } catch {
+      } catch (error) {
+        console.error("PDF document loading failed", error);
         if (!cancelled) onError();
       }
     })();
