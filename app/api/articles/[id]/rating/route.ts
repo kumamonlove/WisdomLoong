@@ -44,8 +44,9 @@ export async function PUT(
     );
     const average = await client.query<{ averageRating: number }>(
       `SELECT ROUND(AVG(rating)::numeric, 1)::float AS "averageRating"
-       FROM article_ratings WHERE article_id = $1`,
-      [articleId],
+       FROM article_ratings
+       WHERE article_id = $1 AND can_users_share_content($2, user_id)`,
+      [articleId, user.id],
     );
     await client.query("COMMIT");
     return NextResponse.json({
@@ -85,8 +86,9 @@ export async function DELETE(
     );
     const average = await client.query<{ averageRating: number | null }>(
       `SELECT ROUND(AVG(rating)::numeric, 1)::float AS "averageRating"
-       FROM article_ratings WHERE article_id = $1`,
-      [articleId],
+       FROM article_ratings
+       WHERE article_id = $1 AND can_users_share_content($2, user_id)`,
+      [articleId, user.id],
     );
     await client.query("COMMIT");
     return NextResponse.json({

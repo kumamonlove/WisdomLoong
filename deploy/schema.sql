@@ -8,6 +8,95 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS visibility_groups (
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_key VARCHAR(64) NOT NULL UNIQUE,
+  display_name VARCHAR(128) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS user_visibility_groups (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  visibility_group_id INTEGER NOT NULL REFERENCES visibility_groups(id) ON DELETE CASCADE,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, visibility_group_id)
+);
+
+CREATE INDEX IF NOT EXISTS user_visibility_groups_group_idx
+  ON user_visibility_groups(visibility_group_id, user_id);
+
+CREATE TABLE IF NOT EXISTS registration_invite_codes (
+  code_hash CHAR(64) PRIMARY KEY,
+  visibility_group_id INTEGER NOT NULL REFERENCES visibility_groups(id) ON DELETE CASCADE,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION can_users_share_content(
+  viewer_user_id INTEGER,
+  author_user_id INTEGER
+) RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM user_visibility_groups viewer_group
+    INNER JOIN user_visibility_groups author_group
+      ON author_group.visibility_group_id = viewer_group.visibility_group_id
+    WHERE viewer_group.user_id = viewer_user_id
+      AND author_group.user_id = author_user_id
+  );
+$$;
+
+INSERT INTO visibility_groups (group_key, display_name)
+VALUES
+  ('zujiansuanfa', 'ZUJIANSUANFA'),
+  ('hihihi', 'HIHIHI')
+ON CONFLICT (group_key) DO UPDATE SET display_name = EXCLUDED.display_name;
+
+INSERT INTO user_visibility_groups (user_id, visibility_group_id)
+SELECT user_visibility_groups.user_id, target_group.id
+FROM user_visibility_groups
+INNER JOIN visibility_groups source_group
+  ON source_group.id = user_visibility_groups.visibility_group_id
+CROSS JOIN visibility_groups target_group
+WHERE source_group.group_key = 'ordinary'
+  AND target_group.group_key = 'zujiansuanfa'
+ON CONFLICT DO NOTHING;
+
+DELETE FROM visibility_groups WHERE group_key = 'ordinary';
+
+INSERT INTO user_visibility_groups (user_id, visibility_group_id)
+SELECT users.id, visibility_groups.id
+FROM users
+CROSS JOIN visibility_groups
+WHERE visibility_groups.group_key = 'zujiansuanfa'
+  AND NOT EXISTS (
+    SELECT 1 FROM user_visibility_groups
+    WHERE user_visibility_groups.user_id = users.id
+  )
+ON CONFLICT DO NOTHING;
+
+INSERT INTO user_visibility_groups (user_id, visibility_group_id)
+SELECT users.id, visibility_groups.id
+FROM users
+CROSS JOIN visibility_groups
+WHERE users.username_key IN ('liuyanwen', 'siyang', 'qianxi')
+  AND visibility_groups.group_key IN ('zujiansuanfa', 'hihihi')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO registration_invite_codes (code_hash, visibility_group_id, enabled)
+SELECT invite.code_hash, visibility_groups.id, TRUE
+FROM (VALUES
+  ('25bbe6f318e65eff211350fe232ae0bd7b6680b16b454485f67c611ed7a50b77', 'hihihi'),
+  ('4ee37d5c68f2706e10c036f1bde0d1702e671316d19990024c125876443ed92e', 'zujiansuanfa')
+) AS invite(code_hash, group_key)
+INNER JOIN visibility_groups ON visibility_groups.group_key = invite.group_key
+ON CONFLICT (code_hash) DO UPDATE SET
+  visibility_group_id = EXCLUDED.visibility_group_id,
+  enabled = TRUE;
+
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash CHAR(64) PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -15,8 +15,9 @@ export async function GET(
     `SELECT reading_note_pdfs.file_name, reading_note_pdfs.pdf_data, reviews.user_id AS owner_id
      FROM reading_note_pdfs
      INNER JOIN reviews ON reviews.id = reading_note_pdfs.review_id
-     WHERE reading_note_pdfs.review_id = $1`,
-    [reviewId],
+     WHERE reading_note_pdfs.review_id = $1
+       AND can_users_share_content($2, reviews.user_id)`,
+    [reviewId, user.id],
   );
   const note = result.rows[0];
   if (!note) return NextResponse.json({ error: "读书笔记不存在" }, { status: 404 });

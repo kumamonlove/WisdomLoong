@@ -116,28 +116,50 @@ export async function registerUser(
     return { ok: false, error: validationError };
   }
 
+  const inviteCodeHash = createHash("sha256").update(invitationCode).digest("hex");
+  const invite = await database.query<{ visibility_group_id: number }>(
+    `SELECT visibility_group_id
+     FROM registration_invite_codes
+     WHERE code_hash = $1 AND enabled`,
+    [inviteCodeHash],
+  );
   const configuredCode = process.env.REGISTRATION_INVITE_CODE;
+  const usesDefaultInvitation = Boolean(
+    configuredCode && safeEqual(invitationCode, configuredCode),
+  );
 
-  if (!configuredCode) {
-    return { ok: false, error: "注册功能尚未配置，请联系管理员" };
-  }
-
-  if (!safeEqual(invitationCode, configuredCode)) {
+  if (!invite.rows[0] && !usesDefaultInvitation) {
     return { ok: false, error: "邀请码不正确" };
   }
 
   const passwordHash = await hashPassword(password);
+  const client = await database.connect();
 
   try {
-    const result = await database.query<AuthUser>(
+    await client.query("BEGIN");
+    const groupId = invite.rows[0]?.visibility_group_id ?? (
+      await client.query<{ id: number }>(
+        "SELECT id FROM visibility_groups WHERE group_key = 'zujiansuanfa'",
+      )
+    ).rows[0]?.id;
+    if (!groupId) throw new Error("Default visibility group is not configured");
+
+    const result = await client.query<AuthUser>(
       `INSERT INTO users (username, username_key, password_hash)
        VALUES ($1, $2, $3)
        RETURNING id, username`,
       [username, usernameKey(username), passwordHash],
     );
+    await client.query(
+      `INSERT INTO user_visibility_groups (user_id, visibility_group_id)
+       VALUES ($1, $2)`,
+      [result.rows[0].id, groupId],
+    );
+    await client.query("COMMIT");
 
     return { ok: true, user: result.rows[0] };
   } catch (error) {
+    await client.query("ROLLBACK");
     if (
       typeof error === "object" &&
       error !== null &&
@@ -148,6 +170,8 @@ export async function registerUser(
     }
 
     throw error;
+  } finally {
+    client.release();
   }
 }
 

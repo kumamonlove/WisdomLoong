@@ -28,6 +28,19 @@ function targetTable(source: AnnotationSource) {
   return source === "published" ? "published_annotations" : "review_annotations";
 }
 
+function visibleTargetCondition(source: AnnotationSource) {
+  return source === "published"
+    ? `EXISTS (
+         SELECT 1 FROM published_annotations target
+         WHERE target.id = $1 AND can_users_share_content($2, target.user_id)
+       )`
+    : `EXISTS (
+         SELECT 1 FROM review_annotations target
+         INNER JOIN reviews ON reviews.id = target.review_id
+         WHERE target.id = $1 AND can_users_share_content($2, reviews.user_id)
+       )`;
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ source: string; id: string }> },
@@ -44,6 +57,8 @@ export async function GET(
      FROM annotation_comments
      INNER JOIN users ON users.id = annotation_comments.user_id
      WHERE annotation_comments.${column} = $1
+       AND can_users_share_content($2, annotation_comments.user_id)
+       AND ${visibleTargetCondition(target.source)}
      ORDER BY annotation_comments.created_at, annotation_comments.id`,
     [target.id, user.id],
   );
@@ -65,9 +80,15 @@ export async function POST(
   }
   const column = targetColumn(target.source);
   const table = targetTable(target.source);
+  const targetJoin = target.source === "published"
+    ? ""
+    : "INNER JOIN reviews ON reviews.id = target.review_id";
+  const ownerColumn = target.source === "published" ? "target.user_id" : "reviews.user_id";
   const result = await database.query<AnnotationComment>(
     `INSERT INTO annotation_comments (${column}, user_id, content)
-     SELECT $1, $2, $3 FROM ${table} WHERE id = $1
+     SELECT $1, $2, $3 FROM ${table} target
+     ${targetJoin}
+     WHERE target.id = $1 AND can_users_share_content($2, ${ownerColumn})
      RETURNING id, $4::text AS author, content, created_at::text AS "createdAt", TRUE AS "isOwn"`,
     [target.id, user.id, content, user.username],
   );

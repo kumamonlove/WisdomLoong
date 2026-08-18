@@ -12,6 +12,7 @@ export async function GET() {
     `WITH review_activity AS (
        SELECT article_id, MAX(updated_at) AS last_reviewed_at
        FROM reviews
+       WHERE can_users_share_content($1, reviews.user_id)
        GROUP BY article_id
      )
      SELECT articles.id

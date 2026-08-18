@@ -14,8 +14,12 @@ export async function GET(
     return NextResponse.json({ error: "截图不存在" }, { status: 404 });
   }
   const result = await database.query<{ content_type: string; image_data: Buffer }>(
-    "SELECT content_type, image_data FROM review_attachments WHERE id = $1",
-    [id],
+    `SELECT review_attachments.content_type, review_attachments.image_data
+     FROM review_attachments
+     INNER JOIN reviews ON reviews.id = review_attachments.review_id
+     WHERE review_attachments.id = $1
+       AND can_users_share_content($2, reviews.user_id)`,
+    [id, user.id],
   );
   const attachment = result.rows[0];
   if (!attachment) return NextResponse.json({ error: "截图不存在" }, { status: 404 });

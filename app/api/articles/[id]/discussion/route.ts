@@ -70,6 +70,7 @@ export async function GET(
            INNER JOIN reviews ON reviews.id = review_annotations.review_id
            INNER JOIN users ON users.id = reviews.user_id
            WHERE reviews.article_id = $1 AND reviews.user_id <> $2
+             AND can_users_share_content($2, reviews.user_id)
              AND review_annotations.rect_x IS NOT NULL
              AND review_annotations.rect_y IS NOT NULL
              AND review_annotations.rect_width IS NOT NULL
@@ -99,6 +100,7 @@ export async function GET(
            FROM published_annotations
            INNER JOIN users ON users.id = published_annotations.user_id
            WHERE published_annotations.article_id = $1 AND published_annotations.user_id <> $2
+             AND can_users_share_content($2, published_annotations.user_id)
          ) annotations
          ORDER BY page, id`,
         [articleId, user.id],
@@ -117,7 +119,9 @@ export async function GET(
          COUNT(review_likes.user_id)::int AS "likeCount",
          BOOL_OR(review_likes.user_id = $2) AS "likedByViewer",
          reviews.user_id = $2 AS "isOwn",
-         (SELECT COUNT(*)::int FROM reading_note_reads WHERE reading_note_reads.review_id = reviews.id) AS "readCount",
+         (SELECT COUNT(*)::int FROM reading_note_reads
+          WHERE reading_note_reads.review_id = reviews.id
+            AND can_users_share_content($2, reading_note_reads.user_id)) AS "readCount",
          CASE WHEN EXISTS (
            SELECT 1 FROM published_annotations
            WHERE published_annotations.user_id = reviews.user_id
@@ -129,15 +133,19 @@ export async function GET(
          ) ELSE (
            SELECT COUNT(*)::int FROM review_annotations WHERE review_annotations.review_id = reviews.id
          ) END AS "annotationCount",
-         (SELECT COUNT(*)::int FROM review_comments WHERE review_comments.review_id = reviews.id) AS "commentCount",
+         (SELECT COUNT(*)::int FROM review_comments
+          WHERE review_comments.review_id = reviews.id
+            AND can_users_share_content($2, review_comments.user_id)) AS "commentCount",
          reading_note_pdfs.file_name AS "noteFileName",
          reading_note_pdfs.source AS "noteSource",
          reviews.updated_at::text AS "updatedAt"
        FROM reviews
        INNER JOIN users ON users.id = reviews.user_id
        LEFT JOIN review_likes ON review_likes.review_id = reviews.id
+         AND can_users_share_content($2, review_likes.user_id)
        LEFT JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
        WHERE reviews.article_id = $1
+         AND can_users_share_content($2, reviews.user_id)
        GROUP BY reviews.id, users.username, reading_note_pdfs.file_name, reading_note_pdfs.source
        ORDER BY reviews.must_read DESC, reviews.review_type DESC,
                 COUNT(review_likes.user_id) DESC, reviews.updated_at DESC`,
@@ -152,6 +160,7 @@ export async function GET(
        FROM review_attachments
        INNER JOIN reviews ON reviews.id = review_attachments.review_id
        WHERE reviews.article_id = $1 AND reviews.user_id <> $2
+         AND can_users_share_content($2, reviews.user_id)
        ORDER BY review_attachments.id`,
       [articleId, user.id],
     ),

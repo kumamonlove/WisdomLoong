@@ -32,6 +32,12 @@ export async function GET(
      INNER JOIN users ON users.id = review_comments.user_id
      INNER JOIN reading_note_pdfs ON reading_note_pdfs.review_id = review_comments.review_id
      WHERE review_comments.review_id = $1
+       AND can_users_share_content($2, review_comments.user_id)
+       AND EXISTS (
+         SELECT 1 FROM reviews
+         WHERE reviews.id = $1
+           AND can_users_share_content($2, reviews.user_id)
+       )
      ORDER BY review_comments.created_at ASC, review_comments.id ASC`,
     [reviewId, user.id],
   );
@@ -55,7 +61,10 @@ export async function POST(
   const result = await database.query<NoteComment>(
     `INSERT INTO review_comments (review_id, user_id, content)
      SELECT reading_note_pdfs.review_id, $2, $3
-     FROM reading_note_pdfs WHERE reading_note_pdfs.review_id = $1
+     FROM reading_note_pdfs
+     INNER JOIN reviews ON reviews.id = reading_note_pdfs.review_id
+     WHERE reading_note_pdfs.review_id = $1
+       AND can_users_share_content($2, reviews.user_id)
      RETURNING id, $4::text AS author, content, created_at::text AS "createdAt", TRUE AS "isOwn"`,
     [reviewId, user.id, content, user.username],
   );

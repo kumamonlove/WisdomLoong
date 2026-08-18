@@ -6,8 +6,8 @@ import { getAnnotatedReadingArticles, getFeaturedNoteArticles } from "@/lib/know
 export default async function Home() {
   const user = await requireUser();
   const [featuredNotes, annotatedArticles] = await Promise.all([
-    getFeaturedNoteArticles(),
-    getAnnotatedReadingArticles(),
+    getFeaturedNoteArticles(user.id),
+    getAnnotatedReadingArticles(user.id),
   ]);
 
   return (

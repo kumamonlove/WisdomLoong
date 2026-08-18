@@ -151,7 +151,7 @@ export function parseReviewFilter(
   return "all";
 }
 
-export async function getFeaturedNoteArticles() {
+export async function getFeaturedNoteArticles(userId: number) {
   const result = await database.query<ArticleCardData>(
     `SELECT
        articles.id,
@@ -179,24 +179,33 @@ export async function getFeaturedNoteArticles() {
        reviews.rating,
        reviews.must_read AS "mustRead",
        reviews.updated_at::text AS "activityAt",
-       (SELECT COUNT(*)::int FROM review_likes WHERE review_likes.review_id = reviews.id) AS "noteLikeCount",
-       (SELECT COUNT(*)::int FROM reading_note_reads WHERE reading_note_reads.review_id = reviews.id) AS "noteReadCount",
-       (SELECT COUNT(*)::int FROM review_comments WHERE review_comments.review_id = reviews.id) AS "noteCommentCount"
+       (SELECT COUNT(*)::int FROM review_likes
+        WHERE review_likes.review_id = reviews.id
+          AND can_users_share_content($1, review_likes.user_id)) AS "noteLikeCount",
+       (SELECT COUNT(*)::int FROM reading_note_reads
+        WHERE reading_note_reads.review_id = reviews.id
+          AND can_users_share_content($1, reading_note_reads.user_id)) AS "noteReadCount",
+       (SELECT COUNT(*)::int FROM review_comments
+        WHERE review_comments.review_id = reviews.id
+          AND can_users_share_content($1, review_comments.user_id)) AS "noteCommentCount"
      FROM reviews
      INNER JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
      INNER JOIN articles ON articles.id = reviews.article_id
      INNER JOIN users ON users.id = reviews.user_id
+     WHERE can_users_share_content($1, reviews.user_id)
      ORDER BY reviews.updated_at DESC, reviews.id DESC`,
+    [userId],
   );
 
   return result.rows;
 }
 
-export async function getAnnotatedReadingArticles() {
+export async function getAnnotatedReadingArticles(userId: number) {
   const result = await database.query<ArticleCardData>(
     `WITH annotation_activity AS (
        SELECT article_id, user_id, MAX(updated_at) AS activity_at
        FROM published_annotations
+       WHERE can_users_share_content($1, published_annotations.user_id)
        GROUP BY article_id, user_id
      )
      SELECT
@@ -213,6 +222,7 @@ export async function getAnnotatedReadingArticles() {
      INNER JOIN users ON users.id = annotation_activity.user_id
      GROUP BY articles.id
      ORDER BY MAX(annotation_activity.activity_at) DESC, articles.id DESC`,
+    [userId],
   );
   return result.rows;
 }
@@ -245,6 +255,7 @@ export async function getRecentlyReadArticles(userId: number) {
          BOOL_OR(reviews.must_read) AS must_read
        FROM reviews
        WHERE reviews.article_id = articles.id
+         AND can_users_share_content($1, reviews.user_id)
      ) review_stats ON TRUE
      WHERE article_recent_views.user_id = $1
      ORDER BY article_recent_views.viewed_at DESC
@@ -302,6 +313,7 @@ export async function getCategoryArticles({
        SELECT reviews.user_id, reviews.content
        FROM reviews
        WHERE reviews.article_id = articles.id
+         AND can_users_share_content($3, reviews.user_id)
        ORDER BY reviews.updated_at DESC
        LIMIT 1
      ) latest_review ON TRUE
@@ -312,6 +324,7 @@ export async function getCategoryArticles({
          BOOL_OR(reviews.must_read) AS must_read
        FROM reviews
        WHERE reviews.article_id = articles.id
+         AND can_users_share_content($3, reviews.user_id)
      ) review_stats ON TRUE
      WHERE ${conditions.join(" AND ")}
      ORDER BY ${orderBy}`,
@@ -362,6 +375,7 @@ export async function getReadingList(userId: number) {
        EXISTS (
          SELECT 1 FROM reviews
          WHERE reviews.article_id = articles.id
+           AND can_users_share_content($1, reviews.user_id)
            AND reviews.must_read
        ) AS "mustRead"
      FROM articles
@@ -369,6 +383,7 @@ export async function getReadingList(userId: number) {
        SELECT reviews.user_id, reviews.content, reviews.rating
        FROM reviews
        WHERE reviews.article_id = articles.id
+         AND can_users_share_content($1, reviews.user_id)
        ORDER BY reviews.updated_at DESC
        LIMIT 1
      ) latest_review ON TRUE
@@ -454,16 +469,19 @@ export async function getArticlesForReview(userId: number) {
               SELECT ROUND(AVG(article_ratings.rating)::numeric, 1)::float
               FROM article_ratings
               WHERE article_ratings.article_id = articles.id
+                AND can_users_share_content($1, article_ratings.user_id)
             ) AS rating,
             (
               SELECT COUNT(*)::int
               FROM article_reads
               WHERE article_reads.article_id = articles.id
+                AND can_users_share_content($1, article_reads.user_id)
             ) AS "readCount",
             (
               SELECT COUNT(*)::int
               FROM article_recent_views
               WHERE article_recent_views.article_id = articles.id
+                AND can_users_share_content($1, article_recent_views.user_id)
                 AND article_recent_views.viewed_at >= NOW() - INTERVAL '5 minutes'
             ) AS "readingNowCount",
             COALESCE(reading_annotation_drafts.annotations, own_annotations.items::jsonb, '[]'::jsonb) AS "savedAnnotations",
@@ -533,11 +551,15 @@ export async function getUserReviewProfile(userId: number) {
       notePdfs: number;
     }>(
       `SELECT
-         COUNT(review_likes.user_id) FILTER (WHERE reading_note_pdfs.review_id IS NOT NULL)::int AS "totalLikes",
+         COUNT(review_likes.user_id) FILTER (
+           WHERE reading_note_pdfs.review_id IS NOT NULL
+             AND can_users_share_content($1, review_likes.user_id)
+         )::int AS "totalLikes",
          COUNT(DISTINCT reviews.id)::int AS "longReviews",
          COUNT(DISTINCT reading_note_pdfs.review_id)::int AS "notePdfs"
        FROM reviews
        LEFT JOIN review_likes ON review_likes.review_id = reviews.id
+         AND can_users_share_content($1, review_likes.user_id)
        LEFT JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
        WHERE reviews.user_id = $1`,
       [userId],
@@ -568,6 +590,7 @@ export async function getUserReviewProfile(userId: number) {
        FROM reviews
        INNER JOIN articles ON articles.id = reviews.article_id
        LEFT JOIN review_likes ON review_likes.review_id = reviews.id
+         AND can_users_share_content($1, review_likes.user_id)
        LEFT JOIN reading_note_pdfs ON reading_note_pdfs.review_id = reviews.id
        WHERE reviews.user_id = $1
        GROUP BY reviews.id, articles.id, articles.title, reading_note_pdfs.file_name
