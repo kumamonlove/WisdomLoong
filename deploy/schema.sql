@@ -82,7 +82,7 @@ INSERT INTO user_visibility_groups (user_id, visibility_group_id)
 SELECT users.id, visibility_groups.id
 FROM users
 CROSS JOIN visibility_groups
-WHERE users.username_key IN ('liuyanwen', 'siyang', 'qianxi')
+WHERE users.username_key IN ('liuyanwen', 'hua', 'siyang', 'qianxi')
   AND visibility_groups.group_key IN ('zujiansuanfa', 'hihihi')
 ON CONFLICT DO NOTHING;
 
