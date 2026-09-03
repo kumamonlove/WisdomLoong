@@ -80,4 +80,16 @@ certbot certonly --webroot --webroot-path "$acme_root" \
   --non-interactive --agree-tos --register-unsafely-without-email \
   --keep-until-expiring -d console.wisdomloong.com
 
+cat >"$bootstrap_site" <<'EOF'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name console.wisdomloong.com;
+    return 301 https://console.wisdomloong.com$request_uri;
+}
+EOF
+
+nginx -t
+systemctl reload nginx
+
 echo "Private SSH proxy account and console tunnel endpoint are ready."
