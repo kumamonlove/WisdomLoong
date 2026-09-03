@@ -36,7 +36,8 @@ Match User wisdomproxy
     AuthenticationMethods publickey
     PasswordAuthentication no
     KbdInteractiveAuthentication no
-    AllowTcpForwarding local
+    AllowTcpForwarding yes
+    PermitListen 127.0.0.1:18443
     AllowAgentForwarding no
     X11Forwarding no
     PermitTTY no
@@ -54,4 +55,29 @@ else
   systemctl reload sshd
 fi
 
-echo "Private SSH SOCKS account is ready."
+acme_root="/var/www/letsencrypt"
+bootstrap_site="/etc/nginx/sites-enabled/wisdomloong-console-bootstrap"
+install -d -m 755 "$acme_root/.well-known/acme-challenge"
+cat >"$bootstrap_site" <<'EOF'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name console.wisdomloong.com;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+    }
+
+    location / {
+        return 404;
+    }
+}
+EOF
+
+nginx -t
+systemctl reload nginx
+certbot certonly --webroot --webroot-path "$acme_root" \
+  --non-interactive --agree-tos --register-unsafely-without-email \
+  --keep-until-expiring -d console.wisdomloong.com
+
+echo "Private SSH proxy account and console tunnel endpoint are ready."
